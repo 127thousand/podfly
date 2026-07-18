@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -47,4 +48,45 @@ Future<void> save(Session session) async {
     expect(d.appTableModels, isNotEmpty);
     await dir.delete(recursive: true);
   });
+
+  test('detects required when auth IDP is initialized', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_db_auth_');
+    File(p.join(dir.path, 'pubspec.yaml')).writeAsStringSync('''
+name: demo_server
+dependencies:
+  serverpod: 4.0.0
+  serverpod_auth_idp_server: 4.0.0
+''');
+    Directory(p.join(dir.path, 'lib')).createSync();
+    File(p.join(dir.path, 'lib', 'server.dart')).writeAsStringSync('''
+import 'package:serverpod_auth_idp_server/core.dart';
+void run() {
+  pod.initializeAuthServices(
+    tokenManagerBuilders: [],
+    identityProviderBuilders: [],
+  );
 }
+''');
+    final mig = Directory(
+        p.join(dir.path, 'migrations', '20260101000000'))
+      ..createSync(recursive: true);
+    File(p.join(mig.path, 'definition.json')).writeAsStringSync(jsonEncode({
+      'tables': [
+        {
+          'name': 'serverpod_auth_core_user',
+          'module': 'serverpod_auth_core',
+        },
+        {
+          'name': 'serverpod_log',
+          'module': 'serverpod',
+        },
+      ],
+    }));
+
+    final d = await detectDatabaseNeed(dir.path);
+    expect(d.need, DatabaseNeed.required);
+    expect(d.authRequiresDatabase, isTrue);
+    await dir.delete(recursive: true);
+  });
+}
+
