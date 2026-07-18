@@ -28,7 +28,7 @@ Deploying a **Serverpod + Flutter web** monorepo involves many non-obvious steps
 5. **Interactive wizard** (`podfly init`) via **nocterm** when TTY; flags/config for CI.
 6. Encode battle-tested web packaging: build in-package, optional bootstrap patch, `_headers` / `_redirects`.
 7. Wire Serverpod `config/production.yaml` (and Fly secrets / mounts) for the chosen DB — do not leave “forgot database:” as a footgun.
-8. Dry-run and smoke tests.
+8. Dry-run and verify checks.
 
 ## Non-goals (v1)
 
@@ -53,7 +53,7 @@ Deploying a **Serverpod + Flutter web** monorepo involves many non-obvious steps
 podfly doctor          # tools + auth (can offer login)
 podfly init            # nocterm wizard → podfly.yaml (+ optional templates)
 podfly deploy          # primary entry: init-if-needed → doctor → deploy
-podfly smoke           # configured smoke checks only
+podfly verify           # configured verify checks only
 podfly --help
 ```
 
@@ -74,7 +74,7 @@ podfly deploy
   → if no podfly.yaml: init (interactive) → write config
   → else: load podfly.yaml
   → doctor (config-aware) # wrangler if split, neonctl if neon provision, config consistency
-  → ensure DB / patch production.yaml / build web / deploy / optional smoke
+  → ensure DB / patch production.yaml / build web / deploy / optional verify
 ```
 
 **Why two doctor passes:** baseline tools are required even to run the wizard usefully; mode-specific tools (wrangler, neonctl) are only known after config exists. Same `doctor` module, different scopes — not two different UIs.
@@ -88,8 +88,8 @@ podfly deploy
 | `--config path` | Default `podfly.yaml` in CWD or walk-up to monorepo root |
 | `--mode split\|fly` | Override config |
 | `--api` / `--web` | Deploy only one half (split); `--api` only for fly-mono is no-op/all |
-| `--dry-run` | Print actions, no side effects |
-| `--smoke` | After deploy, run smoke |
+| `--dry-run` | Plan only: print actions, no create/deploy/login browsers |
+| `--verify` | After a real deploy, hit configured HTTP checks |
 | `--root path` | Project root |
 | `--yes` / `-y` | Non-interactive: accept safe defaults for missing yaml (CI); never open a browser login without token env |
 | `--no-login` | Doctor checks auth only; do not launch login flows (CI) |
@@ -129,7 +129,7 @@ After successful facilitated logins, doctor continues; only hard-fail if still b
 
 ## Config: `podfly.yaml`
 
-Written by `init`, read by `deploy` / `smoke`.
+Written by `init`, read by `deploy` / `verify`.
 
 ```yaml
 # podfly.yaml
@@ -198,7 +198,7 @@ web:
   write_headers: true
   base_href: /
 
-smoke:
+verify:
   api:
     method: POST
     path: /                  # project-specific; init asks
@@ -283,7 +283,7 @@ Provisioning is **idempotent-ish**: skip create if named resource already exists
 7. Apply `_headers` / `_redirects` into build output.
 8. `wrangler pages project create` if missing; `wrangler pages deploy … --project-name … --branch …`.
 9. `fly deploy -a … --config … --ha=false` (API image from server Dockerfile).
-10. Optional smoke: API URL + `https://{project}.pages.dev`.
+10. Optional verify: API URL + `https://{project}.pages.dev`.
 
 **Assumptions for API-only Fly image:** project already has a Dockerfile suitable for Serverpod; `init` can generate a **starter** `fly.toml` (port 8080, scale-to-zero, optional mounts).
 
@@ -293,7 +293,7 @@ Provisioning is **idempotent-ish**: skip create if named resource already exists
 2. Same DB ensure + production.yaml patch as split.
 3. Build Flutter web into package, then copy into server static web path if configured (e.g. `server/web/app` or path in config — default discover `*/web/app` or document Serverpod convention).
 4. Single `fly deploy`.
-5. Smoke against `https://{app}.fly.dev`.
+5. Verify against `https://{app}.fly.dev`.
 
 v1 may require `web.static_dir` in config for mono mode rather than guessing every Serverpod layout.
 
@@ -336,10 +336,10 @@ When stdin is a TTY:
 4. **Database provider** with short cost/scale blurb  
 5. Provider-specific fields  
 6. API URL (default from fly app name)  
-7. Smoke path/method  
+7. Verify path/method  
 8. Write `podfly.yaml`  
 9. Optionally write templates + starter `fly.toml` (+ mounts if sqlite)  
-10. If invoked alone: run config-aware `doctor` (login facilitation) and print `podfly deploy --smoke`  
+10. If invoked alone: run config-aware `doctor` (login facilitation) and print `podfly deploy --verify`  
 11. If invoked from `deploy`: return config; caller already did baseline doctor and will run config-aware doctor next
 
 **Non-TTY without yaml:**
@@ -374,7 +374,7 @@ podfly/
         build.dart
         bootstrap.dart
         headers.dart
-      smoke.dart
+      verify.dart
       wizard/
         app.dart                # nocterm UI
   templates/
@@ -420,7 +420,7 @@ podfly/
 After v1: replace `scripts/deploy.sh` with:
 
 ```bash
-podfly deploy --smoke
+podfly deploy --verify
 ```
 
 and a checked-in `podfly.yaml` matching current split setup + `database.provider: none`.
