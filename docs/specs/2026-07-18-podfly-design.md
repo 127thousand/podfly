@@ -1,7 +1,7 @@
 # podfly — Design Spec
 
 **Date:** 2026-07-18  
-**Status:** Approved for implementation (pending final review of this doc)  
+**Status:** Implemented in v0.1 (see [user docs](../README.md))  
 **Package:** `podfly`  
 **Binary:** `podfly`  
 **Repo:** local `/Users/ben/projects/127k/podfly` · remote `github.com/127thousand/podfly` (sibling of `roitelet`)
