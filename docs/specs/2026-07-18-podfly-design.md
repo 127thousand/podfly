@@ -50,12 +50,32 @@ Deploying a **Serverpod + Flutter web** monorepo involves many non-obvious steps
 ## CLI surface
 
 ```text
-podfly doctor          # tools + auth
+podfly doctor          # tools + auth (can offer login)
 podfly init            # nocterm wizard → podfly.yaml (+ optional templates)
-podfly deploy          # --api | --web | --dry-run | --smoke
+podfly deploy          # primary entry: init-if-needed → doctor → deploy
 podfly smoke           # configured smoke checks only
 podfly --help
 ```
+
+### Primary UX: `podfly deploy` is enough
+
+Users should not need to remember `init` first.
+
+| Situation | Behavior |
+|-----------|----------|
+| `podfly deploy` and **no** `podfly.yaml` found (CWD / walk-up) | Run **init** (wizard if TTY; or fail with clear message if non-TTY unless `--yes` / defaults), write yaml, **then continue deploy** |
+| `podfly.yaml` exists | Skip init; load config and deploy |
+| `podfly deploy --init` | Force re-run wizard (optional override; careful not to clobber without confirm) |
+
+```text
+podfly deploy
+  → resolve root
+  → if no podfly.yaml: init (interactive)
+  → doctor --fix-auth   # install hints + launch login when possible
+  → ensure DB / patch config / build web / deploy / optional smoke
+```
+
+`podfly init` remains available for “configure only, don’t deploy.”
 
 ### Flags (non-interactive / CI)
 
@@ -67,16 +87,33 @@ podfly --help
 | `--dry-run` | Print actions, no side effects |
 | `--smoke` | After deploy, run smoke |
 | `--root path` | Project root |
+| `--yes` / `-y` | Non-interactive: accept safe defaults for missing yaml (CI); never open a browser login without token env |
+| `--no-login` | Doctor checks auth only; do not launch login flows (CI) |
 
-### Doctor checks
+### Doctor checks + **facilitate login**
 
-| Tool | Required when | Auth check |
-|------|----------------|------------|
-| `dart` / `flutter` | always | `flutter --version` |
-| `fly` or `flyctl` | always (both modes) | `fly auth whoami` (or equivalent) |
-| `wrangler` | `mode: split` | `wrangler whoami` not “not authenticated”; or `CLOUDFLARE_API_TOKEN` set |
-| `neonctl` (or `neon`) | `database.provider: neon` **and** `database.neon.provision: true` | `neonctl auth` / env token present |
-| Node/npm | only if wrangler missing and we offer install hint | n/a |
+Doctor is not “fail and dump a URL.” On interactive TTY it **detects, explains, and runs the login command** when the user agrees (or auto-runs when clearly required mid-deploy).
+
+| Tool | Required when | Auth check | Facilitate login (TTY) |
+|------|----------------|------------|-------------------------|
+| `dart` / `flutter` | always | `flutter --version` | Print install link (can’t browser-login Flutter) |
+| `fly` or `flyctl` | always (both modes) | `fly auth whoami` | Prompt → run `fly auth login` (opens browser) → re-check |
+| `wrangler` | `mode: split` | `wrangler whoami` or `CLOUDFLARE_API_TOKEN` | Prompt → run `wrangler login` → re-check; or print how to set API token |
+| `neonctl` / `neon` | neon + provision | `neonctl me` / auth state or `NEON_API_KEY` | Prompt → run `neonctl auth` → re-check |
+| Node/npm | wrangler missing | n/a | Install hints (`npm i -g wrangler` / brew) |
+
+**Missing binary** (not just unauthenticated):
+
+1. Detect not on PATH  
+2. Print one-line install for the OS (brew / npm)  
+3. On TTY, offer to run the install command if safe/simple (e.g. `brew install neonctl`) — **optional**; never `sudo` without explicit confirm  
+4. Re-run PATH check  
+
+**Non-TTY / CI (`--no-login` or no TTY):**
+
+- Do **not** open browsers  
+- Accept env tokens: `FLY_API_TOKEN`, `CLOUDFLARE_API_TOKEN`, `NEON_API_KEY`  
+- Exit non-zero with exact env vars / commands to fix  
 
 Doctor also **validates config consistency**, e.g.:
 
@@ -84,7 +121,7 @@ Doctor also **validates config consistency**, e.g.:
 - `fly_postgres` → warn that PG app usually bills even when API is stopped
 - `none` but `production.yaml` still has `database:` → warn / offer to strip on next init deploy step
 
-Doctor exits non-zero if required checks fail; prints install/login hints.
+After successful facilitated logins, doctor continues; only hard-fail if still broken after user decline or CI mode.
 
 ## Config: `podfly.yaml`
 
@@ -285,24 +322,26 @@ Plus SPA-friendly `_redirects` if missing (`/* /index.html 200` carefully — op
 
 ## Wizard (nocterm)
 
-When `podfly init` and stdin is a TTY:
+Triggered by `podfly init` **or** by `podfly deploy` when no config exists.
 
-1. Detect root / packages
-2. Choose mode: split vs fly
-3. App name, region, scale-to-zero
-4. **Database provider** with short cost/scale blurb:
-   - none (stateless)
-   - sqlite (+ volume)
-   - fly_postgres
-   - neon (existing URL vs provision)
-5. Provider-specific fields (volume size, PG app name, Neon region / paste URL)
-6. API URL (default from fly app name)
-7. Smoke path/method
-8. Write `podfly.yaml`
-9. Optionally write templates + starter `fly.toml` (+ mounts if sqlite)
-10. Run `doctor` and print next step: `podfly deploy --smoke`
+When stdin is a TTY:
 
-Non-TTY: error with message to pass flags or create yaml manually (or `podfly init --defaults` later).
+1. Detect root / packages  
+2. Choose mode: split vs fly  
+3. App name, region, scale-to-zero  
+4. **Database provider** with short cost/scale blurb  
+5. Provider-specific fields  
+6. API URL (default from fly app name)  
+7. Smoke path/method  
+8. Write `podfly.yaml`  
+9. Optionally write templates + starter `fly.toml` (+ mounts if sqlite)  
+10. If invoked alone: run `doctor` (with login facilitation) and print `podfly deploy --smoke`  
+11. If invoked from `deploy`: return config and let deploy continue (doctor next)
+
+**Non-TTY without yaml:**
+
+- Prefer fail with: create `podfly.yaml` or re-run in a terminal  
+- Or `--yes` generates conservative defaults: `mode: split` if wrangler present else `fly`, `database.provider: none`, name from directory — **document as CI escape hatch**, not the happy path
 
 ## Architecture
 
@@ -394,10 +433,11 @@ and a checked-in `podfly.yaml` matching current split setup + `database.provider
 
 ## Success criteria
 
-- `podfly doctor` correctly reports missing/unauth tools (including neonctl when needed)
-- `podfly init` produces a valid `podfly.yaml` including database choice
+- **`podfly deploy` with no yaml** runs init (wizard) then deploy without a separate command
+- `podfly doctor` / deploy preflight **offers and runs** `fly auth login`, `wrangler login`, `neonctl auth` on TTY when unauthenticated
+- Missing tools get install guidance (and optional facilitated install where safe)
+- CI: `--no-login` + env tokens; no browser popups
+- `podfly init` still works standalone
 - `podfly deploy` patches production.yaml appropriately for each provider
-- `split` mode builds web with assets, deploys Pages + Fly
-- `fly` mode deploys without wrangler
-- Documented path from tarot_draw-style project (`database: none`) to first successful deploy
-- Documented path for a Serverpod app with Neon or Fly Postgres
+- `split` / `fly` modes work as specified
+- Documented path: brand-new clone → `podfly deploy` → live app (with logins along the way)

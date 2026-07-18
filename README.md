@@ -26,10 +26,11 @@ dart pub global activate --source path /path/to/podfly
 
 ```bash
 cd your_serverpod_monorepo
-podfly doctor
-podfly init          # wizard → podfly.yaml
-podfly deploy --smoke
+podfly deploy --smoke   # if no podfly.yaml → wizard first, then deploy
+                        # if not logged into fly/wrangler/neon → prompts + runs login
 ```
+
+Optional: `podfly init` (configure only), `podfly doctor` (check/fix tools + auth).
 
 ## License
 
