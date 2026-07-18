@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'config.dart';
+import 'database/detect.dart';
 import 'discover.dart';
 import 'log.dart';
 import 'tty.dart';
@@ -34,7 +35,7 @@ class Initer {
     final String flutter;
     final String region;
     final DatabaseProvider dbProvider;
-    final String? smokePath;
+    final String smokePath;
     final String smokeMethod;
 
     if (yes || !isTty) {
@@ -43,7 +44,15 @@ class Initer {
       server = discovered.server ?? '${nameDefault}_server';
       flutter = discovered.flutter ?? '${nameDefault}_flutter';
       region = 'iad';
-      dbProvider = DatabaseProvider.none;
+      final detection =
+          await detectDatabaseNeed(p.join(root, server));
+      log.detail('DB detection: ${detection.need.name}');
+      for (final r in detection.reasons.take(5)) {
+        log.detail('  · $r');
+      }
+      dbProvider = detection.need == DatabaseNeed.required
+          ? DatabaseProvider.neon
+          : DatabaseProvider.none;
       smokePath = '/';
       smokeMethod = 'GET';
       log.detail('using defaults (--yes / non-TTY)');
@@ -66,14 +75,32 @@ class Initer {
         defaultValue: discovered.flutter ?? '${name}_flutter',
       );
       region = await prompt('Fly region', defaultValue: 'iad');
+
+      final detection =
+          await detectDatabaseNeed(p.join(root, server));
+      log.detail('DB detection: ${detection.need.name}');
+      for (final r in detection.reasons.take(6)) {
+        log.detail('  · $r');
+      }
+
+      final defaultDbIdx = switch (detection.need) {
+        DatabaseNeed.none => 0,
+        DatabaseNeed.required => 3, // neon — scale-to-zero friendly default
+        DatabaseNeed.unknown => 0,
+      };
       final dbIdx = await choose(
-        'Database',
+        detection.need == DatabaseNeed.required
+            ? 'Database (models/migrations suggest you need one)'
+            : detection.need == DatabaseNeed.none
+                ? 'Database (looks stateless — none recommended)'
+                : 'Database',
         [
           'none — stateless (cheapest, scale-to-zero friendly)',
           'sqlite — single machine + Fly volume',
           'fly_postgres — Fly managed Postgres (bills when API sleeps)',
           'neon — serverless Postgres (good with scale-to-zero)',
         ],
+        defaultIndex: defaultDbIdx,
       );
       dbProvider = [
         DatabaseProvider.none,
