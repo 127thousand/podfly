@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import 'log.dart';
 
 class RunResult {
@@ -16,14 +18,48 @@ class RunResult {
 }
 
 /// Runs external tools (flutter, fly, wrangler, …).
+///
+/// When [dryRun] is true, [run] / [runCapture] skip process execution unless
+/// [allowDryRun] is set to false (for rare cases that must always run).
 class ProcessRunner {
   ProcessRunner({required this.log, this.dryRun = false});
 
   final Log log;
   final bool dryRun;
 
+  /// Whether [cmd] is on PATH (Windows uses `where`, elsewhere `which`).
   Future<bool> which(String cmd) async {
-    final r = await Process.run('which', [cmd], runInShell: true);
+    // Also check PATH directories directly for reliability.
+    final pathEnv = Platform.environment['PATH'] ?? '';
+    final sep = Platform.isWindows ? ';' : ':';
+    final exts = Platform.isWindows
+        ? (Platform.environment['PATHEXT'] ?? '.EXE;.BAT;.CMD')
+            .split(';')
+            .where((e) => e.isNotEmpty)
+            .toList()
+        : <String>[''];
+
+    for (final dir in pathEnv.split(sep)) {
+      if (dir.isEmpty) continue;
+      for (final ext in exts) {
+        final candidate = p.join(dir, '$cmd${ext.toLowerCase()}');
+        if (File(candidate).existsSync()) return true;
+        // Windows often has mixed-case extensions
+        final candidate2 = p.join(dir, '$cmd$ext');
+        if (File(candidate2).existsSync()) return true;
+      }
+      // Unix: exact name
+      if (!Platform.isWindows && File(p.join(dir, cmd)).existsSync()) {
+        return true;
+      }
+    }
+
+    final finder = Platform.isWindows ? 'where' : 'which';
+    final r = await Process.run(
+      finder,
+      [cmd],
+      runInShell: true,
+    );
     return r.exitCode == 0 && (r.stdout as String).trim().isNotEmpty;
   }
 
@@ -39,6 +75,7 @@ class ProcessRunner {
     List<String> arguments, {
     String? workingDirectory,
     bool inheritStdio = true,
+    /// When true (default), honor [dryRun] and skip execution.
     bool allowDryRun = true,
     Map<String, String>? environment,
   }) async {
@@ -80,11 +117,12 @@ class ProcessRunner {
     );
   }
 
+  /// Capture stdout/stderr. Defaults [allowDryRun] to true so dry-run is consistent.
   Future<RunResult> runCapture(
     String executable,
     List<String> arguments, {
     String? workingDirectory,
-    bool allowDryRun = false,
+    bool allowDryRun = true,
   }) {
     return run(
       executable,

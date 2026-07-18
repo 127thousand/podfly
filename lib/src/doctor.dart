@@ -60,7 +60,12 @@ class Doctor {
 
   Future<bool> _needBinary(String name, {String? installHint}) async {
     if (await runner.which(name)) {
-      final r = await runner.runCapture(name, ['--version']);
+      if (runner.dryRun) {
+        log.ok('$name  (on PATH; version check skipped in dry-run)');
+        return true;
+      }
+      final r =
+          await runner.runCapture(name, ['--version'], allowDryRun: false);
       final ver = (r.stdout + r.stderr).trim().split('\n').first;
       log.ok('$name  $ver');
       return true;
@@ -90,7 +95,13 @@ class Doctor {
       return true;
     }
 
-    final who = await runner.runCapture(fly, ['auth', 'whoami']);
+    if (runner.dryRun) {
+      log.ok('$fly  (auth check skipped in dry-run)');
+      return true;
+    }
+
+    final who =
+        await runner.runCapture(fly, ['auth', 'whoami'], allowDryRun: false);
     final out = (who.stdout + who.stderr).toLowerCase();
     if (who.ok &&
         !out.contains('not logged') &&
@@ -120,7 +131,8 @@ class Doctor {
 
     if (!await runner.which('wrangler')) {
       log.err('wrangler not found (needed for mode: split)');
-      log.detail('Install: npm i -g wrangler   or   brew install cloudflare-wrangler2');
+      log.detail(
+          'Install: npm i -g wrangler   or   brew install cloudflare-wrangler2');
       if (_canLogin && await runner.which('npm')) {
         if (await confirm('Install wrangler via npm -g?')) {
           final r = await runner.run('npm', ['i', '-g', 'wrangler']);
@@ -130,7 +142,16 @@ class Doctor {
       return false;
     }
 
-    final who = await runner.runCapture('wrangler', ['whoami']);
+    if (runner.dryRun) {
+      log.ok('wrangler  (auth check skipped in dry-run)');
+      return true;
+    }
+
+    final who = await runner.runCapture(
+      'wrangler',
+      ['whoami'],
+      allowDryRun: false,
+    );
     final combined = (who.stdout + who.stderr).toLowerCase();
     if (who.ok && !combined.contains('not authenticated')) {
       log.ok('wrangler  authenticated');
@@ -145,8 +166,7 @@ class Doctor {
         if (r.ok) return _needWrangler();
       }
     } else {
-      log.detail(
-          'Set CLOUDFLARE_API_TOKEN or run: wrangler login');
+      log.detail('Set CLOUDFLARE_API_TOKEN or run: wrangler login');
     }
     return false;
   }
@@ -170,7 +190,13 @@ class Doctor {
       return false;
     }
 
-    final me = await runner.runCapture(neon, ['me']);
+    if (runner.dryRun) {
+      log.ok('$neon  (auth check skipped in dry-run)');
+      return true;
+    }
+
+    final me =
+        await runner.runCapture(neon, ['me'], allowDryRun: false);
     if (me.ok) {
       log.ok('$neon  authenticated');
       return true;

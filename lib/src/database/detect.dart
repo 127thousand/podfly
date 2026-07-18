@@ -114,8 +114,8 @@ Future<DatabaseDetection> detectDatabaseNeed(
 
       final rel = p.relative(ent.path, from: serverPath);
       final text = await ent.readAsString();
-      final inAuthDir = rel.contains('${p.separator}auth${p.separator}') ||
-          rel.contains('/auth/');
+      final inAuthDir =
+          rel.contains('${p.separator}auth${p.separator}');
 
       if (_authInit.hasMatch(text)) {
         authScaffolded = true;
@@ -196,7 +196,10 @@ Future<DatabaseDetection> detectDatabaseNeed(
             reasons.add('migration defines app table `$tName`');
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        warnings.add(
+            'migrations/${p.basename(ent.path)}/definition.json: parse failed ($e)');
+      }
     }
 
     if (authMigrationTables > 0) {
@@ -225,8 +228,7 @@ Future<DatabaseDetection> detectDatabaseNeed(
       if (ent is! File || !ent.path.endsWith('.dart')) continue;
       if (ent.path.contains('${p.separator}generated${p.separator}')) continue;
       final rel = p.relative(ent.path, from: serverPath);
-      if (rel.contains('${p.separator}auth${p.separator}') ||
-          rel.contains('/auth/')) {
+      if (rel.contains('${p.separator}auth${p.separator}')) {
         continue; // template auth endpoints
       }
       final text = await ent.readAsString();

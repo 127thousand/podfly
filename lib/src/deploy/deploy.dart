@@ -35,9 +35,7 @@ class Deployer {
   Future<void> run(DeployOptions opts) async {
     await DatabaseEnsure(config: config, runner: runner, log: log).run();
 
-    final needWeb = opts.doWeb &&
-        (config.mode == DeployMode.split || config.mode == DeployMode.fly);
-    if (needWeb) {
+    if (opts.doWeb) {
       await WebBuilder(config: config, runner: runner, log: log).build();
     }
 
@@ -116,19 +114,25 @@ class Deployer {
       throw StateError('missing web build at $out');
     }
 
-    // Create project if missing (best effort)
-    final list = await runner.runCapture('wrangler', ['pages', 'project', 'list']);
-    if (!list.stdout.contains(project) && !runner.dryRun) {
-      await runner.run('wrangler', [
-        'pages',
-        'project',
-        'create',
-        project,
-        '--production-branch',
-        config.cloudflare!.branch,
-      ]);
-    } else if (runner.dryRun) {
-      log.dry('wrangler pages project create $project (if needed)');
+    // Create project if missing (best effort). Skip network in dry-run.
+    if (runner.dryRun) {
+      log.dry('wrangler pages project list / create $project (if needed)');
+    } else {
+      final list = await runner.runCapture(
+        'wrangler',
+        ['pages', 'project', 'list'],
+        allowDryRun: false,
+      );
+      if (!list.stdout.contains(project)) {
+        await runner.run('wrangler', [
+          'pages',
+          'project',
+          'create',
+          project,
+          '--production-branch',
+          config.cloudflare!.branch,
+        ]);
+      }
     }
 
     final r = await runner.run('wrangler', [

@@ -14,11 +14,14 @@ class Initer {
     required this.root,
     required this.log,
     this.yes = false,
+    /// When set, save to this path instead of `<root>/podfly.yaml`.
+    this.configPath,
   });
 
   final String root;
   final Log log;
   final bool yes;
+  final String? configPath;
 
   Future<PodflyConfig> run() async {
     log.step('Init');
@@ -46,10 +49,7 @@ class Initer {
       region = 'iad';
       final detection = await detectDatabaseNeed(
         p.join(root, server),
-        flutterPath: p.join(
-          root,
-          discovered.flutter ?? '${nameDefault}_flutter',
-        ),
+        flutterPath: p.join(root, flutter),
       );
       log.detail('DB detection: ${detection.need.name}');
       for (final r in detection.reasons.take(5)) {
@@ -197,8 +197,9 @@ class Initer {
       log.warn('flutter path does not exist yet: ${config.flutter}');
     }
 
-    await config.save();
-    log.ok('wrote ${config.configPath}');
+    final outPath = configPath ?? config.configPath;
+    await config.save(outPath);
+    log.ok('wrote $outPath');
     return config;
   }
 }

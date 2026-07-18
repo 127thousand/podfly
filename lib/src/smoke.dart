@@ -47,9 +47,9 @@ class SmokeRunner {
 
   Future<bool> _hit(String url, SmokeEndpoint ep) async {
     log.detail('${ep.method} $url');
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 90);
     try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 90);
       final uri = Uri.parse(url);
       final req = await (ep.method.toUpperCase() == 'POST'
           ? client.postUrl(uri)
@@ -70,6 +70,8 @@ class SmokeRunner {
     } catch (e) {
       log.err('$url failed: $e');
       return false;
+    } finally {
+      client.close(force: true);
     }
   }
 }

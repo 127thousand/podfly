@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -24,7 +25,7 @@ Directory? findTemplatesDir() {
     dir = dir.parent;
   }
 
-  // 3. Pub global / cache — look for package_config
+  // 3. Pub global / cache — package_config.json
   try {
     final configFile = File(p.join(
       p.dirname(script),
@@ -33,16 +34,26 @@ Directory? findTemplatesDir() {
       'package_config.json',
     ));
     if (configFile.existsSync()) {
-      final text = configFile.readAsStringSync();
-      final match = RegExp(r'"name":\s*"podfly"[^}]*"rootUri":\s*"([^"]+)"')
-          .firstMatch(text);
-      if (match != null) {
-        var root = match.group(1)!;
-        if (root.startsWith('file://')) {
-          root = Uri.parse(root).toFilePath();
+      final json =
+          jsonDecode(configFile.readAsStringSync()) as Map<String, dynamic>;
+      final packages = json['packages'];
+      if (packages is List) {
+        for (final pkg in packages) {
+          if (pkg is! Map) continue;
+          if (pkg['name'] != 'podfly') continue;
+          final rootUri = pkg['rootUri']?.toString();
+          if (rootUri == null) continue;
+          var root = rootUri;
+          if (root.startsWith('file://')) {
+            root = Uri.parse(root).toFilePath();
+          } else if (!p.isAbsolute(root)) {
+            root = p.normalize(
+              p.join(p.dirname(configFile.path), root),
+            );
+          }
+          final t = p.join(root, 'templates');
+          if (Directory(t).existsSync()) return Directory(t);
         }
-        final t = p.join(root, 'templates');
-        if (Directory(t).existsSync()) return Directory(t);
       }
     }
   } catch (_) {}

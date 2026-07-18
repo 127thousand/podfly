@@ -73,18 +73,44 @@ class ProductionYamlPatcher {
   }
 
   String _removeDatabaseBlock(String text) {
-    // Remove top-level database: ... until next top-level key or EOF
-    final re = RegExp(
+    final replacement =
+        '# database: omitted by podfly (provider: none)\n';
+
+    // Indented multi-line block
+    final blockRe = RegExp(
       r'^database:\s*\n(?:[ \t]+.+\n)*',
       multiLine: true,
     );
-    if (re.hasMatch(text)) {
-      return text.replaceFirst(re, '# database: omitted by podfly (provider: none)\n');
+    if (blockRe.hasMatch(text)) {
+      return text.replaceFirst(blockRe, replacement);
     }
+
+    // Inline / flow mapping: `database: {host: x}` or `database: {}`
+    final inlineRe = RegExp(
+      r'^database:\s*\{[^}]*\}\s*\n?',
+      multiLine: true,
+    );
+    if (inlineRe.hasMatch(text)) {
+      return text.replaceFirst(inlineRe, replacement);
+    }
+
+    // Bare key with no children: `database:` then next top-level key or EOF
+    final bareRe = RegExp(
+      r'^database:\s*(?:#.*)?\n(?=^\S|\Z)',
+      multiLine: true,
+    );
+    if (bareRe.hasMatch(text)) {
+      return text.replaceFirst(bareRe, replacement);
+    }
+
     if (!text.contains('database:')) {
       return text;
     }
-    return text;
+    // Last resort: comment out every line that starts a database key
+    return text.replaceFirst(
+      RegExp(r'^database:', multiLine: true),
+      '# database: (podfly could not fully strip — review manually)',
+    );
   }
 
   String _setSessionLogsPersistent(String text, bool enabled) {

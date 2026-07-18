@@ -16,3 +16,4 @@ build/
 # Local
 .podfly/
 *.log
+CODE_REVIEW.md

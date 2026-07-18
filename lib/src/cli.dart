@@ -10,6 +10,7 @@ import 'init.dart';
 import 'log.dart';
 import 'process_runner.dart';
 import 'smoke.dart';
+import 'tty.dart';
 
 Future<int> runPodfly(List<String> args) async {
   final parser = _buildParser();
@@ -172,10 +173,12 @@ Future<int> _init(ArgResults g) async {
     noLogin: _flag(g, 'no-login'),
   );
   if (!await doctor.run(scope: DoctorScope.baseline)) return 1;
+  final explicit = _opt(g, 'config');
   final config = await Initer(
     root: root,
     log: log,
     yes: _flag(g, 'yes'),
+    configPath: explicit,
   ).run();
   if (!await doctor.run(scope: DoctorScope.configAware, config: config)) {
     return 1;
@@ -204,30 +207,58 @@ Future<int> _deploy(ArgResults g) async {
   final explicit = _opt(g, 'config');
   var cfgPath = explicit ?? await PodflyConfig.findConfigPath(root);
   final forceInit = _flag(g, 'init');
+  final yes = _flag(g, 'yes');
 
   late PodflyConfig config;
-  if (forceInit || cfgPath == null || !await File(cfgPath).exists()) {
+  final existingPath = cfgPath;
+  final configExists =
+      existingPath != null && await File(existingPath).exists();
+
+  if (forceInit && configExists && !yes) {
+    final path = existingPath;
+    final overwrite = await confirm(
+      'Overwrite existing ${p.basename(path)}?',
+      defaultYes: false,
+    );
+    if (!overwrite) {
+      log.detail('keeping existing config');
+      config = await PodflyConfig.load(path);
+      log.detail('config: $path');
+    } else {
+      config = await Initer(
+        root: root,
+        log: log,
+        yes: yes,
+        configPath: explicit ?? path,
+      ).run();
+    }
+  } else if (forceInit || !configExists) {
     config = await Initer(
       root: root,
       log: log,
-      yes: _flag(g, 'yes'),
+      yes: yes,
+      configPath: explicit ?? existingPath,
     ).run();
   } else {
-    config = await PodflyConfig.load(cfgPath);
-    log.detail('config: $cfgPath');
+    // configExists is true only when existingPath is non-null and file exists
+    config = await PodflyConfig.load(existingPath);
+    log.detail('config: $existingPath');
   }
 
   final modeOpt = _opt(g, 'mode');
   if (modeOpt != null) {
+    final flyMode = modeOpt == 'fly';
     config = PodflyConfig(
       root: config.root,
-      mode: modeOpt == 'fly' ? DeployMode.fly : DeployMode.split,
+      mode: flyMode ? DeployMode.fly : DeployMode.split,
       name: config.name,
       server: config.server,
       flutter: config.flutter,
       fly: config.fly,
-      cloudflare: config.cloudflare ??
-          (modeOpt == 'split' ? CloudflareConfig(project: config.name) : null),
+      // Clear Cloudflare block in fly mode so config stays consistent.
+      cloudflare: flyMode
+          ? null
+          : (config.cloudflare ?? CloudflareConfig(project: config.name)),
       database: config.database,
       web: config.web,
       smoke: config.smoke,

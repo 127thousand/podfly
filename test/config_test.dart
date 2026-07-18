@@ -41,4 +41,32 @@ void main() {
     expect(
         DatabaseConfig.parseProvider('fly_postgres'), DatabaseProvider.flyPostgres);
   });
+
+  test('smoke body with quotes round-trips via double-quoted YAML', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_body_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      mode: DeployMode.split,
+      name: 'demo',
+      server: 's',
+      flutter: 'f',
+      fly: FlyConfig(app: 'demo'),
+      cloudflare: CloudflareConfig(project: 'demo'),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      web: WebConfig(apiUrl: 'https://demo.fly.dev/'),
+      smoke: SmokeConfig(
+        api: SmokeEndpoint(
+          method: 'POST',
+          path: '/x',
+          body: "{'a':'b'}",
+        ),
+      ),
+    );
+    await cfg.save();
+    final yaml = await File(cfg.configPath).readAsString();
+    expect(yaml.contains("body: \"{'a':'b'}\""), isTrue);
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.smoke?.api?.body, "{'a':'b'}");
+    await dir.delete(recursive: true);
+  });
 }

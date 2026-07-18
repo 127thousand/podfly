@@ -324,7 +324,9 @@ class PodflyConfig {
         buf.writeln('  api:');
         buf.writeln('    method: ${a.method}');
         buf.writeln('    path: ${a.path}');
-        if (a.body != null) buf.writeln("    body: '${a.body}'");
+        if (a.body != null) {
+          buf.writeln('    body: ${_yamlDoubleQuoted(a.body!)}');
+        }
         buf.writeln('    expect_status: ${a.expectStatus}');
       }
       if (smoke!.web != null) {
@@ -339,7 +341,18 @@ class PodflyConfig {
 
   Future<void> save([String? path]) async {
     final f = File(path ?? configPath);
+    await f.parent.create(recursive: true);
     await f.writeAsString(toYaml());
+  }
+
+  /// YAML double-quoted scalar with escaping.
+  static String _yamlDoubleQuoted(String value) {
+    final escaped = value
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"')
+        .replaceAll('\n', r'\n')
+        .replaceAll('\r', r'\r');
+    return '"$escaped"';
   }
 
   static Future<PodflyConfig> load(String path) async {

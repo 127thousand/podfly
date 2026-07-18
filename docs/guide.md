@@ -45,7 +45,7 @@ podfly deploy
 
 | Flag | Meaning |
 |------|---------|
-| `--dry-run` | Print planned actions only; no create/deploy; no browser logins |
+| `--dry-run` | Print planned actions only; no create/deploy/network side effects; doctor skips live auth whoami (tools still checked on PATH); no browser logins |
 | `--smoke` | After a real deploy, hit `smoke:` endpoints |
 | `--web` | Deploy static UI only (skip Fly when used alone) |
 | `--api` | Deploy Fly API only (skip Pages when used alone) |
@@ -159,6 +159,12 @@ smoke:
 - **Web** URL (split) = `https://<cloudflare.project>.pages.dev` + path  
 
 Fly cold start: allow ~60–90s timeout (podfly uses long HTTP timeouts).
+
+## Wizard / UX notes
+
+- Init uses simple terminal prompts (not a full nocterm TUI). Same questions as the design wizard.
+- `podfly deploy --init` asks before overwriting an existing `podfly.yaml` (unless `--yes`).
+- `--config path` is used for both load and save when creating config.
 
 ## Troubleshooting
 
