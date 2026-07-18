@@ -59,23 +59,27 @@ podfly --help
 
 ### Primary UX: `podfly deploy` is enough
 
-Users should not need to remember `init` first.
+Users should not need to remember `init` first. **Doctor always runs before work** so missing tools/auth fail (or get fixed) before a long Flutter build.
 
 | Situation | Behavior |
 |-----------|----------|
-| `podfly deploy` and **no** `podfly.yaml` found (CWD / walk-up) | Run **init** (wizard if TTY; or fail with clear message if non-TTY unless `--yes` / defaults), write yaml, **then continue deploy** |
-| `podfly.yaml` exists | Skip init; load config and deploy |
-| `podfly deploy --init` | Force re-run wizard (optional override; careful not to clobber without confirm) |
+| `podfly deploy` and **no** `podfly.yaml` | Baseline doctor → **init** wizard → config-aware doctor → deploy |
+| `podfly.yaml` exists | Baseline + config-aware doctor → deploy |
+| `podfly deploy --init` | Force re-run wizard after baseline doctor (confirm before clobber) |
 
 ```text
 podfly deploy
   → resolve root
-  → if no podfly.yaml: init (interactive)
-  → doctor --fix-auth   # install hints + launch login when possible
-  → ensure DB / patch config / build web / deploy / optional smoke
+  → doctor (baseline)     # always: flutter, fly/flyctl — install hints + login if needed
+  → if no podfly.yaml: init (interactive) → write config
+  → else: load podfly.yaml
+  → doctor (config-aware) # wrangler if split, neonctl if neon provision, config consistency
+  → ensure DB / patch production.yaml / build web / deploy / optional smoke
 ```
 
-`podfly init` remains available for “configure only, don’t deploy.”
+**Why two doctor passes:** baseline tools are required even to run the wizard usefully; mode-specific tools (wrangler, neonctl) are only known after config exists. Same `doctor` module, different scopes — not two different UIs.
+
+`podfly init` remains available for “configure only, don’t deploy” (still runs baseline doctor first, then config-aware after write).
 
 ### Flags (non-interactive / CI)
 
@@ -335,8 +339,8 @@ When stdin is a TTY:
 7. Smoke path/method  
 8. Write `podfly.yaml`  
 9. Optionally write templates + starter `fly.toml` (+ mounts if sqlite)  
-10. If invoked alone: run `doctor` (with login facilitation) and print `podfly deploy --smoke`  
-11. If invoked from `deploy`: return config and let deploy continue (doctor next)
+10. If invoked alone: run config-aware `doctor` (login facilitation) and print `podfly deploy --smoke`  
+11. If invoked from `deploy`: return config; caller already did baseline doctor and will run config-aware doctor next
 
 **Non-TTY without yaml:**
 
@@ -433,8 +437,9 @@ and a checked-in `podfly.yaml` matching current split setup + `database.provider
 
 ## Success criteria
 
-- **`podfly deploy` with no yaml** runs init (wizard) then deploy without a separate command
-- `podfly doctor` / deploy preflight **offers and runs** `fly auth login`, `wrangler login`, `neonctl auth` on TTY when unauthenticated
+- **`podfly deploy` always doctors first** (baseline, then config-aware after yaml exists)
+- **`podfly deploy` with no yaml** → baseline doctor → init → config-aware doctor → deploy
+- Doctor **offers and runs** `fly auth login`, `wrangler login`, `neonctl auth` on TTY when unauthenticated
 - Missing tools get install guidance (and optional facilitated install where safe)
 - CI: `--no-login` + env tokens; no browser popups
 - `podfly init` still works standalone
