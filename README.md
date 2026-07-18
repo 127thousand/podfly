@@ -4,6 +4,7 @@ Deploy **Serverpod + Flutter web** with less pain.
 
 - **`split`** — Flutter UI on Cloudflare Pages, API on Fly.io  
 - **`fly`** — everything on Fly  
+- **Database** — `none` · SQLite (+ volume) · Fly Postgres · Neon  
 
 Interactive setup (`podfly init`) via [nocterm](https://pub.dev/packages/nocterm), plus `doctor`, `deploy`, and `smoke`.
 
