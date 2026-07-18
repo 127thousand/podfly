@@ -44,11 +44,19 @@ class Initer {
       server = discovered.server ?? '${nameDefault}_server';
       flutter = discovered.flutter ?? '${nameDefault}_flutter';
       region = 'iad';
-      final detection =
-          await detectDatabaseNeed(p.join(root, server));
+      final detection = await detectDatabaseNeed(
+        p.join(root, server),
+        flutterPath: p.join(
+          root,
+          discovered.flutter ?? '${nameDefault}_flutter',
+        ),
+      );
       log.detail('DB detection: ${detection.need.name}');
       for (final r in detection.reasons.take(5)) {
         log.detail('  · $r');
+      }
+      for (final w in detection.warnings.take(4)) {
+        log.warn(w);
       }
       dbProvider = detection.need == DatabaseNeed.required
           ? DatabaseProvider.neon
@@ -76,11 +84,16 @@ class Initer {
       );
       region = await prompt('Fly region', defaultValue: 'iad');
 
-      final detection =
-          await detectDatabaseNeed(p.join(root, server));
+      final detection = await detectDatabaseNeed(
+        p.join(root, server),
+        flutterPath: p.join(root, flutter),
+      );
       log.detail('DB detection: ${detection.need.name}');
       for (final r in detection.reasons.take(6)) {
         log.detail('  · $r');
+      }
+      for (final w in detection.warnings.take(5)) {
+        log.warn(w);
       }
 
       final defaultDbIdx = switch (detection.need) {
@@ -90,9 +103,11 @@ class Initer {
       };
       final dbIdx = await choose(
         detection.need == DatabaseNeed.required
-            ? 'Database (models/migrations suggest you need one)'
+            ? 'Database (app uses tables/auth — DB recommended)'
             : detection.need == DatabaseNeed.none
-                ? 'Database (looks stateless — none recommended)'
+                ? detection.authScaffolded
+                    ? 'Database (looks stateless; template auth unused — none OK)'
+                    : 'Database (looks stateless — none recommended)'
                 : 'Database',
         [
           'none — stateless (cheapest, scale-to-zero friendly)',

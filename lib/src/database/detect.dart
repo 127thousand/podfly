@@ -5,10 +5,10 @@ import 'package:path/path.dart' as p;
 
 /// Heuristic: does this Serverpod server look like it needs a database?
 enum DatabaseNeed {
-  /// No app tables, no auth, no session.db — fine without Postgres.
+  /// No app tables / hard auth / session.db — fine without Postgres.
   none,
 
-  /// Clear signals: tables, auth, session.db, or production database block.
+  /// Clear signals: app tables, requireLogin, session.db, or active auth use.
   required,
 
   /// Ambiguous — ask the user.
@@ -19,18 +19,28 @@ class DatabaseDetection {
   DatabaseDetection({
     required this.need,
     required this.reasons,
+    this.warnings = const [],
     this.appTableModels = const [],
     this.appMigrationTables = const [],
-    this.authRequiresDatabase = false,
+    this.authScaffolded = false,
+    this.authActivelyUsed = false,
   });
 
   final DatabaseNeed need;
   final List<String> reasons;
+  /// Soft notes (e.g. unused template auth) — do not force DB alone.
+  final List<String> warnings;
   final List<String> appTableModels;
   final List<String> appMigrationTables;
 
-  /// True when Serverpod Auth / IDP is wired up (needs tables for users/sessions).
-  final bool authRequiresDatabase;
+  /// Template-style auth present (deps / init / migration tables).
+  final bool authScaffolded;
+
+  /// App actually gates endpoints or UI on auth.
+  final bool authActivelyUsed;
+
+  @Deprecated('Use authActivelyUsed / authScaffolded')
+  bool get authRequiresDatabase => authActivelyUsed;
 }
 
 final _authPackage = RegExp(
@@ -41,14 +51,32 @@ final _authInit = RegExp(
   r'initializeAuthServices|AuthConfig\.set|pod\.authenticationHandler',
 );
 
-/// Inspect a Serverpod `*_server` package for database usage signals.
-Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
+final _requireLoginTrue = RegExp(
+  r'bool\s+get\s+requireLogin\s*=>\s*true\b',
+);
+
+final _authSessionUse = RegExp(
+  r'session\.authenticated\b|session\.auth\b|AuthSuccess\b|'
+  r'authenticatedUser\b|currentUserId\b|requireAuthentication\b',
+);
+
+/// Inspect a Serverpod `*_server` package (and optional Flutter app) for DB need.
+///
+/// **Template auth** (Serverpod create default) is a **warning**, not a hard
+/// requirement — login tables exist but unused apps (e.g. sacred-draw) can stay
+/// `database: none`. Hard require when app models/ORM/`requireLogin`/sign-in home.
+Future<DatabaseDetection> detectDatabaseNeed(
+  String serverPath, {
+  String? flutterPath,
+}) async {
   final reasons = <String>[];
+  final warnings = <String>[];
   final tableModels = <String>[];
   final migrationTables = <String>[];
   var scoreRequired = 0;
   var scoreNone = 0;
-  var authRequiresDatabase = false;
+  var authScaffolded = false;
+  var authActivelyUsed = false;
   var authMigrationTables = 0;
   var coreOnlyMigrationTables = 0;
 
@@ -60,7 +88,7 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
     );
   }
 
-  // ── Auth: pubspec dependencies ─────────────────────────────
+  // ── Auth scaffold: pubspec ─────────────────────────────────
   final pubspec = File(p.join(serverPath, 'pubspec.yaml'));
   if (await pubspec.exists()) {
     final text = await pubspec.readAsString();
@@ -70,42 +98,53 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
       if (m != null) authDeps.add(m.group(1)!);
     }
     if (authDeps.isNotEmpty) {
-      authRequiresDatabase = true;
-      scoreRequired += 2;
-      reasons.add(
-          'pubspec depends on auth: ${authDeps.take(4).join(', ')}'
-          '${authDeps.length > 4 ? '…' : ''} (needs DB for users/sessions)');
+      authScaffolded = true;
+      warnings.add(
+          'template/auth deps: ${authDeps.take(3).join(', ')}'
+          '${authDeps.length > 3 ? '…' : ''} — strip if unused, else need a DB for login');
     }
   }
 
-  // ── Auth: server.dart / lib initializeAuthServices ─────────
+  // ── Auth scaffold + active use in server lib ───────────────
   final lib = Directory(p.join(serverPath, 'lib'));
   if (await lib.exists()) {
     await for (final ent in lib.list(recursive: true, followLinks: false)) {
       if (ent is! File || !ent.path.endsWith('.dart')) continue;
       if (ent.path.contains('${p.separator}generated${p.separator}')) continue;
+
+      final rel = p.relative(ent.path, from: serverPath);
       final text = await ent.readAsString();
+      final inAuthDir = rel.contains('${p.separator}auth${p.separator}') ||
+          rel.contains('/auth/');
+
       if (_authInit.hasMatch(text)) {
-        authRequiresDatabase = true;
-        scoreRequired += 3;
-        reasons.add(
-            'auth initialized in ${p.relative(ent.path, from: serverPath)} '
-            '(initializeAuthServices / AuthConfig — needs DB)');
-        break;
+        authScaffolded = true;
+        warnings.add(
+            'auth initialized in $rel (Serverpod create default) — '
+            'only needs DB if you use login');
       }
-      // Imports of auth packages in non-generated code
-      if (_authPackage.hasMatch(text) &&
-          text.contains('import ') &&
-          !authRequiresDatabase) {
-        // weak until we confirm init — still a hint
-        scoreRequired += 1;
-        reasons.add(
-            'imports serverpod_auth_* in ${p.relative(ent.path, from: serverPath)}');
+
+      if (_authPackage.hasMatch(text) && text.contains('import ')) {
+        authScaffolded = true;
+      }
+
+      // App endpoints requiring login → auth is real
+      if (_requireLoginTrue.hasMatch(text) && !inAuthDir) {
+        // Insights etc. not in app lib
+        authActivelyUsed = true;
+        scoreRequired += 3;
+        reasons.add('endpoint requireLogin => true in $rel (auth is in use)');
+      }
+
+      if (_authSessionUse.hasMatch(text) && !inAuthDir) {
+        authActivelyUsed = true;
+        scoreRequired += 2;
+        reasons.add('app code checks auth session in $rel');
       }
     }
   }
 
-  // ── 1. .spy.yaml with active `table:` ──────────────────────
+  // ── App models with table: ─────────────────────────────────
   await for (final ent in server.list(recursive: true, followLinks: false)) {
     if (ent is! File) continue;
     final name = p.basename(ent.path);
@@ -124,10 +163,7 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
     }
   }
 
-  // ── 2. Migrations ──────────────────────────────────────────
-  // serverpod_* core (logs, health, cloud storage) = scaffolding
-  // serverpod_auth_* = real auth schema → DB required
-  // other modules / app tables → DB required
+  // ── Migrations ─────────────────────────────────────────────
   final migRoot = Directory(p.join(serverPath, 'migrations'));
   if (await migRoot.exists()) {
     await for (final ent in migRoot.list(followLinks: false)) {
@@ -151,8 +187,7 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
 
           if (isAuth) {
             authMigrationTables++;
-            authRequiresDatabase = true;
-            migrationTables.add(tName);
+            authScaffolded = true;
           } else if (isCoreServerpod) {
             coreOnlyMigrationTables++;
           } else {
@@ -165,16 +200,15 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
     }
 
     if (authMigrationTables > 0) {
-      scoreRequired += 3;
-      reasons.add(
+      warnings.add(
           'migrations include $authMigrationTables serverpod_auth_* tables '
-          '(users, sessions, IDP accounts)');
-    } else if (coreOnlyMigrationTables > 0 &&
+          '(template schema; unused unless login is enabled)');
+    }
+    if (coreOnlyMigrationTables > 0 &&
         migrationTables.isEmpty &&
-        tableModels.isEmpty &&
-        !authRequiresDatabase) {
+        tableModels.isEmpty) {
       reasons.add(
-          'migrations only have core serverpod_* tables (no auth, no app tables)');
+          'migrations only have core serverpod_* tables (no app tables)');
       scoreNone += 1;
     }
   } else {
@@ -182,7 +216,7 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
     scoreNone += 1;
   }
 
-  // ── 3. session.db / ORM in app code ────────────────────────
+  // ── session.db / ORM in app code ───────────────────────────
   if (await lib.exists()) {
     final dbCall = RegExp(
       r'session\.db\b|\.insertRow\b|\.find\(|\.findById\b|\.updateRow\b|\.deleteRow\b|\.deleteWhere\b',
@@ -190,18 +224,36 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
     await for (final ent in lib.list(recursive: true, followLinks: false)) {
       if (ent is! File || !ent.path.endsWith('.dart')) continue;
       if (ent.path.contains('${p.separator}generated${p.separator}')) continue;
+      final rel = p.relative(ent.path, from: serverPath);
+      if (rel.contains('${p.separator}auth${p.separator}') ||
+          rel.contains('/auth/')) {
+        continue; // template auth endpoints
+      }
       final text = await ent.readAsString();
-      // Avoid matching Auth package generated patterns only in app endpoints
       if (dbCall.hasMatch(text)) {
         scoreRequired += 3;
-        reasons.add(
-            'code uses DB APIs in ${p.relative(ent.path, from: serverPath)}');
+        reasons.add('code uses DB APIs in $rel');
         break;
       }
     }
   }
 
-  // ── 4. production.yaml ─────────────────────────────────────
+  // ── Flutter: sign-in as home = active auth ─────────────────
+  final flutter = flutterPath ?? _guessFlutterSibling(serverPath);
+  if (flutter != null) {
+    final flutterAuth = await _inspectFlutterAuth(flutter);
+    if (flutterAuth.scaffolded) {
+      authScaffolded = true;
+      warnings.addAll(flutterAuth.warnings);
+    }
+    if (flutterAuth.active) {
+      authActivelyUsed = true;
+      scoreRequired += 3;
+      reasons.addAll(flutterAuth.reasons);
+    }
+  }
+
+  // ── production.yaml ────────────────────────────────────────
   final prod = File(p.join(serverPath, 'config', 'production.yaml'));
   if (await prod.exists()) {
     final text = await prod.readAsString();
@@ -211,15 +263,17 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
     final omitted = text.contains('database: omitted') || !hasDbKey;
 
     if (omitted) {
-      if (authRequiresDatabase) {
-        // Conflict: auth needs DB but production omitted it
-        scoreRequired += 1;
+      scoreNone += 2;
+      reasons.add('production.yaml has no active database: block');
+      if (authScaffolded && !authActivelyUsed) {
+        warnings.add(
+            'auth is scaffolded but production omits database: — fine if '
+            'you never call login; add a DB before enabling sign-in');
+      }
+      if (authActivelyUsed) {
+        scoreRequired += 2;
         reasons.add(
-            'production.yaml omits database: but auth is configured — '
-            'login/session endpoints will fail without a DB');
-      } else {
-        scoreNone += 2;
-        reasons.add('production.yaml has no active database: block');
+            'production.yaml omits database: but auth is actively used');
       }
     } else {
       scoreRequired += 1;
@@ -231,8 +285,8 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
     }
   }
 
-  // Auth alone is enough to require DB (even if app models are pure DTOs)
-  if (authRequiresDatabase) {
+  // Scaffold-only auth does NOT force required
+  if (authActivelyUsed) {
     scoreRequired = scoreRequired < 2 ? 2 : scoreRequired;
   }
 
@@ -249,8 +303,121 @@ Future<DatabaseDetection> detectDatabaseNeed(String serverPath) async {
   return DatabaseDetection(
     need: need,
     reasons: reasons,
+    warnings: warnings,
     appTableModels: tableModels,
     appMigrationTables: migrationTables,
-    authRequiresDatabase: authRequiresDatabase,
+    authScaffolded: authScaffolded,
+    authActivelyUsed: authActivelyUsed,
+  );
+}
+
+String? _guessFlutterSibling(String serverPath) {
+  final parent = p.dirname(serverPath);
+  final base = p.basename(serverPath);
+  // app_server → app_flutter
+  if (base.endsWith('_server')) {
+    final candidate =
+        p.join(parent, '${base.substring(0, base.length - '_server'.length)}_flutter');
+    if (Directory(candidate).existsSync()) return candidate;
+  }
+  // scan parent for *_flutter with web/
+  final dir = Directory(parent);
+  if (!dir.existsSync()) return null;
+  for (final ent in dir.listSync()) {
+    if (ent is! Directory) continue;
+    final n = p.basename(ent.path);
+    if (n.endsWith('_flutter') &&
+        Directory(p.join(ent.path, 'web')).existsSync()) {
+      return ent.path;
+    }
+  }
+  return null;
+}
+
+class _FlutterAuthInspect {
+  _FlutterAuthInspect({
+    this.scaffolded = false,
+    this.active = false,
+    this.warnings = const [],
+    this.reasons = const [],
+  });
+  final bool scaffolded;
+  final bool active;
+  final List<String> warnings;
+  final List<String> reasons;
+}
+
+Future<_FlutterAuthInspect> _inspectFlutterAuth(String flutterPath) async {
+  final warnings = <String>[];
+  final reasons = <String>[];
+  var scaffolded = false;
+  var active = false;
+
+  final pub = File(p.join(flutterPath, 'pubspec.yaml'));
+  if (await pub.exists()) {
+    final t = await pub.readAsString();
+    if (t.contains('serverpod_auth')) {
+      scaffolded = true;
+      warnings.add(
+          'Flutter depends on serverpod_auth_* (template) — strip if no login UI');
+    }
+  }
+
+  final lib = Directory(p.join(flutterPath, 'lib'));
+  if (!await lib.exists()) {
+    return _FlutterAuthInspect(scaffolded: scaffolded, warnings: warnings);
+  }
+
+  var hasSignInScreen = false;
+  var signInIsHome = false;
+
+  await for (final ent in lib.list(recursive: true, followLinks: false)) {
+    if (ent is! File || !ent.path.endsWith('.dart')) continue;
+    final text = await ent.readAsString();
+    final rel = p.relative(ent.path, from: flutterPath);
+    final base = p.basename(ent.path);
+
+    if (base.contains('sign_in') ||
+        text.contains('SignInScreen') ||
+        text.contains('SignInPage')) {
+      hasSignInScreen = true;
+      scaffolded = true;
+    }
+
+    // home: SignInScreen / MaterialApp(home: SignIn...)
+    if (RegExp(
+          r'''home:\s*(const\s+)?\w*SignIn\w*|initialRoute:\s*['"][^'"]*sign[_-]?in''',
+          caseSensitive: false,
+        ).hasMatch(text)) {
+      signInIsHome = true;
+    }
+
+    // Auth gate wrapping the app
+    if (text.contains('authInfoListenable') &&
+        (text.contains('isAuthenticated') || text.contains('signedIn')) &&
+        !base.contains('sign_in')) {
+      // Could be only in sign_in_screen — if main.dart gates, harder
+      if (base == 'main.dart' || rel.contains('app.dart')) {
+        active = true;
+        reasons.add('Flutter $rel gates UI on auth state');
+      }
+    }
+  }
+
+  if (hasSignInScreen && !signInIsHome) {
+    warnings.add(
+        'Flutter has sign_in_screen.dart but it is not the app home '
+        '(typical unused Serverpod template)');
+  }
+  if (signInIsHome) {
+    active = true;
+    reasons.add('Flutter app home/initialRoute is sign-in (auth is in use)');
+  }
+
+  return _FlutterAuthInspect(
+    scaffolded: scaffolded,
+    active: active,
+    warnings: warnings,
+    reasons: reasons,
   );
 }
