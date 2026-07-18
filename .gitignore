@@ -2,7 +2,8 @@
 .dart_tool/
 .packages
 build/
-pubspec.lock
+# Keep lockfile for apps; optional for pure CLI packages
+# pubspec.lock
 
 # IDE
 .idea/

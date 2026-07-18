@@ -1,0 +1,3 @@
+# Optional SPA fallback — Flutter web usually has real index.html routes.
+# Uncomment if you need client-side routing for non-file paths:
+# /*    /index.html   200
