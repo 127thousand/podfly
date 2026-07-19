@@ -126,6 +126,9 @@ podfly smoke
 
 | Doc | Contents |
 |-----|----------|
+| [**AGENTS.md**](AGENTS.md) | Rules for coding agents |
+| [**llms.txt**](llms.txt) | LLM / doc index |
+| [**Skill**](.grok/skills/podfly/SKILL.md) | Grok skill (`/podfly`) |
 | [**User guide**](docs/guide.md) | Flow, flags, CI, automation |
 | [**Caching & Flutter web**](docs/caching.md) | WASM, service worker, `_headers` |
 | [**Database**](docs/database.md) | Providers + detection |
