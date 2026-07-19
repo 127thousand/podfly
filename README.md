@@ -13,52 +13,75 @@ podfly deploy          →  provider CLIs + configs + quirks (podfly)
 
 ---
 
+## Official recommendation
+
+For the path Serverpod themselves maintain and recommend, use **[Serverpod Cloud](https://serverpod.dev/cloud)** — managed hosting built for Serverpod (API, Insights, and the rest of the product surface).
+
+**podfly** is for teams that want to stay on **their own** infra (Fly, Railway, big clouds, etc.) and still avoid hand-rolling every CLI and config quirk. It complements Serverpod Cloud; it does not replace it.
+
+---
+
 ## Provider roadmap
 
-Status is what **podfly** supports as a first-class target (not whether you can deploy Serverpod there by hand).
+**podfly status** = first-class in this tool.  
+**Fit** = how well that host matches Serverpod’s process model (multi-port monolith vs API-only), independent of podfly.
 
-### 🚀 App hosts (run the Serverpod Docker API)
+### Topology keys
 
-| Provider | CLI | Status | Notes |
-|----------|-----|--------|--------|
-| 🟣 [**Fly.io**](https://fly.io) | `fly` / `flyctl` | ✅ **Supported** | Default path; apps create, `fly.toml`, scale-to-zero |
-| 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ **Supported** (UI only) | Flutter web split frontend; not the API |
-| 🚂 [**Railway**](https://railway.app) | Railway CLI | 🗺️ Planned | Excellent DX; Docker + Git |
-| 🟦 [**Render**](https://render.com) | Render CLI / Blueprint | 🗺️ Planned | Docker services + simple prod |
-| ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | 🗺️ Planned | Large-cloud default; containers |
-| 📦 [**AWS**](https://aws.amazon.com) (App Runner / ECS) | `aws` | 🗺️ Planned | What most enterprises already have |
-| 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ Planned | Same for Microsoft shops |
-| 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | 🗺️ Planned | Simple PaaS many already use |
+| Topology | Meaning |
+|----------|---------|
+| 📱 **API-only** | Serverpod API (≈ one public port). Mobile or other clients. |
+| 🔀 **Split** | Static Flutter web on a CDN/Pages host; API on an app host. |
+| 🧱 **All-in-one** | API + web (and often Insights) as multi-port / multi-role on one machine. |
+| 📊 **Insights** | Serverpod Insights (separate port/process in full setups). **Not automated by podfly yet.** |
+
+### 🚀 App hosts
+
+| Provider | CLI | podfly | 📱 API-only | 🔀 Split UI+API | 🧱 All-in-one | 📊 Insights | Notes |
+|----------|-----|--------|:-----------:|:---------------:|:-------------:|:-----------:|-------|
+| 💜 [**Serverpod Cloud**](https://serverpod.dev/cloud) | Serverpod Cloud | — | ✅ | ✅ | ✅ | ✅ | **Official** managed option |
+| 🟣 [**Fly.io**](https://fly.io) | `fly` / `flyctl` | ✅ | ✅ | ✅ | ✅ | 🟡 | Default podfly path; multi-port Machines OK |
+| 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | — | Static Flutter web only; **not** the API |
+| 🚂 [**Railway**](https://railway.app) | `railway` | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | Great DX; one service/port is simplest |
+| 🟦 [**Render**](https://render.com) | Render CLI | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | Same: prefer API service + static site |
+| ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | 🗺️ | 🟡 | 🟡 | ❌ | ❌ | Request-scoped, one public port; cold starts; sidecars only help routing — **not** a drop-in multi-port monolith |
+| 📦 [**AWS**](https://aws.amazon.com) App Runner / ECS | `aws` | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | App Runner ≈ API-only; ECS freer for multi-service |
+| 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | Similar to Cloud Run / containers |
+| 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | Simple PaaS |
+
+**Fit legend:** ✅ natural · 🟡 possible with constraints (single port, split services, always-on, etc.) · ❌ poor fit · 🗺️ podfly not implemented yet · — N/A
+
+**Cloud Run in particular:** fine for **API-only** (or split with UI elsewhere) if you pin one port and accept cold starts / min instances. **Not** a first-class target for stock multi-port Serverpod (API + web + Insights) without redesign or multi-service layout.
 
 ### 🐘 Hosted Postgres
 
-| Provider | CLI / API | Status | Notes |
+| Provider | CLI / API | podfly | Notes |
 |----------|-----------|--------|--------|
-| 🚫 **None** | — | ✅ **Supported** | Stateless APIs |
-| 🟢 [**Neon**](https://neon.tech) | `neonctl` | ✅ **Supported** | Serverless PG; good with sleeping APIs |
-| 🟣 [**Fly Postgres**](https://fly.io/docs/postgres/) | `fly postgres` | ✅ **Supported** | Private network to Machines; bills when API sleeps |
-| 💾 **SQLite** (+ Fly volume) | `fly volumes` | ✅ **Supported** | Single-machine only |
-| ⚡ [**Supabase**](https://supabase.com) | Supabase CLI / URL | 🗺️ Planned | Managed PG (use as database only if you want) |
-| 🚂 [**Railway Postgres**](https://railway.app) | Railway CLI | 🗺️ Planned | Bundle with Railway app host |
-| 🟦 [**Render Postgres**](https://render.com) | Dashboard / API | 🗺️ Planned | Bundle with Render |
-| 📦 [**AWS RDS**](https://aws.amazon.com/rds/) | `aws` | 🗺️ Planned | Enterprise default |
-| ☁️ [**Google Cloud SQL**](https://cloud.google.com/sql) | `gcloud` | 🗺️ Planned | GCP default |
-| 🔷 [**Azure Database for PostgreSQL**](https://azure.microsoft.com/products/postgresql) | `az` | 🗺️ Planned | Azure default |
-| 🌊 [**DigitalOcean Managed Postgres**](https://www.digitalocean.com/products/managed-databases) | `doctl` | 🗺️ Planned | Simple managed PG |
+| 🚫 **None** | — | ✅ | Stateless APIs |
+| 🟢 [**Neon**](https://neon.tech) | `neonctl` | ✅ | Serverless PG; pairs with sleeping APIs |
+| 🟣 [**Fly Postgres**](https://fly.io/docs/postgres/) | `fly postgres` | ✅ | Private network; often bills when API is stopped |
+| 💾 **SQLite** (+ Fly volume) | `fly volumes` | ✅ | Single-machine only |
+| ⚡ [**Supabase**](https://supabase.com) | CLI / URL | 🗺️ | Managed PG (use DB only if you want) |
+| 🚂 [**Railway Postgres**](https://railway.app) | Railway CLI | 🗺️ | Bundle with Railway app |
+| 🟦 [**Render Postgres**](https://render.com) | API / dashboard | 🗺️ | Bundle with Render |
+| 📦 [**AWS RDS**](https://aws.amazon.com/rds/) | `aws` | 🗺️ | Enterprise default |
+| ☁️ [**Google Cloud SQL**](https://cloud.google.com/sql) | `gcloud` | 🗺️ | GCP default |
+| 🔷 [**Azure Database for PostgreSQL**](https://azure.microsoft.com/products/postgresql) | `az` | 🗺️ | Azure default |
+| 🌊 [**DigitalOcean Managed Postgres**](https://www.digitalocean.com/products/managed-databases) | `doctl` | 🗺️ | Simple managed PG |
 
-**Legend:** ✅ supported today · 🗺️ planned  
+**podfly legend:** ✅ supported today · 🗺️ planned  
 
 Want another provider? Open an issue — preference is **excellent DX** or **clouds most teams already pay for**.
 
 ---
 
-## What you get today (Fly + optional Pages + Neon)
+## What you get today (podfly)
 
-| Mode | UI | API |
-|------|----|-----|
-| 🔀 **`split`** | 🟠 Cloudflare Pages | 🟣 Fly.io |
-| 🪰 **`fly`** | Optional static on Fly | 🟣 Fly.io |
-| 📱 **API-only** | — (mobile / other clients) | 🟣 Fly.io (`web.enabled: false`) |
+| Mode | UI | API | Insights |
+|------|----|-----|----------|
+| 🔀 **`split`** | 🟠 Cloudflare Pages | 🟣 Fly.io | ⛔ not wired |
+| 🪰 **`fly`** | Optional static on Fly | 🟣 Fly.io | ⛔ not wired |
+| 📱 **API-only** | — (mobile / other clients) | 🟣 Fly.io | ⛔ not wired |
 
 | Database | When |
 |----------|------|
@@ -66,6 +89,8 @@ Want another provider? Open an issue — preference is **excellent DX** or **clo
 | 💾 **`sqlite`** | Single machine + volume |
 | 🟣 **`fly_postgres`** | Classic Serverpod on Fly |
 | 🟢 **`neon`** | Serverless PG |
+
+Serverpod **Insights** is part of full Serverpod deployments (and of [Serverpod Cloud](https://serverpod.dev/cloud)); podfly does not deploy or configure Insights yet.
 
 ---
 
