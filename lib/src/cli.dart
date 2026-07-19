@@ -87,29 +87,41 @@ ArgParser _buildParser() {
 
 void _usage(ArgParser parser) {
   stdout.writeln('''
-podfly — deploy Serverpod + Flutter web
+podfly — deploy Serverpod via existing cloud CLIs (not a host)
+
+  serverpod create …  →  monorepo + Dockerfile (Serverpod)
+  podfly deploy       →  fly/wrangler/neonctl + config quirks
 
 Usage:
   podfly deploy [options]   Doctor → init if needed → deploy
-  podfly doctor
-  podfly init
-  podfly smoke
+  podfly doctor             Check tools + auth
+  podfly init               Write podfly.yaml only
+  podfly smoke              HTTP checks only
 
-Options (deploy):
-  --dry-run     Plan only, no side effects
-  --smoke       HTTP checks after deploy
-  --web / --api Partial deploy
+Deploy options:
+  --dry-run     Plan only (no create/deploy/network side effects)
+  --smoke       After deploy, hit smoke: endpoints in podfly.yaml
+  --api         API only (skip Flutter web / Pages) — use for mobile
+  --web         Web only (or force web even if web.enabled: false)
   --yes / -y    Non-interactive init defaults
-  --no-login    Do not open auth browsers
-  --init        Force wizard even if podfly.yaml exists
-  --mode        split | fly
-  --root        Project root
+  --no-login    Do not open browser logins (CI: use FLY_API_TOKEN, etc.)
+  --init        Force wizard; confirms before overwriting podfly.yaml
+  --mode        split | fly   (split = Pages UI + Fly API)
+  --root        Project root (default: cwd)
   --config      Path to podfly.yaml
 
+Supported today: Fly (API), Cloudflare Pages (UI), Neon / Fly PG / SQLite / none.
+Dockerfile: prefer Serverpod's *_server/Dockerfile (podfly does not invent hosts).
+
 Examples:
-  podfly deploy --smoke
-  podfly deploy --dry-run
-  podfly --web --dry-run
+  serverpod create my_app --mini -f && cd my_app
+  podfly deploy --yes --smoke
+
+  podfly deploy --yes --dry-run --no-login   # plan
+  podfly deploy --api --yes --smoke          # mobile / API-only
+  podfly doctor
+
+Docs: https://github.com/127thousand/podfly (README, AGENTS.md, llms.txt)
 ''');
 }
 

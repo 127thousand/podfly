@@ -1,7 +1,7 @@
 name: podfly
 description: >
-  Deploy Serverpod + Flutter web — split (Cloudflare Pages + Fly) or all-on-Fly,
-  with doctor, init wizard, and database providers (none, sqlite, fly postgres, neon).
+  Orchestrate Serverpod deploys on existing clouds via their CLIs (fly, wrangler,
+  neonctl, …). Encodes config quirks; not a host. Fly + Pages + Neon today.
 version: 0.1.0
 repository: https://github.com/127thousand/podfly
 homepage: https://github.com/127thousand/podfly

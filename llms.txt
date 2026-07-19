@@ -1,0 +1,66 @@
+# podfly
+
+> Deploy Serverpod on existing cloud infrastructure via each provider’s CLI.
+> Not a host — orchestrates fly, wrangler, neonctl, etc., and encodes config quirks.
+
+## Start here
+
+- [README](README.md) — mission, provider roadmap, quick start
+- [AGENTS.md](AGENTS.md) — agent rules and decision tree
+- [docs/guide.md](docs/guide.md) — commands, flags, automation, troubleshooting
+- [docs/podfly.yaml.md](docs/podfly.yaml.md) — full config reference
+
+## Core docs
+
+- [docs/caching.md](docs/caching.md) — Flutter web WASM, service worker, Cache-Control
+- [docs/database.md](docs/database.md) — none / sqlite / fly_postgres / neon + detection
+- [docs/README.md](docs/README.md) — docs index
+- [docs/specs/2026-07-18-podfly-design.md](docs/specs/2026-07-18-podfly-design.md) — design history
+
+## Examples
+
+- [examples/mobile_api_only](examples/mobile_api_only) — Serverpod mini, android+ios only, API-only deploy
+
+## Default commands (copy-paste)
+
+```bash
+# Install
+dart pub global activate --source git https://github.com/127thousand/podfly.git
+
+# After serverpod create (or in existing Serverpod monorepo)
+podfly deploy --yes --smoke
+
+# Plan only
+podfly deploy --yes --dry-run --no-login
+
+# API only (mobile clients)
+podfly deploy --api --yes --smoke
+
+# Checks
+podfly doctor
+podfly smoke
+```
+
+## Supported today
+
+| Layer | Providers |
+|-------|-----------|
+| API | Fly.io (`fly`) |
+| UI | Cloudflare Pages (`wrangler`) when `mode: split` + `web.enabled` |
+| DB | none, sqlite (+ volume), fly_postgres, neon |
+
+Planned: Railway, Render, Cloud Run, AWS, Azure, DigitalOcean; Supabase / RDS / Cloud SQL / etc.
+
+## Hard rules for agents
+
+1. Prefer Serverpod’s `*_server/Dockerfile` — do not invent Python or random images.
+2. Build Flutter web inside the Flutter package (podfly does this).
+3. Template Serverpod auth ≠ needs Postgres (soft warning only).
+4. No `web/` + android/ios → API-only (`web.enabled: false`).
+5. Podfly auto-creates Fly apps and sanitizes names (`_` → `-`).
+
+## Package
+
+- Binary: `podfly`
+- Repo: https://github.com/127thousand/podfly
+- Skill: `.grok/skills/podfly/SKILL.md` (also installable under `~/.grok/skills/podfly/`)
