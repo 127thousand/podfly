@@ -3,9 +3,14 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import 'hosts/hosts.dart';
+
 enum DeployMode { split, fly }
 
 /// Where the Serverpod **API** container runs.
+///
+/// Behavior (CLI, deploy, auth) lives on [HostAdapter] via [HostRegistry] —
+/// do not add host-specific logic here.
 enum AppHost {
   fly,
   railway,
@@ -19,60 +24,27 @@ enum AppHost {
 enum DatabaseProvider { none, sqlite, flyPostgres, neon }
 
 extension AppHostX on AppHost {
-  String get yamlName => switch (this) {
-        AppHost.fly => 'fly',
-        AppHost.railway => 'railway',
-        AppHost.render => 'render',
-        AppHost.cloudRun => 'cloud_run',
-        AppHost.aws => 'aws',
-        AppHost.azure => 'azure',
-        AppHost.digitalOcean => 'digitalocean',
-      };
+  HostAdapter get adapter {
+    ensureHostsRegistered();
+    return HostRegistry.require(this);
+  }
 
-  String get label => switch (this) {
-        AppHost.fly => 'Fly.io',
-        AppHost.railway => 'Railway',
-        AppHost.render => 'Render',
-        AppHost.cloudRun => 'Google Cloud Run',
-        AppHost.aws => 'AWS (App Runner / ECS)',
-        AppHost.azure => 'Azure Container Apps',
-        AppHost.digitalOcean => 'DigitalOcean App Platform',
-      };
+  String get yamlName => adapter.id;
 
-  /// CLI binary names to check (first found wins for multi-name tools).
-  List<String> get cliBinaries => switch (this) {
-        AppHost.fly => ['fly', 'flyctl'],
-        AppHost.railway => ['railway'],
-        AppHost.render => ['render'],
-        AppHost.cloudRun => ['gcloud'],
-        AppHost.aws => ['aws'],
-        AppHost.azure => ['az'],
-        AppHost.digitalOcean => ['doctl'],
-      };
+  String get label => adapter.label;
 
-  String get installHint => switch (this) {
-        AppHost.fly => 'https://fly.io/docs/hands-on/install-flyctl/',
-        AppHost.railway => 'https://docs.railway.app/guides/cli',
-        AppHost.render => 'https://render.com/docs/cli',
-        AppHost.cloudRun => 'https://cloud.google.com/sdk/docs/install',
-        AppHost.aws => 'https://docs.aws.amazon.com/cli/',
-        AppHost.azure => 'https://learn.microsoft.com/cli/azure/install-azure-cli',
-        AppHost.digitalOcean => 'https://docs.digitalocean.com/reference/doctl/',
-      };
+  List<String> get cliBinaries => adapter.cliBinaries;
 
-  /// Deploy implemented in podfly today.
-  bool get isImplemented => this == AppHost.fly || this == AppHost.railway;
+  String get installHint => adapter.installHint;
 
-  static AppHost parse(String? s) => switch (s) {
-        null || 'fly' => AppHost.fly,
-        'railway' => AppHost.railway,
-        'render' => AppHost.render,
-        'cloud_run' || 'cloudrun' || 'gcp' || 'google' => AppHost.cloudRun,
-        'aws' => AppHost.aws,
-        'azure' => AppHost.azure,
-        'digitalocean' || 'do' => AppHost.digitalOcean,
-        _ => throw FormatException('Unknown host/provider: $s'),
-      };
+  /// Deploy implemented for this host.
+  bool get isImplemented => adapter.canDeploy;
+
+  static AppHost parse(String? s) {
+    ensureHostsRegistered();
+    if (s == null || s.isEmpty || s == 'fly') return AppHost.fly;
+    return HostRegistry.requireId(s).appHost;
+  }
 }
 
 class FlyConfig {
@@ -366,15 +338,8 @@ class PodflyConfig {
 
   /// Best-known public API base URL for this host (trailing slash).
   String get apiPublicBase {
-    if (host == AppHost.railway) {
-      final u = railway?.publicUrl;
-      if (u != null) return u;
-      // Placeholder until domain is provisioned.
-      return web.apiUrlNormalized;
-    }
-    if (host == AppHost.fly) {
-      return 'https://${fly.app}.fly.dev/';
-    }
+    final fromHost = host.adapter.publicApiBase(this);
+    if (fromHost != null && fromHost.isNotEmpty) return fromHost;
     return web.apiUrlNormalized;
   }
 
@@ -604,9 +569,11 @@ class PodflyConfig {
     }
 
     final webMap = _map(doc['web']);
-    final defaultApiUrl = host == AppHost.railway
-        ? (railway?.publicUrl ?? 'https://REPLACE.up.railway.app/')
-        : 'https://${fly.app}.fly.dev/';
+    final sanitized = name.replaceAll('_', '-');
+    final defaultApiUrl = host.adapter.defaultApiUrl(
+      name: name,
+      sanitizedName: flyMap['app']?.toString() ?? sanitized,
+    );
     final apiUrl = webMap['api_url']?.toString() ?? defaultApiUrl;
     final web = WebConfig(
       enabled: webMap['enabled'] != false,

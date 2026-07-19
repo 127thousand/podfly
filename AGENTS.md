@@ -4,8 +4,10 @@ Instructions for coding agents working in this repo or deploying Serverpod with 
 
 ## What podfly is
 
-Thin **orchestrator** over existing cloud CLIs (`fly`, `wrangler`, `neonctl`, …).  
+Thin **orchestrator** over existing cloud CLIs (`fly`, `railway`, `wrangler`, `neonctl`, …).  
 It is **not** a host. It generates config, encodes quirks, and runs provider tools.
+
+API clouds are **HostAdapter** plugins under `lib/src/hosts/` (registry). Do not add `switch (host)` in doctor/deploy/init — implement or extend an adapter and register it.
 
 ```text
 serverpod create …  →  monorepo + Dockerfile (Serverpod owns this)

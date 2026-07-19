@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'config.dart';
 import 'deploy/deploy.dart';
 import 'doctor.dart';
+import 'hosts/hosts.dart';
 import 'init.dart';
 import 'log.dart';
 import 'process_runner.dart';
@@ -13,6 +14,7 @@ import 'smoke.dart';
 import 'tty.dart';
 
 Future<int> runPodfly(List<String> args) async {
+  ensureHostsRegistered();
   final parser = _buildParser();
 
   // Allow `podfly --smoke` as shorthand for `podfly deploy --smoke`
@@ -75,15 +77,7 @@ ArgParser _buildParser() {
     ..addFlag('init', negatable: false, help: 'Force init wizard')
     ..addOption('mode', allowed: ['split', 'fly'])
     ..addOption('host',
-        allowed: [
-          'fly',
-          'railway',
-          'render',
-          'cloud_run',
-          'aws',
-          'azure',
-          'digitalocean',
-        ],
+        allowed: HostRegistry.cliAllowedIds,
         help: 'API cloud host (default: fly; fly + railway deploy today)')
     ..addOption('config', help: 'Path to podfly.yaml')
     ..addOption('root', help: 'Project root');

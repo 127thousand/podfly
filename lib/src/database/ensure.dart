@@ -1,4 +1,5 @@
 import '../config.dart';
+import '../hosts/hosts.dart';
 import '../log.dart';
 import '../process_runner.dart';
 import 'production_yaml.dart';
@@ -43,9 +44,11 @@ class DatabaseEnsure {
   }
 
   Future<void> _sqliteVolume() async {
+    ensureHostsRegistered();
     if (config.host != AppHost.fly) {
       log.warn(
-          'sqlite volume automation is Fly-only; on ${config.host.label} mount storage yourself or use neon');
+          'sqlite volume automation is Fly-only; on ${config.host.label} '
+          'mount storage yourself or use neon');
       return;
     }
     final s = config.database.sqlite;
@@ -138,14 +141,8 @@ class DatabaseEnsure {
   }
 
   String _neonSecretHint(String secret) {
-    switch (config.host) {
-      case AppHost.railway:
-        final svc = config.railway?.service ?? 'api';
-        return 'Neon: railway variable set $secret=… -s $svc';
-      case AppHost.fly:
-        return 'Neon: fly secrets set $secret=… -a ${config.fly.app}';
-      default:
-        return 'Neon: set $secret on your API host';
-    }
+    ensureHostsRegistered();
+    final adapter = HostRegistry.require(config.host);
+    return 'Neon: ${adapter.secretSetHint(secret, config)}';
   }
 }

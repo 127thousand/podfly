@@ -7,6 +7,7 @@ import 'database/detect.dart';
 import 'detect_surface.dart';
 import 'discover.dart';
 import 'fly_name.dart';
+import 'hosts/hosts.dart';
 import 'log.dart';
 import 'tty.dart';
 
@@ -29,6 +30,7 @@ class Initer {
   final AppHost? preferredHost;
 
   Future<PodflyConfig> run() async {
+    ensureHostsRegistered();
     log.step('Init');
     final discovered = await discover(root);
     if (!discovered.isComplete) {
@@ -48,19 +50,11 @@ class Initer {
     final String smokeMethod;
     late final bool webEnabled;
 
-    // Shared host menu (✅ = deploy implemented today)
-    const hostOptions = <AppHost>[
-      AppHost.fly,
-      AppHost.railway,
-      AppHost.render,
-      AppHost.cloudRun,
-      AppHost.aws,
-      AppHost.azure,
-      AppHost.digitalOcean,
-    ];
-    String hostMenuLabel(AppHost h) =>
-        '${h.isImplemented ? '✅' : '🗺️'} ${h.label}'
-        '${h.isImplemented ? '' : ' (planned — doctor only for now)'}';
+    // Host menu from registry (✅ = canDeploy)
+    final hostAdapters = HostRegistry.all;
+    String hostMenuLabel(HostAdapter a) =>
+        '${a.canDeploy ? '✅' : '🗺️'} ${a.label}'
+        '${a.canDeploy ? '' : ' (planned — doctor only for now)'}';
 
     if (yes || !isTty) {
       name = nameDefault;
@@ -114,14 +108,15 @@ class Initer {
 
       final hostIdx = await choose(
         'Where should the Serverpod API run?',
-        hostOptions.map(hostMenuLabel).toList(),
+        hostAdapters.map(hostMenuLabel).toList(),
         defaultIndex: 0,
       );
-      host = hostOptions[hostIdx];
-      if (!host.isImplemented) {
+      host = hostAdapters[hostIdx].appHost;
+      final hostAdapter = HostRegistry.require(host);
+      if (!hostAdapter.canDeploy) {
         log.warn(
-            '${host.label} is planned — you can save config and install its CLI, '
-            'but deploy only works for Fly and Railway today.');
+            '${hostAdapter.label} is planned — you can save config and install its CLI, '
+            'but deploy only works for hosts marked ✅ today.');
       }
 
       final surface = await detectClientSurface(
@@ -149,21 +144,20 @@ class Initer {
       );
       webEnabled = webIdx == 0;
 
-      // Layout mode: only meaningful for Fly (Pages split vs all-on-Fly).
-      if (host == AppHost.fly && webEnabled) {
+      // All-in-one layout only when host supports multi-port / static on API.
+      if (hostAdapter.supportsAllInOneWeb && webEnabled) {
         final modeIdx = await choose(
           'How should web + API be hosted?',
           [
-            'split — Cloudflare Pages (UI) + Fly (API)',
-            'fly — everything on Fly',
+            'split — Cloudflare Pages (UI) + ${hostAdapter.label} (API)',
+            'all-in-one — everything on ${hostAdapter.label}',
           ],
           defaultIndex: 0,
         );
         mode = modeIdx == 1 ? DeployMode.fly : DeployMode.split;
-      } else if (host == AppHost.fly) {
+      } else if (hostAdapter.supportsAllInOneWeb) {
         mode = DeployMode.fly;
       } else {
-        // Non-Fly: treat as "API on host"; web UI still may use Pages later.
         mode = webEnabled ? DeployMode.split : DeployMode.fly;
       }
 
@@ -183,23 +177,15 @@ class Initer {
         log.warn(w);
       }
 
-      final useFlyDb = host == AppHost.fly;
+      final dbProviders = hostAdapter.supportedDatabases;
+      final dbLabels = dbProviders.map(_dbMenuLabel).toList();
+      final preferredNeon = dbProviders.indexOf(DatabaseProvider.neon);
       final defaultDbIdx = switch (detection.need) {
         DatabaseNeed.none => 0,
-        DatabaseNeed.required => useFlyDb ? 3 : 1, // neon
+        DatabaseNeed.required =>
+          preferredNeon >= 0 ? preferredNeon : 0,
         DatabaseNeed.unknown => 0,
       };
-      final dbChoices = useFlyDb
-          ? [
-              'none — stateless (cheapest, scale-to-zero friendly)',
-              'sqlite — single machine + Fly volume',
-              'fly_postgres — Fly managed Postgres (bills when API sleeps)',
-              'neon — serverless Postgres (good with scale-to-zero)',
-            ]
-          : [
-              'none — stateless (cheapest)',
-              'neon — serverless Postgres',
-            ];
       final dbIdx = await choose(
         detection.need == DatabaseNeed.required
             ? 'Database (app uses tables/auth — DB recommended)'
@@ -208,32 +194,21 @@ class Initer {
                     ? 'Database (looks stateless; template auth unused — none OK)'
                     : 'Database (looks stateless — none recommended)'
                 : 'Database',
-        dbChoices,
-        defaultIndex: defaultDbIdx.clamp(0, dbChoices.length - 1),
+        dbLabels,
+        defaultIndex: defaultDbIdx.clamp(0, dbLabels.length - 1),
       );
-      if (useFlyDb) {
-        dbProvider = [
-          DatabaseProvider.none,
-          DatabaseProvider.sqlite,
-          DatabaseProvider.flyPostgres,
-          DatabaseProvider.neon,
-        ][dbIdx];
-      } else {
-        dbProvider = [
-          DatabaseProvider.none,
-          DatabaseProvider.neon,
-        ][dbIdx];
-      }
+      dbProvider = dbProviders[dbIdx];
       smokeMethod = await prompt('Smoke HTTP method', defaultValue: 'POST');
       smokePath = await prompt('Smoke API path', defaultValue: '/');
     }
 
-    // Fly DNS names prefer hyphens (podfly will create the app if missing).
+    // DNS-friendly names prefer hyphens.
     final flyApp = sanitizeFlyAppName(name);
     final railwayProject = sanitizeFlyAppName(name);
-    final apiUrl = host == AppHost.railway
-        ? 'https://REPLACE.up.railway.app/'
-        : 'https://$flyApp.fly.dev/';
+    final apiUrl = HostRegistry.require(host).defaultApiUrl(
+      name: name,
+      sanitizedName: flyApp,
+    );
 
     DatabaseConfig database;
     switch (dbProvider) {
@@ -317,4 +292,15 @@ class Initer {
     log.ok('wrote $outPath');
     return config;
   }
+
+  static String _dbMenuLabel(DatabaseProvider p) => switch (p) {
+        DatabaseProvider.none =>
+          'none — stateless (cheapest, scale-to-zero friendly)',
+        DatabaseProvider.sqlite =>
+          'sqlite — single machine + Fly volume',
+        DatabaseProvider.flyPostgres =>
+          'fly_postgres — Fly managed Postgres (bills when API sleeps)',
+        DatabaseProvider.neon =>
+          'neon — serverless Postgres (good with scale-to-zero)',
+      };
 }
