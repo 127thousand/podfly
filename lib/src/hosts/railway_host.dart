@@ -113,14 +113,35 @@ class RailwayHost extends HostAdapter {
       await _persistRailwayPublicHost(ctx, host);
     }
 
-    final args = <String>['up', '.', '-y', '-c', '-s', service];
-    final r = await runner.run(
+    // Do not pass PATH `.` — Railway CLI 5.x errors with "prefix not found".
+    // Upload cwd via workingDirectory instead.
+    final args = <String>['up', '-y', '-c', '-s', service];
+    var r = await runner.run(
       railway,
       args,
       workingDirectory: config.root,
     );
+    // Free-tier US regions often block peak hours — retry once in eu-west.
     if (!r.ok && !runner.dryRun) {
-      throw StateError('railway up failed (exit ${r.exitCode})');
+      log.warn(
+          'railway up failed — retrying with eu-west=1 (free-tier peak hours?)');
+      await runner.run(
+        railway,
+        ['scale', '-s', service, 'eu-west=1', 'us-west=0', 'us-east=0'],
+        workingDirectory: config.root,
+        allowDryRun: false,
+      );
+      r = await runner.run(
+        railway,
+        args,
+        workingDirectory: config.root,
+      );
+    }
+    if (!r.ok && !runner.dryRun) {
+      throw StateError(
+        'railway up failed (exit ${r.exitCode}). '
+        'If free-tier peak hours: railway scale -s $service eu-west=1 && retry',
+      );
     }
     final display = host ?? rcfg.publicHost ?? 'railway.app';
     final url = 'https://$display/';

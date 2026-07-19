@@ -170,10 +170,12 @@ Future<int> _doctor(ArgResults g) async {
     noLogin: _flag(g, 'no-login'),
   );
   final root = _root(g);
-  final cfgPath = await PodflyConfig.findConfigPath(root);
+  final explicit = _opt(g, 'config');
+  final cfgPath = explicit ?? await PodflyConfig.findConfigPath(root);
   PodflyConfig? config;
-  if (cfgPath != null) {
+  if (cfgPath != null && await File(cfgPath).exists()) {
     config = await PodflyConfig.load(cfgPath);
+    log.detail('config: $cfgPath');
   }
   var ok = await doctor.run(scope: DoctorScope.baseline);
   if (config != null) {
