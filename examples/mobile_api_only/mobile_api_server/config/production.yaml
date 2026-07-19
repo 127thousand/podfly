@@ -1,9 +1,0 @@
-apiServer:
-  port: 8080
-  publicHost: mobile-api-only.fly.dev
-  publicPort: 443
-  publicScheme: https
-
-# database: omitted — example is stateless
-sessionLogs:
-  persistentEnabled: false

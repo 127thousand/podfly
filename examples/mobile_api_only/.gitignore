@@ -1,0 +1,14 @@
+.dart_tool/
+.flutter-plugins-dependencies
+**/build/
+.idea/
+*.iml
+.serverpod/
+.agents/
+.claude/
+.cursor/
+.dart_skills/
+.mcp.json
+.vscode/
+*.podfly.bak
+**/config/*.podfly.bak

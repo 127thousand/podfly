@@ -1,6 +1,0 @@
-name: mobile_api_server
-description: Sample Serverpod server for mobile clients (no web UI)
-environment:
-  sdk: ^3.5.0
-dependencies:
-  serverpod: 4.0.0-beta.0

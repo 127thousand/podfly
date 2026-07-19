@@ -1,8 +1,0 @@
-name: mobile_api_flutter
-description: Mobile Flutter client (ios + android only — no web/)
-environment:
-  sdk: ^3.5.0
-  flutter: '>=3.16.0'
-dependencies:
-  flutter:
-    sdk: flutter
