@@ -17,34 +17,36 @@ podfly deploy          →  provider CLIs + configs + quirks (podfly)
 
 Status is what **podfly** supports as a first-class target (not whether you can deploy Serverpod there by hand).
 
-### App hosts (run the Serverpod Docker API)
+### 🚀 App hosts (run the Serverpod Docker API)
 
 | Provider | CLI | Status | Notes |
 |----------|-----|--------|--------|
-| [**Fly.io**](https://fly.io) | `fly` / `flyctl` | **Supported** | Default path; apps create, `fly.toml`, scale-to-zero |
-| [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | **Supported** (UI only) | Flutter web split frontend; not the API |
-| [**Railway**](https://railway.app) | Railway CLI | Planned | Excellent DX; Docker + Git |
-| [**Render**](https://render.com) | Render CLI / Blueprint | Planned | Docker services + simple prod |
-| [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | Planned | Large-cloud default; containers |
-| [**AWS**](https://aws.amazon.com) (App Runner / ECS) | `aws` | Planned | What most enterprises already have |
-| [**Azure**](https://azure.microsoft.com) Container Apps | `az` | Planned | Same for Microsoft shops |
-| [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | Planned | Simple PaaS many already use |
+| 🟣 [**Fly.io**](https://fly.io) | `fly` / `flyctl` | ✅ **Supported** | Default path; apps create, `fly.toml`, scale-to-zero |
+| 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ **Supported** (UI only) | Flutter web split frontend; not the API |
+| 🚂 [**Railway**](https://railway.app) | Railway CLI | 🗺️ Planned | Excellent DX; Docker + Git |
+| 🟦 [**Render**](https://render.com) | Render CLI / Blueprint | 🗺️ Planned | Docker services + simple prod |
+| ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | 🗺️ Planned | Large-cloud default; containers |
+| 📦 [**AWS**](https://aws.amazon.com) (App Runner / ECS) | `aws` | 🗺️ Planned | What most enterprises already have |
+| 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ Planned | Same for Microsoft shops |
+| 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | 🗺️ Planned | Simple PaaS many already use |
 
-### Hosted Postgres
+### 🐘 Hosted Postgres
 
 | Provider | CLI / API | Status | Notes |
 |----------|-----------|--------|--------|
-| **None** | — | **Supported** | Stateless APIs |
-| [**Neon**](https://neon.tech) | `neonctl` | **Supported** | Serverless PG; good with sleeping APIs |
-| [**Fly Postgres**](https://fly.io/docs/postgres/) | `fly postgres` | **Supported** | Private network to Machines; bills when API sleeps |
-| **SQLite** (+ Fly volume) | `fly volumes` | **Supported** | Single-machine only |
-| [**Supabase**](https://supabase.com) | Supabase CLI / URL | Planned | Managed PG (use as database only if you want) |
-| [**Railway Postgres**](https://railway.app) | Railway CLI | Planned | Bundle with Railway app host |
-| [**Render Postgres**](https://render.com) | Dashboard / API | Planned | Bundle with Render |
-| [**AWS RDS**](https://aws.amazon.com/rds/) | `aws` | Planned | Enterprise default |
-| [**Google Cloud SQL**](https://cloud.google.com/sql) | `gcloud` | Planned | GCP default |
-| [**Azure Database for PostgreSQL**](https://azure.microsoft.com/products/postgresql) | `az` | Planned | Azure default |
-| [**DigitalOcean Managed Postgres**](https://www.digitalocean.com/products/managed-databases) | `doctl` | Planned | Simple managed PG |
+| 🚫 **None** | — | ✅ **Supported** | Stateless APIs |
+| 🟢 [**Neon**](https://neon.tech) | `neonctl` | ✅ **Supported** | Serverless PG; good with sleeping APIs |
+| 🟣 [**Fly Postgres**](https://fly.io/docs/postgres/) | `fly postgres` | ✅ **Supported** | Private network to Machines; bills when API sleeps |
+| 💾 **SQLite** (+ Fly volume) | `fly volumes` | ✅ **Supported** | Single-machine only |
+| ⚡ [**Supabase**](https://supabase.com) | Supabase CLI / URL | 🗺️ Planned | Managed PG (use as database only if you want) |
+| 🚂 [**Railway Postgres**](https://railway.app) | Railway CLI | 🗺️ Planned | Bundle with Railway app host |
+| 🟦 [**Render Postgres**](https://render.com) | Dashboard / API | 🗺️ Planned | Bundle with Render |
+| 📦 [**AWS RDS**](https://aws.amazon.com/rds/) | `aws` | 🗺️ Planned | Enterprise default |
+| ☁️ [**Google Cloud SQL**](https://cloud.google.com/sql) | `gcloud` | 🗺️ Planned | GCP default |
+| 🔷 [**Azure Database for PostgreSQL**](https://azure.microsoft.com/products/postgresql) | `az` | 🗺️ Planned | Azure default |
+| 🌊 [**DigitalOcean Managed Postgres**](https://www.digitalocean.com/products/managed-databases) | `doctl` | 🗺️ Planned | Simple managed PG |
+
+**Legend:** ✅ supported today · 🗺️ planned  
 
 Want another provider? Open an issue — preference is **excellent DX** or **clouds most teams already pay for**.
 
@@ -54,16 +56,16 @@ Want another provider? Open an issue — preference is **excellent DX** or **clo
 
 | Mode | UI | API |
 |------|----|-----|
-| **`split`** | Cloudflare Pages | Fly.io |
-| **`fly`** | Optional static on Fly | Fly.io |
-| **API-only** | — (mobile / other clients) | Fly.io (`web.enabled: false`) |
+| 🔀 **`split`** | 🟠 Cloudflare Pages | 🟣 Fly.io |
+| 🪰 **`fly`** | Optional static on Fly | 🟣 Fly.io |
+| 📱 **API-only** | — (mobile / other clients) | 🟣 Fly.io (`web.enabled: false`) |
 
 | Database | When |
 |----------|------|
-| **`none`** | Stateless |
-| **`sqlite`** | Single machine + volume |
-| **`fly_postgres`** | Classic Serverpod on Fly |
-| **`neon`** | Serverless PG |
+| 🚫 **`none`** | Stateless |
+| 💾 **`sqlite`** | Single machine + volume |
+| 🟣 **`fly_postgres`** | Classic Serverpod on Fly |
+| 🟢 **`neon`** | Serverless PG |
 
 ---
 
