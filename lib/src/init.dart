@@ -6,6 +6,7 @@ import 'config.dart';
 import 'database/detect.dart';
 import 'detect_surface.dart';
 import 'discover.dart';
+import 'fly_name.dart';
 import 'log.dart';
 import 'tty.dart';
 
@@ -178,7 +179,8 @@ class Initer {
       smokePath = await prompt('Smoke API path', defaultValue: '/');
     }
 
-    final flyApp = name;
+    // Fly DNS names prefer hyphens (podfly will create the app if missing).
+    final flyApp = sanitizeFlyAppName(name);
     final apiUrl = 'https://$flyApp.fly.dev/';
 
     DatabaseConfig database;

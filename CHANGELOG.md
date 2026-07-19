@@ -4,9 +4,12 @@
 
 ### Features
 
+- **`fly apps create`** automatically when the app is missing (before `fly deploy`)
+- Sanitize Fly app names (`my_app` → `my-app`)
 - Detect **mobile / API-only** Serverpod projects (`android`/`ios` without real web) and set `web.enabled: false` so deploy only runs Fly API
 - Sample fixture: `examples/mobile_api_only`
 - Discover `*_flutter` packages even without a `web/` directory
+- Clear error if Serverpod `Dockerfile` is missing
 
 ## 0.1.0
 

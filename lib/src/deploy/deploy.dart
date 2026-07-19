@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../config.dart';
 import '../database/ensure.dart';
+import '../fly_name.dart';
 import '../log.dart';
 import '../process_runner.dart';
 import '../smoke.dart';
@@ -86,11 +87,15 @@ class Deployer {
     log.detail('generating ${config.fly.config}');
     var dockerfile = p.join(config.server, 'Dockerfile');
     if (!await File(p.join(config.root, dockerfile)).exists()) {
-      dockerfile = 'Dockerfile';
+      throw StateError(
+        'Missing ${p.join(config.server, 'Dockerfile')}. '
+        'Serverpod creates this via `serverpod create` — podfly does not invent it.',
+      );
     }
+    final app = sanitizeFlyAppName(config.fly.app);
     var body = readTemplate('fly.toml.api_only');
     body = body
-        .replaceAll('{{APP}}', config.fly.app)
+        .replaceAll('{{APP}}', app)
         .replaceAll('{{REGION}}', config.fly.region)
         .replaceAll('{{DOCKERFILE}}', dockerfile);
     if (runner.dryRun) {
@@ -101,14 +106,61 @@ class Deployer {
     log.ok('wrote ${config.fly.config}');
   }
 
+  /// Create the Fly app if it does not exist (`fly apps create`).
+  Future<void> _ensureFlyApp(String flyBin, String app) async {
+    if (runner.dryRun) {
+      log.dry('$flyBin apps create $app  (if not exists)');
+      return;
+    }
+
+    final status = await runner.runCapture(
+      flyBin,
+      ['status', '-a', app],
+      allowDryRun: false,
+    );
+    final combined = (status.stdout + status.stderr).toLowerCase();
+    if (status.ok && !combined.contains('could not find') && !combined.contains('not found')) {
+      log.detail('Fly app $app already exists');
+      return;
+    }
+
+    log.detail('creating Fly app $app');
+    final create = await runner.run(
+      flyBin,
+      ['apps', 'create', app],
+      allowDryRun: false,
+    );
+    if (create.ok) {
+      log.ok('created Fly app $app');
+      return;
+    }
+
+    // Name taken / already exists in this org — continue to deploy.
+    final err = create.stderr + create.stdout;
+    if (err.toLowerCase().contains('already') ||
+        err.toLowerCase().contains('taken')) {
+      log.detail('Fly app $app already taken/exists — continuing');
+      return;
+    }
+    throw StateError(
+      'fly apps create $app failed (exit ${create.exitCode}). '
+      'Create it manually or pick another fly.app name.',
+    );
+  }
+
   Future<void> _deployFly() async {
-    log.step('Deploy Fly API (${config.fly.app})');
+    final app = sanitizeFlyAppName(config.fly.app);
+    if (app != config.fly.app) {
+      log.detail('Fly app name sanitized: ${config.fly.app} → $app');
+    }
+    log.step('Deploy Fly API ($app)');
     await _ensureFlyToml();
     final fly = await _flyBin();
+    await _ensureFlyApp(fly, app);
     final args = <String>[
       'deploy',
       '-a',
-      config.fly.app,
+      app,
       '--config',
       config.fly.config,
     ];
@@ -117,7 +169,7 @@ class Deployer {
     if (!r.ok && !runner.dryRun) {
       throw StateError('fly deploy failed (exit ${r.exitCode})');
     }
-    log.ok('Fly: https://${config.fly.app}.fly.dev');
+    log.ok('Fly: https://$app.fly.dev');
   }
 
   Future<void> _deployPages() async {

@@ -130,6 +130,16 @@ podfly deploy --web          # force web half (even if enabled: false)
 
 Sample fixture: [`examples/mobile_api_only`](../examples/mobile_api_only).
 
+## Fly app creation
+
+On API deploy, podfly:
+
+1. Sanitizes the app name (`my_app` → `my-app`)
+2. Runs **`fly apps create <name>`** if `fly status -a <name>` says the app is missing
+3. Runs **`fly deploy`**
+
+You should not need a manual `fly apps create` for a normal first deploy (you still need to be logged into Fly).
+
 ## Modes
 
 ### `split` (recommended for most web apps)
@@ -197,7 +207,9 @@ Fly cold start: allow ~60–90s timeout (podfly uses long HTTP timeouts).
 |---------|----------------|
 | Assets/images missing in web build | Must build inside Flutter package — podfly already does this; don’t override with broken external `--output` |
 | WASM re-downloads every reload | Bootstrap/SW — see [caching.md](caching.md) |
-| Doctor fails on wrangler | `mode: split` needs wrangler; or switch to `mode: fly` |
+| Doctor fails on wrangler | `mode: split` + `web.enabled` needs wrangler; or API-only / `mode: fly` |
+| fly apps create fails | Name taken globally — change `fly.app` in `podfly.yaml` |
+| Missing Dockerfile | Run `serverpod create` first — podfly does not generate Serverpod Dockerfiles |
 | Auth tables but no login | Soft warning only — see [database.md](database.md) |
 | Deploy works locally, Pages shows old JS | `main.dart.js` is cached up to 1 day; hard-refresh or wait; bootstrap/index are `no-cache` |
 | Double slash 404 on API | Ensure `api_url` is normalized (podfly adds trailing `/`); Serverpod client joins `host + endpoint` |
