@@ -45,11 +45,12 @@ podfly smoke
 
 | Layer | Providers |
 |-------|-----------|
-| API | Fly.io (`fly`) |
+| API **deploy** | Fly.io only (`host: fly`) |
+| API **host choice** | Wizard: fly, railway, render, cloud_run, aws, azure, digitalocean |
 | UI | Cloudflare Pages (`wrangler`) when `mode: split` + `web.enabled` |
 | DB | none, sqlite (+ volume), fly_postgres, neon |
 
-Planned: Railway, Render, Cloud Run, AWS, Azure, DigitalOcean; Supabase / RDS / Cloud SQL / etc.
+Planned deploys: Railway, Render, Cloud Run, AWS, Azure, DigitalOcean (+ matching Postgres).
 
 ## Hard rules for agents
 
@@ -58,6 +59,8 @@ Planned: Railway, Render, Cloud Run, AWS, Azure, DigitalOcean; Supabase / RDS / 
 3. Template Serverpod auth ≠ needs Postgres (soft warning only).
 4. No `web/` + android/ios → API-only (`web.enabled: false`).
 5. Podfly auto-creates Fly apps and sanitizes names (`_` → `-`).
+6. **Do not require Fly CLI** when `host:` is railway/render/etc. — only that host’s CLI.
+7. Non-Fly `host:` may pass doctor; **deploy is Fly-only** until implemented.
 
 ## Package
 
