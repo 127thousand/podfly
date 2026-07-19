@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../config.dart';
 import '../fly_name.dart';
 import '../log.dart';
+import '../templates.dart';
 import 'adapter.dart';
 import 'auth_helpers.dart';
 
@@ -34,8 +35,12 @@ class RailwayHost extends HostAdapter {
   bool get supportsAllInOneWeb => false;
 
   @override
+  bool get deploysWebNatively => true;
+
+  @override
   List<DatabaseProvider> get supportedDatabases => const [
         DatabaseProvider.none,
+        DatabaseProvider.railwayPostgres,
         DatabaseProvider.neon,
       ];
 
@@ -145,8 +150,118 @@ class RailwayHost extends HostAdapter {
     }
     final display = host ?? rcfg.publicHost ?? 'railway.app';
     final url = 'https://$display/';
-    log.ok('Railway: $url');
+    log.ok('Railway API: $url');
     return HostDeployResult(publicHost: host ?? rcfg.publicHost, displayUrl: url);
+  }
+
+  @override
+  Future<HostDeployResult?> deployWeb(DeployContext ctx) async {
+    final config = ctx.config;
+    final runner = ctx.runner;
+    final log = ctx.log;
+    final rcfg = _cfg(config);
+    final project = sanitizeFlyAppName(rcfg.project);
+    final service = rcfg.webService;
+
+    log.step('Deploy Railway web ($project / $service)');
+    final railway = await runner.resolve('railway');
+    if (railway == null) {
+      throw StateError('railway CLI not found — install: $installHint');
+    }
+
+    final stageRel = p.join('build', 'railway_web');
+    final stageAbs = p.join(config.root, stageRel);
+    await _stageWebBundle(ctx, stageAbs);
+
+    await _ensureRailwayProject(ctx, railway, project, rcfg);
+    await _ensureRailwayService(ctx, railway, service);
+
+    // Upload staged directory as Docker context (own Dockerfile).
+    final args = <String>['up', stageRel, '-y', '-c', '-s', service];
+    if (runner.dryRun) {
+      log.dry('$railway ${args.join(' ')}');
+    } else {
+      var r = await runner.run(
+        railway,
+        args,
+        workingDirectory: config.root,
+      );
+      if (!r.ok) {
+        log.warn('railway up web failed — retry eu-west');
+        await runner.run(
+          railway,
+          ['scale', '-s', service, 'eu-west=1', 'us-west=0', 'us-east=0'],
+          workingDirectory: config.root,
+          allowDryRun: false,
+        );
+        r = await runner.run(
+          railway,
+          args,
+          workingDirectory: config.root,
+        );
+      }
+      if (!r.ok) {
+        throw StateError('railway up web failed (exit ${r.exitCode})');
+      }
+    }
+
+    final host =
+        await _ensureRailwayDomain(ctx, railway, service, rcfg.webPort);
+    if (host != null) {
+      await _persistRailwayWebHost(ctx, host);
+    }
+
+    if (rcfg.enableCdn && !runner.dryRun) {
+      final cdn = await runner.run(
+        railway,
+        ['cdn', 'enable', '-s', service],
+        workingDirectory: config.root,
+        allowDryRun: false,
+      );
+      if (cdn.ok) {
+        log.ok('Railway CDN enabled on $service');
+      } else {
+        log.detail('CDN enable skipped/failed (optional)');
+      }
+    }
+
+    final display = host ?? rcfg.webPublicHost ?? 'railway.app';
+    final url = 'https://$display/';
+    log.ok('Railway web: $url');
+    return HostDeployResult(publicHost: host, displayUrl: url);
+  }
+
+  Future<void> _stageWebBundle(DeployContext ctx, String stageAbs) async {
+    final src = ctx.config.webOutPath;
+    final publicDir = p.join(stageAbs, 'public');
+    if (ctx.runner.dryRun) {
+      ctx.log.dry('stage web → $stageAbs (from $src)');
+      return;
+    }
+    if (!await Directory(src).exists()) {
+      throw StateError('missing Flutter web build at $src');
+    }
+    await Directory(publicDir).create(recursive: true);
+    // Copy build output into public/
+    if (await ctx.runner.which('rsync')) {
+      await ctx.runner.run(
+        'rsync',
+        ['-a', '--delete', '$src/', '$publicDir/'],
+        allowDryRun: false,
+      );
+    } else {
+      // Fallback: recursive copy via shell
+      await ctx.runner.run(
+        'cp',
+        ['-R', '$src/.', publicDir],
+        allowDryRun: false,
+      );
+    }
+    await File(p.join(stageAbs, 'Dockerfile'))
+        .writeAsString(readTemplate('Dockerfile.railway_web'));
+    await File(p.join(stageAbs, 'nginx.conf'))
+        .writeAsString(readTemplate('nginx.railway_web.conf'));
+    ctx.log.ok('staged Railway web bundle → build/railway_web');
   }
 
   Future<void> _ensureRailwayToml(
@@ -429,5 +544,36 @@ dockerfilePath = "$dockerfile"
     );
     await cfgFile.writeAsString(text);
     ctx.log.ok('updated podfly.yaml railway.public_host → $bare');
+  }
+
+  Future<void> _persistRailwayWebHost(
+    DeployContext ctx,
+    String host,
+  ) async {
+    final bare =
+        host.replaceFirst(RegExp(r'^https?://'), '').split('/').first;
+    final cfgFile = File(ctx.config.configPath);
+    if (!await cfgFile.exists()) return;
+    var text = await cfgFile.readAsString();
+    if (RegExp(r'^\s*web_public_host:', multiLine: true).hasMatch(text)) {
+      text = text.replaceFirst(
+        RegExp(r'(^\s*web_public_host:\s*).+$', multiLine: true),
+        '  web_public_host: $bare',
+      );
+    } else if (RegExp(r'^railway:', multiLine: true).hasMatch(text)) {
+      text = text.replaceFirst(
+        RegExp(r'^(railway:\s*)$', multiLine: true),
+        'railway:\n  web_public_host: $bare',
+      );
+      // If railway: already has nested keys, append web_public_host after first line
+      if (!text.contains('web_public_host:')) {
+        text = text.replaceFirst(
+          RegExp(r'^(railway:\n)', multiLine: true),
+          'railway:\n  web_public_host: $bare\n',
+        );
+      }
+    }
+    await cfgFile.writeAsString(text);
+    ctx.log.ok('updated podfly.yaml railway.web_public_host → $bare');
   }
 }

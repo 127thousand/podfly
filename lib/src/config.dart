@@ -21,7 +21,7 @@ enum AppHost {
   digitalOcean,
 }
 
-enum DatabaseProvider { none, sqlite, flyPostgres, neon }
+enum DatabaseProvider { none, sqlite, flyPostgres, neon, railwayPostgres }
 
 extension AppHostX on AppHost {
   HostAdapter get adapter {
@@ -71,39 +71,54 @@ class FlyConfig {
       };
 }
 
-/// Railway project / service for the Serverpod API.
+/// Railway project / services for API (+ optional static web).
 class RailwayConfig {
   RailwayConfig({
     required this.project,
     this.service = 'api',
+    this.webService = 'web',
     this.environment = 'production',
     this.projectId,
     this.port = 8080,
+    this.webPort = 80,
     this.config = 'railway.toml',
     this.publicHost,
+    this.webPublicHost,
+    this.enableCdn = true,
   });
 
   /// Human project name (used when creating / as default).
   final String project;
   final String service;
+  /// Static Flutter web service name when web is hosted on Railway.
+  final String webService;
   final String environment;
   /// Railway project UUID when known (skips name-based create).
   final String? projectId;
   /// Internal container port Serverpod listens on (domain targets this).
   final int port;
-  /// Config-as-code file at monorepo root (dockerfile path).
+  /// Internal port for nginx static web.
+  final int webPort;
+  /// Config-as-code file at monorepo root (dockerfile path for API).
   final String config;
   /// e.g. `xxx.up.railway.app` once domain exists.
   final String? publicHost;
+  final String? webPublicHost;
+  /// Enable Railway edge CDN on the web service.
+  final bool enableCdn;
 
   Map<String, Object?> toMap() => {
         'project': project,
         'service': service,
+        'web_service': webService,
         'environment': environment,
         if (projectId != null) 'project_id': projectId,
         'port': port,
+        'web_port': webPort,
         'config': config,
         if (publicHost != null) 'public_host': publicHost,
+        if (webPublicHost != null) 'web_public_host': webPublicHost,
+        'enable_cdn': enableCdn,
       };
 
   String? get publicUrl {
@@ -112,6 +127,32 @@ class RailwayConfig {
     final host = h.replaceFirst(RegExp(r'^https?://'), '').split('/').first;
     return 'https://$host/';
   }
+
+  String? get webPublicUrl {
+    final h = webPublicHost;
+    if (h == null || h.isEmpty) return null;
+    final host = h.replaceFirst(RegExp(r'^https?://'), '').split('/').first;
+    return 'https://$host/';
+  }
+}
+
+class RailwayPostgresConfig {
+  RailwayPostgresConfig({
+    this.service = 'Postgres',
+    this.create = true,
+    this.connectionStringSecret = 'DATABASE_URL',
+  });
+
+  /// Railway database plugin service name (template default: Postgres).
+  final String service;
+  final bool create;
+  final String connectionStringSecret;
+
+  Map<String, Object?> toMap() => {
+        'service': service,
+        'create': create,
+        'connection_string_secret': connectionStringSecret,
+      };
 }
 
 class CloudflareConfig {
@@ -198,18 +239,23 @@ class DatabaseConfig {
     this.sqlite,
     this.flyPostgres,
     this.neon,
+    this.railwayPostgres,
   });
 
   final DatabaseProvider provider;
   final SqliteConfig? sqlite;
   final FlyPostgresConfig? flyPostgres;
   final NeonConfig? neon;
+  final RailwayPostgresConfig? railwayPostgres;
 
   Map<String, Object?> toMap() {
     final m = <String, Object?>{'provider': _providerName(provider)};
     if (sqlite != null) m['sqlite'] = sqlite!.toMap();
     if (flyPostgres != null) m['fly_postgres'] = flyPostgres!.toMap();
     if (neon != null) m['neon'] = neon!.toMap();
+    if (railwayPostgres != null) {
+      m['railway_postgres'] = railwayPostgres!.toMap();
+    }
     return m;
   }
 
@@ -218,6 +264,7 @@ class DatabaseConfig {
         DatabaseProvider.sqlite => 'sqlite',
         DatabaseProvider.flyPostgres => 'fly_postgres',
         DatabaseProvider.neon => 'neon',
+        DatabaseProvider.railwayPostgres => 'railway_postgres',
       };
 
   static DatabaseProvider parseProvider(String? s) => switch (s) {
@@ -226,6 +273,8 @@ class DatabaseConfig {
         'fly_postgres' || 'fly-postgres' || 'postgres' =>
           DatabaseProvider.flyPostgres,
         'neon' => DatabaseProvider.neon,
+        'railway_postgres' || 'railway-postgres' || 'railway' =>
+          DatabaseProvider.railwayPostgres,
         _ => throw FormatException('Unknown database.provider: $s'),
       };
 }
@@ -380,17 +429,24 @@ class PodflyConfig {
       buf.writeln('railway:');
       buf.writeln('  project: ${r.project}');
       buf.writeln('  service: ${r.service}');
+      buf.writeln('  web_service: ${r.webService}');
       buf.writeln('  environment: ${r.environment}');
       if (r.projectId != null) {
         buf.writeln('  project_id: ${r.projectId}');
       }
       buf.writeln('  port: ${r.port}');
+      buf.writeln('  web_port: ${r.webPort}');
       buf.writeln('  config: ${r.config}');
+      buf.writeln('  enable_cdn: ${r.enableCdn}');
       if (r.publicHost != null) {
         buf.writeln('  public_host: ${r.publicHost}');
       }
+      if (r.webPublicHost != null) {
+        buf.writeln('  web_public_host: ${r.webPublicHost}');
+      }
     }
-    if (cloudflare != null) {
+    // Cloudflare only when not hosting UI on Railway
+    if (cloudflare != null && host != AppHost.railway) {
       buf.writeln();
       buf.writeln('cloudflare:');
       buf.writeln('  project: ${cloudflare!.project}');
@@ -427,6 +483,14 @@ class PodflyConfig {
       }
       buf.writeln('    region: ${n.region}');
       if (n.host != null) buf.writeln('    host: ${n.host}');
+    }
+    if (database.railwayPostgres != null) {
+      final r = database.railwayPostgres!;
+      buf.writeln('  railway_postgres:');
+      buf.writeln('    service: ${r.service}');
+      buf.writeln('    create: ${r.create}');
+      buf.writeln(
+          '    connection_string_secret: ${r.connectionStringSecret}');
     }
     buf.writeln();
     buf.writeln('web:');
@@ -512,17 +576,23 @@ class PodflyConfig {
       railway = RailwayConfig(
         project: m['project']?.toString() ?? name,
         service: m['service']?.toString() ?? 'api',
+        webService: m['web_service']?.toString() ?? 'web',
         environment: m['environment']?.toString() ?? 'production',
         projectId: m['project_id']?.toString(),
         port: int.tryParse('${m['port'] ?? 8080}') ?? 8080,
+        webPort: int.tryParse('${m['web_port'] ?? 80}') ?? 80,
         config: m['config']?.toString() ?? 'railway.toml',
         publicHost: m['public_host']?.toString(),
+        webPublicHost: m['web_public_host']?.toString(),
+        enableCdn: m['enable_cdn'] != false,
       );
     }
 
     CloudflareConfig? cf;
-    // Split mode still uses Pages for UI (Fly or Railway API).
-    if (doc['cloudflare'] != null || mode == DeployMode.split) {
+    // Pages UI for Fly split; Railway hosts its own static web service.
+    final wantPages = host != AppHost.railway &&
+        (doc['cloudflare'] != null || mode == DeployMode.split);
+    if (wantPages) {
       final m = _map(doc['cloudflare']);
       cf = CloudflareConfig(
         project: m['project']?.toString() ?? name,
@@ -536,6 +606,7 @@ class PodflyConfig {
     SqliteConfig? sqlite;
     FlyPostgresConfig? flyPg;
     NeonConfig? neon;
+    // railwayPg declared below with provider branch
     if (provider == DatabaseProvider.sqlite) {
       final s = _map(dbMap['sqlite']);
       final vol = _map(s['volume']);
@@ -565,6 +636,16 @@ class PodflyConfig {
         host: n['host']?.toString(),
         database: n['database']?.toString() ?? 'neondb',
         user: n['user']?.toString() ?? 'neondb_owner',
+      );
+    }
+    RailwayPostgresConfig? railwayPg;
+    if (provider == DatabaseProvider.railwayPostgres) {
+      final r = _map(dbMap['railway_postgres']);
+      railwayPg = RailwayPostgresConfig(
+        service: r['service']?.toString() ?? 'Postgres',
+        create: r['create'] != false,
+        connectionStringSecret:
+            r['connection_string_secret']?.toString() ?? 'DATABASE_URL',
       );
     }
 
@@ -626,6 +707,7 @@ class PodflyConfig {
         sqlite: sqlite,
         flyPostgres: flyPg,
         neon: neon,
+        railwayPostgres: railwayPg,
       ),
       web: web,
       smoke: smoke,

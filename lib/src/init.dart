@@ -246,6 +246,11 @@ class Initer {
             host: neonHost,
           ),
         );
+      case DatabaseProvider.railwayPostgres:
+        database = DatabaseConfig(
+          provider: DatabaseProvider.railwayPostgres,
+          railwayPostgres: RailwayPostgresConfig(),
+        );
     }
 
     final config = PodflyConfig(
@@ -259,7 +264,9 @@ class Initer {
       railway: host == AppHost.railway
           ? RailwayConfig(project: railwayProject, service: 'api')
           : null,
-      cloudflare: mode == DeployMode.split && webEnabled
+      cloudflare: mode == DeployMode.split &&
+              webEnabled &&
+              host != AppHost.railway
           ? CloudflareConfig(project: name)
           : null,
       database: database,
@@ -302,5 +309,7 @@ class Initer {
           'fly_postgres — Fly managed Postgres (bills when API sleeps)',
         DatabaseProvider.neon =>
           'neon — serverless Postgres (good with scale-to-zero)',
+        DatabaseProvider.railwayPostgres =>
+          'railway_postgres — Postgres plugin on Railway project',
       };
 }

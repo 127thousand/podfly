@@ -8,7 +8,7 @@ Location: project root (walk-up from cwd also finds it).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `host` | `fly` \| `railway` \| `render` \| `cloud_run` \| `aws` \| `azure` \| `digitalocean` | `fly` | **API cloud** — `fly` and `railway` deploy today |
+| `host` | `fly` \| `railway` \| `render` \| `cloud_run` \| `aws` \| `azure` \| `digitalocean` | `fly` | **API cloud** — `fly` and `railway` deploy today. Railway also hosts static web + optional Postgres. |
 | `mode` | `split` \| `fly` | `split` | Layout: Pages UI + API host vs all-on-API-host (Fly) |
 | `name` | string | directory name | Default for app + Pages project names |
 | `server` | string | discovered `*_server` | Path relative to root |
@@ -37,6 +37,23 @@ Used when `host: railway`.
 | `port` | int | `8080` | Internal port for `railway domain --port` (Serverpod API) |
 | `config` | string | `railway.toml` | Config-as-code with `dockerfilePath` to `*_server/Dockerfile` |
 | `public_host` | string | — | e.g. `xxx.up.railway.app` (filled after first domain) |
+| `web_service` | string | `web` | Static Flutter web service name |
+| `web_port` | int | `80` | Domain port for nginx web |
+| `web_public_host` | string | — | Filled after web domain |
+| `enable_cdn` | bool | `true` | `railway cdn enable` on web service |
+
+### `database.railway_postgres`
+
+```yaml
+database:
+  provider: railway_postgres
+  railway_postgres:
+    service: Postgres
+    create: true
+    connection_string_secret: DATABASE_URL
+```
+
+Requires `host: railway`. Adds the Postgres plugin, wires `DATABASE_URL` onto the API service, patches `production.yaml` / `passwords.yaml` when vars are readable.
 
 ## `cloudflare` (split only)
 

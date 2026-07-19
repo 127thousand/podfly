@@ -35,6 +35,7 @@ class Deployer {
   final Log log;
 
   HostDeployResult? lastApiResult;
+  HostDeployResult? lastWebResult;
 
   Future<void> run(DeployOptions opts) async {
     ensureHostsRegistered();
@@ -73,23 +74,20 @@ class Deployer {
       ),
     );
 
-    Future<void> deployApi() async {
-      lastApiResult = await adapter.deployApi(ctx);
-    }
-
-    if (config.mode == DeployMode.split && doWeb) {
-      await _deployPages();
-      if (doApi) await deployApi();
-    } else if (config.mode == DeployMode.split && !doWeb) {
-      if (doApi) await deployApi();
-    } else {
-      // All-in-one: only hosts that support multi-port / static on same machine.
-      if (adapter.supportsAllInOneWeb && doWeb) {
+    // Web first (Pages / Railway static / copy into image), then API.
+    if (doWeb) {
+      if (adapter.deploysWebNatively) {
+        lastWebResult = await adapter.deployWeb(ctx);
+      } else if (config.mode == DeployMode.split) {
+        await _deployPages();
+      } else if (adapter.supportsAllInOneWeb) {
         await _copyWebIntoServer();
+      } else {
+        log.warn('no web deploy path for ${adapter.label}');
       }
-      if (doApi || (adapter.supportsAllInOneWeb && doWeb)) {
-        await deployApi();
-      }
+    }
+    if (doApi) {
+      lastApiResult = await adapter.deployApi(ctx);
     }
 
     if (opts.smoke && !runner.dryRun) {
@@ -99,11 +97,14 @@ class Deployer {
     }
 
     log.step('Done');
-    if (doWeb &&
-        config.mode == DeployMode.split &&
-        config.cloudflare != null) {
-      log.detail(
-          'UI:  https://${config.cloudflare!.project}.pages.dev');
+    if (doWeb) {
+      if (lastWebResult?.displayUrl != null) {
+        log.detail('UI:  ${lastWebResult!.displayUrl}');
+      } else if (config.mode == DeployMode.split &&
+          config.cloudflare != null) {
+        log.detail(
+            'UI:  https://${config.cloudflare!.project}.pages.dev');
+      }
     }
     if (doApi) {
       final url = lastApiResult?.displayUrl ??

@@ -64,12 +64,76 @@ class ProductionYamlPatcher {
           'requireSsl': 'true',
         });
         log.detail(
-            'Neon: set Fly secret ${config.database.neon?.connectionStringSecret ?? 'DATABASE_URL'} '
+            'Neon: set secret ${config.database.neon?.connectionStringSecret ?? 'DATABASE_URL'} '
             'and passwords.yaml production.database');
+      case DatabaseProvider.railwayPostgres:
+        final sidecar = File(
+          p.join(config.serverPath, 'config', '.podfly_railway_pg.json'),
+        );
+        if (await sidecar.exists()) {
+          final raw = await sidecar.readAsString();
+          final host = _jsonField(raw, 'host') ?? 'postgres.railway.internal';
+          final port = _jsonField(raw, 'port') ?? '5432';
+          final name = _jsonField(raw, 'name') ?? 'railway';
+          final user = _jsonField(raw, 'user') ?? 'postgres';
+          final password = _jsonField(raw, 'password');
+          text = _upsertDatabaseBlock(text, {
+            'host': host,
+            'port': port,
+            'name': name,
+            'user': user,
+            'requireSsl': _jsonField(raw, 'requireSsl') ?? 'false',
+          });
+          if (password != null) {
+            await _patchPasswordsYaml(password);
+          }
+        } else {
+          text = _upsertDatabaseBlock(text, {
+            'host': 'postgres.railway.internal',
+            'port': '5432',
+            'name': 'railway',
+            'user': 'postgres',
+            'requireSsl': 'false',
+          });
+          log.warn(
+              'railway_postgres: no sidecar creds yet — host placeholder written');
+        }
     }
 
     await f.writeAsString(text);
     log.ok('patched config/production.yaml (${config.database.provider.name})');
+  }
+
+  String? _jsonField(String raw, String key) {
+    final m = RegExp('"$key"\\s*:\\s*"([^"]*)"').firstMatch(raw);
+    return m?.group(1);
+  }
+
+  Future<void> _patchPasswordsYaml(String password) async {
+    final f = File(p.join(config.serverPath, 'config', 'passwords.yaml'));
+    if (!await f.exists()) {
+      log.warn('no passwords.yaml — cannot set production database password');
+      return;
+    }
+    var text = await f.readAsString();
+    final re = RegExp(
+      r'^(production:\s*\n(?:[ \t]+.+\n)*?)([ \t]+)database:\s*.+$',
+      multiLine: true,
+    );
+    if (re.hasMatch(text)) {
+      text = text.replaceFirstMapped(re, (m) {
+        return '${m.group(1)}${m.group(2)}database: \'$password\'';
+      });
+    } else if (RegExp(r'^production:', multiLine: true).hasMatch(text)) {
+      text = text.replaceFirst(
+        RegExp(r'^(production:\s*)$', multiLine: true),
+        'production:\n  database: \'$password\'',
+      );
+    } else {
+      text = '$text\nproduction:\n  database: \'$password\'\n';
+    }
+    await f.writeAsString(text);
+    log.ok('patched passwords.yaml production.database');
   }
 
   String _removeDatabaseBlock(String text) {

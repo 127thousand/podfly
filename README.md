@@ -80,15 +80,16 @@ Want another provider? Open an issue — preference is **excellent DX** or **clo
 
 | Mode | UI | API |
 |------|----|-----|
-| 🔀 **`split`** | 🟠 Cloudflare Pages | 🟣 Fly.io or 🚂 Railway (`host:`) |
+| 🔀 **`split`** | 🟠 Cloudflare Pages **or** 🚂 Railway static (`host: railway`) | 🟣 Fly.io or 🚂 Railway |
 | 🪰 **`fly`** | Optional static on Fly | 🟣 Fly.io |
 | 📱 **API-only** | — (mobile / other clients) | 🟣 Fly.io or 🚂 Railway |
 
 | Database | When |
 |----------|------|
 | 🚫 **`none`** | Stateless |
-| 💾 **`sqlite`** | Single machine + volume |
+| 💾 **`sqlite`** | Single machine + volume (Fly) |
 | 🟣 **`fly_postgres`** | Classic Serverpod on Fly |
+| 🚂 **`railway_postgres`** | Railway Postgres plugin (`host: railway`) |
 | 🟢 **`neon`** | Serverless PG |
 
 Insights and full managed Serverpod ops: **[Serverpod Cloud](https://serverpod.dev/cloud)** (not podfly).

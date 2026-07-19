@@ -52,16 +52,17 @@ class Doctor {
     if (scope == DoctorScope.configAware && config != null) {
       ok = await _needHost(config.host) && ok;
 
+      // Cloudflare Pages only when host does not deploy web natively.
+      final adapter = HostRegistry.require(config.host);
       if (config.web.enabled &&
           config.mode == DeployMode.split &&
-          config.web.enabled) {
+          !adapter.deploysWebNatively) {
         ok = await _needWrangler() && ok;
       }
       if (config.database.provider == DatabaseProvider.neon &&
           config.database.neon?.provision == true) {
         ok = await _needNeon() && ok;
       }
-      final adapter = HostRegistry.require(config.host);
       if (!adapter.canDeploy) {
         log.warn(
             '${adapter.label} is on the roadmap — deploy will not run yet. '

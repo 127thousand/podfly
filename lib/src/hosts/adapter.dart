@@ -32,6 +32,9 @@ abstract class HostAdapter {
   /// Hosts that fit multi-port / static web on the same machine.
   bool get supportsAllInOneWeb => false;
 
+  /// When true, Flutter web is deployed via [deployWeb] (not Cloudflare Pages).
+  bool get deploysWebNatively => false;
+
   /// Database providers this host can automate (or sensibly pair with).
   List<DatabaseProvider> get supportedDatabases => const [
         DatabaseProvider.none,
@@ -52,6 +55,9 @@ abstract class HostAdapter {
 
   /// Deploy the API container. May update podfly.yaml / production.yaml.
   Future<HostDeployResult> deployApi(DeployContext ctx);
+
+  /// Deploy static Flutter web when [deploysWebNatively] is true.
+  Future<HostDeployResult?> deployWeb(DeployContext ctx) async => null;
 
   /// Optional host-specific config warnings during doctor.
   void configWarnings(PodflyConfig config, Log log) {} // ignore: avoid_types_on_closure_parameters

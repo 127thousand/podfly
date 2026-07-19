@@ -24,18 +24,30 @@ class SmokeRunner {
       ok = await _hit(url, ep) && ok;
     }
 
-    if (smoke.web != null && config.mode == DeployMode.split) {
+    if (smoke.web != null) {
       final ep = smoke.web!;
-      final base = 'https://${config.cloudflare!.project}.pages.dev/';
-      final url = _join(base, ep.path);
-      ok = await _hit(url, ep) && ok;
-    } else if (smoke.web != null && config.mode == DeployMode.fly) {
-      final ep = smoke.web!;
-      final url = _join(config.web.apiUrlNormalized, ep.path);
-      ok = await _hit(url, ep) && ok;
+      final base = _webBase();
+      if (base != null) {
+        final url = _join(base, ep.path);
+        ok = await _hit(url, ep) && ok;
+      } else {
+        log.warn('smoke.web set but no web URL (cloudflare / railway.web_public_host)');
+      }
     }
 
     return ok;
+  }
+
+  String? _webBase() {
+    final rw = config.railway?.webPublicUrl;
+    if (rw != null) return rw;
+    if (config.mode == DeployMode.split && config.cloudflare != null) {
+      return 'https://${config.cloudflare!.project}.pages.dev/';
+    }
+    if (config.mode == DeployMode.fly) {
+      return config.web.apiUrlNormalized;
+    }
+    return null;
   }
 
   String _join(String base, String path) {
