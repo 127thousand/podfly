@@ -4,12 +4,11 @@
 
 ### Features
 
-- **`fly apps create`** automatically when the app is missing (before `fly deploy`)
-- Sanitize Fly app names (`my_app` → `my-app`)
-- Detect **mobile / API-only** Serverpod projects (`android`/`ios` without real web) and set `web.enabled: false` so deploy only runs Fly API
-- Sample fixture: `examples/mobile_api_only`
-- Discover `*_flutter` packages even without a `web/` directory
-- Clear error if Serverpod `Dockerfile` is missing
+- **Maximum automation pass:** `fly apps create` (+ unique name if taken), name sanitize, Pages project create, optional Dockerfile template if missing, patch production `publicHost` to Fly
+- `PODFLY_AUTO=1` skips Y/n on login prompts
+- Detect **mobile / API-only** Serverpod projects and set `web.enabled: false`
+- Sample: `examples/mobile_api_only` (real `serverpod create --mini`)
+- Discover `*_flutter` without `web/`
 
 ## 0.1.0
 

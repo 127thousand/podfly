@@ -43,31 +43,38 @@ Ensure `~/.pub-cache/bin` is on your `PATH` (e.g. `export PATH="$PATH:$HOME/.pub
 
 ---
 
-## Quick start
+## Quick start (zero-touch as possible)
 
 ```bash
-cd your_serverpod_monorepo   # workspace with *_server + *_flutter
-podfly deploy --smoke
+# Once per machine: install tools + log in
+# flutter, flyctl, wrangler (if web), neonctl (if Neon provision)
+
+serverpod create my_app --mini -f   # Serverpod creates Dockerfile + monorepo
+cd my_app
+podfly deploy --yes --smoke         # non-interactive defaults
 ```
 
-That single command:
+That `podfly deploy` will:
 
-1. **Doctor (baseline)** — Flutter + Fly installed and authenticated  
-2. **Init** if there is no `podfly.yaml` (wizard, or `--yes` for defaults)  
-3. **Doctor (config-aware)** — Wrangler / Neon as needed  
-4. Database ensure + optional `production.yaml` patch  
-5. Flutter web build with **cache-friendly** packaging (see [docs/caching.md](docs/caching.md))  
-6. Deploy UI + API  
-7. Optional HTTP **smoke** checks  
+1. **Doctor** — tools on PATH; offers / auto-runs login when needed  
+2. **Init** if no `podfly.yaml` (`--yes` skips prompts)  
+3. Detect **web vs API-only** (mobile without `web/` → API only)  
+4. Write **`fly.toml`** if missing; write Serverpod-style **Dockerfile** only if missing  
+5. **`fly apps create`** if the app does not exist (sanitizes `my_app` → `my-app`)  
+6. Create **Cloudflare Pages project** if deploying web  
+7. Patch production `publicHost` toward `*.fly.dev` when still localhost  
+8. Build/deploy + optional **smoke**  
 
 ```bash
-podfly deploy --dry-run     # plan only, no side effects
-podfly deploy --web         # static UI only (split)
-podfly deploy --api         # Fly API only
+podfly deploy --dry-run     # plan only
+podfly deploy --api         # force API only
+podfly deploy --web         # force web half
 podfly doctor
 podfly init
 podfly smoke
 ```
+
+**You still need:** CLIs installed and authenticated once. **You do not need:** hand-written `fly.toml`, manual `fly apps create`, or a custom Dockerfile when Serverpod already provided one.
 
 ---
 

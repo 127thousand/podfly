@@ -22,6 +22,11 @@ class Doctor {
 
   bool get _canLogin => fixAuth && !noLogin && isTty && !runner.dryRun;
 
+  /// When true, run login commands without an extra Y/n prompt (max automation).
+  bool get _autoLogin =>
+      Platform.environment['PODFLY_AUTO'] == '1' ||
+      Platform.environment['CI'] == 'true';
+
   /// Returns true if all required checks passed.
   Future<bool> run({
     required DoctorScope scope,
@@ -114,7 +119,8 @@ class Doctor {
 
     log.warn('$fly not authenticated');
     if (_canLogin) {
-      if (await confirm('Run `fly auth login` now?')) {
+      final go = _autoLogin || await confirm('Run `fly auth login` now?');
+      if (go) {
         final r = await runner.run(fly, ['auth', 'login'], allowDryRun: false);
         if (r.ok) return _needFly();
       }
@@ -161,7 +167,8 @@ class Doctor {
 
     log.warn('wrangler not authenticated');
     if (_canLogin) {
-      if (await confirm('Run `wrangler login` now?')) {
+      final go = _autoLogin || await confirm('Run `wrangler login` now?');
+      if (go) {
         final r =
             await runner.run('wrangler', ['login'], allowDryRun: false);
         if (r.ok) return _needWrangler();
@@ -205,7 +212,8 @@ class Doctor {
 
     log.warn('$neon not authenticated');
     if (_canLogin) {
-      if (await confirm('Run `neonctl auth` now?')) {
+      final go = _autoLogin || await confirm('Run `neonctl auth` now?');
+      if (go) {
         final r = await runner.run(neon, ['auth'], allowDryRun: false);
         if (r.ok) return _needNeon();
       }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as p;
 
@@ -33,10 +34,14 @@ class Deployer {
   final ProcessRunner runner;
   final Log log;
 
+  /// Resolved Fly app name after sanitization / uniqueness (set during deploy).
+  String? resolvedFlyApp;
+
   Future<void> run(DeployOptions opts) async {
+    await _ensureServerDockerfile();
+    await _patchProductionPublicHosts();
     await DatabaseEnsure(config: config, runner: runner, log: log).run();
 
-    // web.enabled: false → API-only (mobile clients, etc.)
     final doWeb = opts.doWeb && config.web.enabled;
     final doApi = opts.doApi;
     if (opts.doWeb && !config.web.enabled) {
@@ -51,7 +56,6 @@ class Deployer {
       await _deployPages();
       if (doApi) await _deployFly();
     } else if (config.mode == DeployMode.split && !doWeb) {
-      // Split mode without web: still deploy API only.
       if (doApi) await _deployFly();
     } else {
       if (doWeb) await _copyWebIntoServer();
@@ -71,7 +75,8 @@ class Deployer {
           'UI:  https://${config.cloudflare!.project}.pages.dev');
     }
     if (doApi) {
-      log.detail('API: ${config.web.apiUrlNormalized}');
+      final app = resolvedFlyApp ?? sanitizeFlyAppName(config.fly.app);
+      log.detail('API: https://$app.fly.dev/');
     }
   }
 
@@ -81,18 +86,126 @@ class Deployer {
     return fly;
   }
 
-  Future<void> _ensureFlyToml() async {
-    final f = File(config.flyTomlPath);
-    if (await f.exists()) return;
-    log.detail('generating ${config.fly.config}');
-    var dockerfile = p.join(config.server, 'Dockerfile');
-    if (!await File(p.join(config.root, dockerfile)).exists()) {
-      throw StateError(
-        'Missing ${p.join(config.server, 'Dockerfile')}. '
-        'Serverpod creates this via `serverpod create` — podfly does not invent it.',
-      );
+  /// Write a Serverpod-style Dockerfile if the server package is missing one.
+  Future<void> _ensureServerDockerfile() async {
+    final rel = p.join(config.server, 'Dockerfile');
+    final abs = p.join(config.root, rel);
+    if (await File(abs).exists()) return;
+
+    log.detail('no $rel — writing Serverpod-style Dockerfile template');
+    var body = readTemplate('Dockerfile.serverpod');
+    body = body.replaceAll('{{SERVER_DIR}}', config.server);
+    if (runner.dryRun) {
+      log.dry('write $rel');
+      return;
     }
+    await File(abs).parent.create(recursive: true);
+    await File(abs).writeAsString(body);
+    log.ok('wrote $rel (prefer `serverpod create` Dockerfile when available)');
+  }
+
+  /// Point production publicHost at the Fly app so Serverpod clients get HTTPS.
+  Future<void> _patchProductionPublicHosts() async {
+    final prod = File(
+      p.join(config.serverPath, 'config', 'production.yaml'),
+    );
+    // Mini templates sometimes use only development.yaml
+    final candidates = [
+      prod,
+      File(p.join(config.serverPath, 'config', 'development.yaml')),
+    ];
     final app = sanitizeFlyAppName(config.fly.app);
+    final host = '$app.fly.dev';
+
+    for (final f in candidates) {
+      if (!await f.exists()) continue;
+      var text = await f.readAsString();
+      final original = text;
+
+      // apiServer publicHost
+      text = text.replaceAllMapped(
+        RegExp(
+          r'(apiServer:[\s\S]*?publicHost:\s*)(\S+)',
+          multiLine: true,
+        ),
+        (m) {
+          final current = m.group(2)!;
+          if (current.contains('localhost') ||
+              current.contains('example') ||
+              current == '""' ||
+              current == "''") {
+            return '${m.group(1)}$host';
+          }
+          return m.group(0)!;
+        },
+      );
+      text = text.replaceAllMapped(
+        RegExp(
+          r'(apiServer:[\s\S]*?publicScheme:\s*)(\S+)',
+          multiLine: true,
+        ),
+        (m) {
+          final current = m.group(2)!;
+          if (current.contains('http') && !current.contains('https')) {
+            return '${m.group(1)}https';
+          }
+          return m.group(0)!;
+        },
+      );
+      text = text.replaceAllMapped(
+        RegExp(
+          r'(apiServer:[\s\S]*?publicPort:\s*)(\d+)',
+          multiLine: true,
+        ),
+        (m) {
+          final port = m.group(2)!;
+          if (port == '8080' || port == '80') {
+            return '${m.group(1)}443';
+          }
+          return m.group(0)!;
+        },
+      );
+
+      if (text != original) {
+        if (runner.dryRun) {
+          log.dry('patch ${p.relative(f.path, from: config.root)} publicHost → $host');
+        } else {
+          final bak = File('${f.path}.podfly.bak');
+          if (!await bak.exists()) await bak.writeAsString(original);
+          await f.writeAsString(text);
+          log.ok(
+              'patched ${p.relative(f.path, from: config.root)} publicHost → $host');
+        }
+      }
+    }
+  }
+
+  Future<void> _ensureFlyToml(String app) async {
+    final f = File(config.flyTomlPath);
+    final dockerfile = p.join(config.server, 'Dockerfile');
+    if (!await File(p.join(config.root, dockerfile)).exists() &&
+        !runner.dryRun) {
+      // _ensureServerDockerfile should have written it
+      if (!await File(p.join(config.root, dockerfile)).exists()) {
+        throw StateError('Missing $dockerfile after ensure step');
+      }
+    }
+
+    if (await f.exists()) {
+      // Keep app = name in sync if we sanitized / uniquified
+      var text = await f.readAsString();
+      final updated = text.replaceFirst(
+        RegExp(r'^app\s*=\s*"[^"]*"', multiLine: true),
+        'app = "$app"',
+      );
+      if (updated != text && !runner.dryRun) {
+        await f.writeAsString(updated);
+        log.detail('updated fly.toml app = $app');
+      }
+      return;
+    }
+
+    log.detail('generating ${config.fly.config}');
     var body = readTemplate('fly.toml.api_only');
     body = body
         .replaceAll('{{APP}}', app)
@@ -106,57 +219,95 @@ class Deployer {
     log.ok('wrote ${config.fly.config}');
   }
 
-  /// Create the Fly app if it does not exist (`fly apps create`).
-  Future<void> _ensureFlyApp(String flyBin, String app) async {
+  /// Ensure Fly app exists; if name is taken globally, try a unique suffix.
+  Future<String> _ensureFlyApp(String flyBin, String preferred) async {
     if (runner.dryRun) {
-      log.dry('$flyBin apps create $app  (if not exists)');
-      return;
+      log.dry('$flyBin apps create $preferred  (if not exists)');
+      return preferred;
     }
 
+    var app = preferred;
+    for (var attempt = 0; attempt < 5; attempt++) {
+      if (await _flyAppExists(flyBin, app)) {
+        log.detail('Fly app $app already exists');
+        return app;
+      }
+
+      log.detail('creating Fly app $app');
+      final create = await runner.run(
+        flyBin,
+        ['apps', 'create', app],
+        allowDryRun: false,
+      );
+      if (create.ok) {
+        log.ok('created Fly app $app');
+        if (app != preferred) {
+          await _persistFlyAppName(app);
+        }
+        return app;
+      }
+
+      final err = (create.stderr + create.stdout).toLowerCase();
+      if (err.contains('already') || err.contains('taken')) {
+        // Might be ours or someone else's — if status works, use it.
+        if (await _flyAppExists(flyBin, app)) {
+          log.detail('Fly app $app exists — continuing');
+          return app;
+        }
+        // Taken by another org — pick a new name
+        final suffix = Random().nextInt(0xFFFF).toRadixString(16).padLeft(4, '0');
+        app = '$preferred-$suffix';
+        log.warn('name taken — trying $app');
+        continue;
+      }
+
+      throw StateError(
+        'fly apps create $app failed (exit ${create.exitCode})',
+      );
+    }
+    throw StateError('could not create a unique Fly app name from $preferred');
+  }
+
+  Future<bool> _flyAppExists(String flyBin, String app) async {
     final status = await runner.runCapture(
       flyBin,
       ['status', '-a', app],
       allowDryRun: false,
     );
     final combined = (status.stdout + status.stderr).toLowerCase();
-    if (status.ok && !combined.contains('could not find') && !combined.contains('not found')) {
-      log.detail('Fly app $app already exists');
-      return;
-    }
+    return status.ok &&
+        !combined.contains('could not find') &&
+        !combined.contains('not found') &&
+        !combined.contains('error');
+  }
 
-    log.detail('creating Fly app $app');
-    final create = await runner.run(
-      flyBin,
-      ['apps', 'create', app],
-      allowDryRun: false,
+  Future<void> _persistFlyAppName(String app) async {
+    final cfgFile = File(config.configPath);
+    if (!await cfgFile.exists()) return;
+    var text = await cfgFile.readAsString();
+    text = text.replaceFirst(
+      RegExp(r'(^\s*app:\s*).+$', multiLine: true),
+      '  app: $app',
     );
-    if (create.ok) {
-      log.ok('created Fly app $app');
-      return;
-    }
-
-    // Name taken / already exists in this org — continue to deploy.
-    final err = create.stderr + create.stdout;
-    if (err.toLowerCase().contains('already') ||
-        err.toLowerCase().contains('taken')) {
-      log.detail('Fly app $app already taken/exists — continuing');
-      return;
-    }
-    throw StateError(
-      'fly apps create $app failed (exit ${create.exitCode}). '
-      'Create it manually or pick another fly.app name.',
+    text = text.replaceFirst(
+      RegExp(r'(^\s*api_url:\s*).+$', multiLine: true),
+      '  api_url: https://$app.fly.dev/',
     );
+    await cfgFile.writeAsString(text);
+    log.ok('updated podfly.yaml fly.app → $app');
   }
 
   Future<void> _deployFly() async {
-    final app = sanitizeFlyAppName(config.fly.app);
-    if (app != config.fly.app) {
-      log.detail('Fly app name sanitized: ${config.fly.app} → $app');
+    final preferred = sanitizeFlyAppName(config.fly.app);
+    if (preferred != config.fly.app) {
+      log.detail('Fly app name sanitized: ${config.fly.app} → $preferred');
     }
-    log.step('Deploy Fly API ($app)');
-    await _ensureFlyToml();
+    log.step('Deploy Fly API ($preferred)');
     final fly = await _flyBin();
-    await _ensureFlyApp(fly, app);
+    final app = await _ensureFlyApp(fly, preferred);
+    resolvedFlyApp = app;
+    await _ensureFlyToml(app);
+
     final args = <String>[
       'deploy',
       '-a',
@@ -180,7 +331,6 @@ class Deployer {
       throw StateError('missing web build at $out');
     }
 
-    // Create project if missing (best effort). Skip network in dry-run.
     if (runner.dryRun) {
       log.dry('wrangler pages project list / create $project (if needed)');
     } else {
@@ -190,7 +340,8 @@ class Deployer {
         allowDryRun: false,
       );
       if (!list.stdout.contains(project)) {
-        await runner.run('wrangler', [
+        log.detail('creating Cloudflare Pages project $project');
+        final create = await runner.run('wrangler', [
           'pages',
           'project',
           'create',
@@ -198,6 +349,12 @@ class Deployer {
           '--production-branch',
           config.cloudflare!.branch,
         ]);
+        if (create.ok) {
+          log.ok('created Pages project $project');
+        } else {
+          log.warn(
+              'pages project create failed — deploy may still work if project exists');
+        }
       }
     }
 
@@ -217,8 +374,8 @@ class Deployer {
   }
 
   Future<void> _copyWebIntoServer() async {
-    final staticDir = config.web.staticDir ??
-        p.join(config.server, 'web', 'app');
+    final staticDir =
+        config.web.staticDir ?? p.join(config.server, 'web', 'app');
     final dest = p.isAbsolute(staticDir)
         ? staticDir
         : p.join(config.root, staticDir);

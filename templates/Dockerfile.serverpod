@@ -1,0 +1,46 @@
+# Serverpod 4-style API image (written by podfly only if missing).
+# Prefer the Dockerfile from `serverpod create` when present.
+# Build from monorepo root:
+#   docker build -f {{SERVER_DIR}}/Dockerfile .
+
+FROM dart:3.10.3 AS build
+
+WORKDIR /app
+COPY pubspec.lock .
+COPY {{SERVER_DIR}} {{SERVER_DIR}}
+RUN printf '%s\n' \
+  'name: _' \
+  'environment:' \
+  '  sdk: ^3.10.3' \
+  'workspace:' \
+  '  - {{SERVER_DIR}}' \
+  > pubspec.yaml
+RUN dart pub get
+
+WORKDIR /app/{{SERVER_DIR}}
+RUN dart build cli --target bin/main.dart --output build
+RUN mv build/bundle/bin/main build/bundle/bin/server
+RUN mkdir -p config web migrations assets
+
+FROM alpine:3.21
+WORKDIR /app
+
+RUN apk add --no-cache ca-certificates libstdc++ \
+  && rm -rf /var/cache/apk/*
+
+ENV runmode=production
+ENV serverid=default
+ENV logging=normal
+ENV role=monolith
+
+COPY --from=build /runtime/ /
+COPY --from=build /app/{{SERVER_DIR}}/build/bundle/ ./
+COPY --from=build /app/{{SERVER_DIR}}/config/ config/
+COPY --from=build /app/{{SERVER_DIR}}/web/ web/
+COPY --from=build /app/{{SERVER_DIR}}/migrations/ migrations/
+COPY --from=build /app/{{SERVER_DIR}}/lib/src/generated/protocol.yaml \
+  lib/src/generated/protocol.yaml
+
+EXPOSE 8080
+
+ENTRYPOINT ["./bin/server", "--mode=production", "--server-id=default", "--logging=normal", "--role=monolith"]

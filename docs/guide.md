@@ -130,15 +130,28 @@ podfly deploy --web          # force web half (even if enabled: false)
 
 Sample fixture: [`examples/mobile_api_only`](../examples/mobile_api_only).
 
-## Fly app creation
+## Maximum automation
 
-On API deploy, podfly:
+podfly aims for: **after `serverpod create` + tools logged in, one command ships.**
 
-1. Sanitizes the app name (`my_app` → `my-app`)
-2. Runs **`fly apps create <name>`** if `fly status -a <name>` says the app is missing
-3. Runs **`fly deploy`**
+| Step | Automated? |
+|------|------------|
+| `podfly.yaml` | Yes (init / `--yes`) |
+| `fly.toml` | Yes if missing |
+| `fly apps create` | Yes if app missing; unique suffix if name taken |
+| Fly app name sanitize | Yes (`_` → `-`) |
+| Serverpod `Dockerfile` | Prefer Serverpod’s; **podfly writes a 4.x-style template only if missing** |
+| Pages project create | Yes when deploying web |
+| Web bootstrap / `_headers` | Yes if missing and web enabled |
+| `publicHost` → `*.fly.dev` | Yes when still localhost-like |
+| DB provision | Partial (Neon/Fly PG flags; secrets may need one paste) |
+| Tool install | Hints + optional brew/npm offer |
+| Tool login | Prompt; set `PODFLY_AUTO=1` to skip Y/n |
 
-You should not need a manual `fly apps create` for a normal first deploy (you still need to be logged into Fly).
+```bash
+export PODFLY_AUTO=1   # optional: auto-accept login prompts on TTY
+podfly deploy --yes --smoke
+```
 
 ## Modes
 
