@@ -11,7 +11,7 @@ void main() {
     File(p.join(server.path, 'pubspec.yaml')).writeAsStringSync('''
 name: app_server
 dependencies:
-  serverpod: 2.0.0
+  serverpod: 4.0.0-beta.0
 ''');
     Directory(p.join(server.path, 'config')).createSync();
 
@@ -36,7 +36,7 @@ dependencies:
     File(p.join(server.path, 'pubspec.yaml')).writeAsStringSync('''
 name: app_server
 dependencies:
-  serverpod: 2.0.0
+  serverpod: 4.0.0-beta.0
 ''');
     Directory(p.join(server.path, 'config')).createSync();
 
