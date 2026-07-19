@@ -92,6 +92,25 @@ class RailwayHost extends HostAdapter {
       );
 
   @override
+  Future<String?> ensureApiPublicHost(DeployContext ctx) async {
+    final rcfg = _cfg(ctx.config);
+    final project = sanitizeFlyAppName(rcfg.project);
+    final service = rcfg.service;
+    final railway = await ctx.runner.resolve('railway');
+    if (railway == null) return null;
+
+    ctx.log.step('Railway: ensure project + API domain');
+    await _ensureRailwayProject(ctx, railway, project, rcfg);
+    await _ensureRailwayService(ctx, railway, service);
+    final host = await _ensureRailwayDomain(ctx, railway, service, rcfg.port);
+    if (host != null) {
+      await ctx.patchPublicHosts(host);
+      await _persistRailwayPublicHost(ctx, host);
+    }
+    return host;
+  }
+
+  @override
   Future<HostDeployResult> deployApi(DeployContext ctx) async {
     final config = ctx.config;
     final runner = ctx.runner;
@@ -110,6 +129,7 @@ class RailwayHost extends HostAdapter {
     }
 
     await _ensureRailwayToml(ctx, rcfg);
+    await _ensureRailwayIgnore(ctx);
     await _ensureRailwayProject(ctx, railway, project, rcfg);
     await _ensureRailwayService(ctx, railway, service);
     final host = await _ensureRailwayDomain(ctx, railway, service, rcfg.port);
@@ -169,22 +189,40 @@ class RailwayHost extends HostAdapter {
       throw StateError('railway CLI not found — install: $installHint');
     }
 
-    final stageRel = p.join('build', 'railway_web');
-    final stageAbs = p.join(config.root, stageRel);
+    // Stage outside the monorepo so `railway up` does not archive local
+    // Serverpod unix sockets (upload fails with "socket can not be archived").
+    final stageAbs = p.join(
+      Directory.systemTemp.path,
+      'podfly-railway-web-${sanitizeFlyAppName(config.name)}',
+    );
     await _stageWebBundle(ctx, stageAbs);
 
     await _ensureRailwayProject(ctx, railway, project, rcfg);
     await _ensureRailwayService(ctx, railway, service);
+    await _ensureRailwayIgnore(ctx);
 
-    // Upload staged directory as Docker context (own Dockerfile).
-    final args = <String>['up', stageRel, '-y', '-c', '-s', service];
+    // No PATH arg (CLI "prefix not found"); cwd = staged bundle only.
+    // Explicit -p/-e required when cwd is outside the monorepo link.
+    final args = <String>[
+      'up',
+      '-y',
+      '-c',
+      '-s',
+      service,
+      '-e',
+      rcfg.environment,
+    ];
+    final projectId = rcfg.projectId ?? await _readLinkedProjectId(ctx, railway);
+    if (projectId != null) {
+      args.addAll(['-p', projectId]);
+    }
     if (runner.dryRun) {
-      log.dry('$railway ${args.join(' ')}');
+      log.dry('$railway ${args.join(' ')}  (cwd: $stageAbs)');
     } else {
       var r = await runner.run(
         railway,
         args,
-        workingDirectory: config.root,
+        workingDirectory: stageAbs,
       );
       if (!r.ok) {
         log.warn('railway up web failed — retry eu-west');
@@ -197,7 +235,7 @@ class RailwayHost extends HostAdapter {
         r = await runner.run(
           railway,
           args,
-          workingDirectory: config.root,
+          workingDirectory: stageAbs,
         );
       }
       if (!r.ok) {
@@ -262,6 +300,49 @@ class RailwayHost extends HostAdapter {
     await File(p.join(stageAbs, 'nginx.conf'))
         .writeAsString(readTemplate('nginx.railway_web.conf'));
     ctx.log.ok('staged Railway web bundle → build/railway_web');
+  }
+
+  /// Keep `railway up` small and free of local sockets (413 / archive errors).
+  Future<void> _ensureRailwayIgnore(DeployContext ctx) async {
+    final path = p.join(ctx.config.root, '.railwayignore');
+    final flutter = ctx.config.flutter;
+    final lines = <String>[
+      '# Written by podfly — slim monorepo upload for Serverpod API image',
+      '.serverpod/',
+      '**/.s.PGSQL*',
+      '**/*.sock',
+      '.dart_tool/',
+      '**/build/',
+      'build/',
+      '.git/',
+      if (flutter.isNotEmpty) '$flutter/',
+      // Client package if present next to server
+      if (ctx.config.server.endsWith('_server'))
+        '${ctx.config.server.replaceFirst(RegExp(r'_server$'), '_client')}/',
+    ];
+    final body = '${lines.join('\n')}\n';
+    if (ctx.runner.dryRun) {
+      ctx.log.dry('write .railwayignore');
+      return;
+    }
+    // Always refresh so size limits stay current.
+    await File(path).writeAsString(body);
+    ctx.log.detail('ensured .railwayignore (exclude flutter/build/sockets)');
+  }
+
+  Future<String?> _readLinkedProjectId(
+    DeployContext ctx,
+    String railway,
+  ) async {
+    final status = await ctx.runner.runCapture(
+      railway,
+      ['status', '--json'],
+      workingDirectory: ctx.config.root,
+      allowDryRun: false,
+    );
+    final m = RegExp(r'"id"\s*:\s*"([0-9a-fA-F-]{36})"')
+        .firstMatch(status.stdout);
+    return m?.group(1) ?? ctx.config.railway?.projectId;
   }
 
   Future<void> _ensureRailwayToml(

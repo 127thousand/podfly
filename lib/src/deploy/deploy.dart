@@ -49,36 +49,59 @@ class Deployer {
       );
     }
 
-    await _ensureServerDockerfile();
-    await DatabaseEnsure(config: config, runner: runner, log: log).run();
-
-    final doWeb = opts.doWeb && config.web.enabled;
-    final doApi = opts.doApi;
-    if (opts.doWeb && !config.web.enabled) {
-      log.detail('web.enabled: false — skipping Flutter web build/deploy');
-    }
-
-    if (doWeb) {
-      await WebBuilder(config: config, runner: runner, log: log).build();
-    }
+    // Working config may pick up API public host before Flutter web build.
+    var cfg = config;
 
     final ctx = DeployContext(
-      config: config,
+      config: cfg,
       runner: runner,
       log: log,
       patchPublicHosts: (host) => patchProductionPublicHosts(
-        config: config,
+        config: cfg,
         runner: runner,
         log: log,
         host: host,
       ),
     );
 
-    // Web first (Pages / Railway static / copy into image), then API.
+    // For split Railway web, resolve API hostname first (SERVER_URL dart-define).
+    if (opts.doWeb && cfg.web.enabled && adapter.deploysWebNatively) {
+      final apiHost = await adapter.ensureApiPublicHost(ctx);
+      if (apiHost != null) {
+        cfg = _withApiUrl(cfg, 'https://$apiHost/');
+      }
+    }
+
+    await _ensureServerDockerfile();
+    await DatabaseEnsure(config: cfg, runner: runner, log: log).run();
+
+    final doWeb = opts.doWeb && cfg.web.enabled;
+    final doApi = opts.doApi;
+    if (opts.doWeb && !cfg.web.enabled) {
+      log.detail('web.enabled: false — skipping Flutter web build/deploy');
+    }
+
+    final buildCtx = DeployContext(
+      config: cfg,
+      runner: runner,
+      log: log,
+      patchPublicHosts: (host) => patchProductionPublicHosts(
+        config: cfg,
+        runner: runner,
+        log: log,
+        host: host,
+      ),
+    );
+
+    if (doWeb) {
+      await WebBuilder(config: cfg, runner: runner, log: log).build();
+    }
+
+    // Separate web service (Railway) or Pages / all-in-one copy — not siamese.
     if (doWeb) {
       if (adapter.deploysWebNatively) {
-        lastWebResult = await adapter.deployWeb(ctx);
-      } else if (config.mode == DeployMode.split) {
+        lastWebResult = await adapter.deployWeb(buildCtx);
+      } else if (cfg.mode == DeployMode.split) {
         await _deployPages();
       } else if (adapter.supportsAllInOneWeb) {
         await _copyWebIntoServer();
@@ -87,11 +110,11 @@ class Deployer {
       }
     }
     if (doApi) {
-      lastApiResult = await adapter.deployApi(ctx);
+      lastApiResult = await adapter.deployApi(buildCtx);
     }
 
     if (opts.smoke && !runner.dryRun) {
-      final smokeCfg = await _smokeConfig();
+      final smokeCfg = await _smokeConfig(cfg);
       final ok = await SmokeRunner(config: smokeCfg, log: log).run();
       if (!ok) throw StateError('smoke checks failed');
     }
@@ -100,52 +123,61 @@ class Deployer {
     if (doWeb) {
       if (lastWebResult?.displayUrl != null) {
         log.detail('UI:  ${lastWebResult!.displayUrl}');
-      } else if (config.mode == DeployMode.split &&
-          config.cloudflare != null) {
+      } else if (cfg.mode == DeployMode.split && cfg.cloudflare != null) {
         log.detail(
-            'UI:  https://${config.cloudflare!.project}.pages.dev');
+            'UI:  https://${cfg.cloudflare!.project}.pages.dev');
       }
     }
     if (doApi) {
       final url = lastApiResult?.displayUrl ??
           lastApiResult?.publicHost ??
-          adapter.publicApiBase(config) ??
-          config.web.apiUrlNormalized;
+          adapter.publicApiBase(cfg) ??
+          cfg.web.apiUrlNormalized;
       log.detail('API: $url');
     }
   }
 
-  Future<PodflyConfig> _smokeConfig() async {
-    PodflyConfig smokeCfg = config;
-    if (await File(config.configPath).exists()) {
+  PodflyConfig _withApiUrl(PodflyConfig c, String apiUrl) {
+    return PodflyConfig(
+      root: c.root,
+      host: c.host,
+      mode: c.mode,
+      name: c.name,
+      server: c.server,
+      flutter: c.flutter,
+      fly: c.fly,
+      railway: c.railway,
+      cloudflare: c.cloudflare,
+      database: c.database,
+      web: WebConfig(
+        enabled: c.web.enabled,
+        serverUrlDefine: c.web.serverUrlDefine,
+        apiUrl: apiUrl,
+        patchBootstrap: c.web.patchBootstrap,
+        writeHeaders: c.web.writeHeaders,
+        baseHref: c.web.baseHref,
+        staticDir: c.web.staticDir,
+      ),
+      smoke: c.smoke,
+    );
+  }
+
+  Future<PodflyConfig> _smokeConfig(PodflyConfig fallback) async {
+    PodflyConfig smokeCfg = fallback;
+    if (await File(fallback.configPath).exists()) {
       try {
-        smokeCfg = await PodflyConfig.load(config.configPath);
+        smokeCfg = await PodflyConfig.load(fallback.configPath);
       } catch (_) {/* use in-memory */}
     }
     final host = lastApiResult?.publicHost;
-    if (host != null && smokeCfg.web.apiUrlNormalized.contains('REPLACE')) {
-      smokeCfg = PodflyConfig(
-        root: smokeCfg.root,
-        host: smokeCfg.host,
-        mode: smokeCfg.mode,
-        name: smokeCfg.name,
-        server: smokeCfg.server,
-        flutter: smokeCfg.flutter,
-        fly: smokeCfg.fly,
-        railway: smokeCfg.railway,
-        cloudflare: smokeCfg.cloudflare,
-        database: smokeCfg.database,
-        web: WebConfig(
-          enabled: smokeCfg.web.enabled,
-          serverUrlDefine: smokeCfg.web.serverUrlDefine,
-          apiUrl: 'https://$host/',
-          patchBootstrap: smokeCfg.web.patchBootstrap,
-          writeHeaders: smokeCfg.web.writeHeaders,
-          baseHref: smokeCfg.web.baseHref,
-          staticDir: smokeCfg.web.staticDir,
-        ),
-        smoke: smokeCfg.smoke,
-      );
+    if (host != null &&
+        (smokeCfg.web.apiUrlNormalized.contains('REPLACE') ||
+            smokeCfg.web.apiUrlNormalized.contains('fly.dev'))) {
+      // Prefer live Railway API host for smoke after railway deploy.
+      if (fallback.host == AppHost.railway ||
+          smokeCfg.web.apiUrlNormalized.contains('REPLACE')) {
+        smokeCfg = _withApiUrl(smokeCfg, 'https://$host/');
+      }
     }
     return smokeCfg;
   }

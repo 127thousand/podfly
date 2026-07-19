@@ -53,6 +53,10 @@ abstract class HostAdapter {
   /// Doctor: CLI is already resolved; verify auth (may prompt login).
   Future<bool> checkAuth(DoctorContext ctx);
 
+  /// Ensure project + API public hostname exist **before** Flutter web build
+  /// so `SERVER_URL` / `api_url` can be real. Default: no-op.
+  Future<String?> ensureApiPublicHost(DeployContext ctx) async => null;
+
   /// Deploy the API container. May update podfly.yaml / production.yaml.
   Future<HostDeployResult> deployApi(DeployContext ctx);
 
