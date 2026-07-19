@@ -42,6 +42,34 @@ void main() {
         DatabaseConfig.parseProvider('fly_postgres'), DatabaseProvider.flyPostgres);
   });
 
+  test('railway host round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_railway_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.railway,
+      mode: DeployMode.fly,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      railway: RailwayConfig(
+        project: 'demo',
+        service: 'api',
+        publicHost: 'demo-production-xxxx.up.railway.app',
+      ),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      web: WebConfig(apiUrl: 'https://demo-production-xxxx.up.railway.app/'),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.host, AppHost.railway);
+    expect(loaded.railway?.project, 'demo');
+    expect(loaded.railway?.service, 'api');
+    expect(loaded.railway?.publicHost, 'demo-production-xxxx.up.railway.app');
+    expect(AppHost.railway.isImplemented, isTrue);
+    await dir.delete(recursive: true);
+  });
+
   test('smoke body with quotes round-trips via double-quoted YAML', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_body_');
     final cfg = PodflyConfig(

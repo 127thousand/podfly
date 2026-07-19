@@ -42,8 +42,8 @@ Serverpod **Insights** is not covered by podfly (and is not in this table). For 
 |----------|-----|--------|:-----------:|:---------------:|:-------------:|-------|
 | 💜 [**Serverpod Cloud**](https://serverpod.dev/cloud) | Serverpod Cloud | — | ✅ | ✅ | ✅ | **Officially recommended** managed option |
 | 🟣 [**Fly.io**](https://fly.io) | `fly` / `flyctl` | ✅ | ✅ | ✅ | ✅ | Default podfly path; multi-port Machines OK |
+| 🚂 [**Railway**](https://railway.app) | `railway` | ✅ | ✅ | ✅ | 🟡 | API service + optional Pages UI; one public port |
 | 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | Static Flutter web only; **not** the API |
-| 🚂 [**Railway**](https://railway.app) | `railway` | 🗺️ | ✅ | ✅ | 🟡 | Great DX; one service/port is simplest |
 | 🟦 [**Render**](https://render.com) | Render CLI | 🗺️ | ✅ | ✅ | 🟡 | Same: prefer API service + static site |
 | ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | 🗺️ | 🟡 | 🟡 | ❌ | One public port, request-scoped; cold starts; **not** a multi-port monolith |
 | 📦 [**AWS**](https://aws.amazon.com) App Runner / ECS | `aws` | 🗺️ | ✅ | ✅ | 🟡 | App Runner ≈ API-only; ECS freer for multi-service |
@@ -80,9 +80,9 @@ Want another provider? Open an issue — preference is **excellent DX** or **clo
 
 | Mode | UI | API |
 |------|----|-----|
-| 🔀 **`split`** | 🟠 Cloudflare Pages | 🟣 Fly.io |
+| 🔀 **`split`** | 🟠 Cloudflare Pages | 🟣 Fly.io or 🚂 Railway (`host:`) |
 | 🪰 **`fly`** | Optional static on Fly | 🟣 Fly.io |
-| 📱 **API-only** | — (mobile / other clients) | 🟣 Fly.io |
+| 📱 **API-only** | — (mobile / other clients) | 🟣 Fly.io or 🚂 Railway |
 
 | Database | When |
 |----------|------|
@@ -108,6 +108,7 @@ Ensure `~/.pub-cache/bin` is on your `PATH`.
 |------|------|
 | [Flutter](https://flutter.dev) | Always |
 | Host CLI (`fly`, `railway`, `gcloud`, …) | **Only for the `host:` you chose** (wizard asks) |
+| [Railway CLI](https://docs.railway.app/guides/cli) | `host: railway` (install often lands in `~/.railway/bin`) |
 | [wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/) | Flutter web on Cloudflare Pages (`mode: split`) |
 | [neonctl](https://neon.tech/docs/reference/neon-cli) | `database.neon.provision: true` |
 
@@ -137,6 +138,7 @@ podfly will (today, on Fly/Pages/Neon):
 ```bash
 podfly deploy --dry-run
 podfly deploy --api
+podfly deploy --host railway --api --yes --smoke
 podfly deploy --web
 podfly doctor
 podfly init

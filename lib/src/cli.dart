@@ -84,7 +84,7 @@ ArgParser _buildParser() {
           'azure',
           'digitalocean',
         ],
-        help: 'API cloud host (default: fly; only fly deploys today)')
+        help: 'API cloud host (default: fly; fly + railway deploy today)')
     ..addOption('config', help: 'Path to podfly.yaml')
     ..addOption('root', help: 'Project root');
 
@@ -101,7 +101,7 @@ void _usage(ArgParser parser) {
 podfly — deploy Serverpod via existing cloud CLIs (not a host)
 
   serverpod create …  →  monorepo + Dockerfile (Serverpod)
-  podfly deploy       →  fly/wrangler/neonctl + config quirks
+  podfly deploy       →  fly/railway/wrangler/neonctl + config quirks
 
 Usage:
   podfly deploy [options]   Doctor → init if needed → deploy
@@ -115,22 +115,23 @@ Deploy options:
   --api         API only (skip Flutter web / Pages) — use for mobile
   --web         Web only (or force web even if web.enabled: false)
   --yes / -y    Non-interactive init defaults
-  --no-login    Do not open browser logins (CI: use FLY_API_TOKEN, etc.)
+  --no-login    Do not open browser logins (CI: use tokens)
   --init        Force wizard; confirms before overwriting podfly.yaml
   --host        API cloud: fly | railway | render | cloud_run | aws | azure | digitalocean
-                (wizard asks this; only fly deploys today — others check CLI only)
+                (wizard asks this; fly + railway deploy today)
   --mode        split | fly   (split = Pages UI + API host)
   --root        Project root (default: cwd)
   --config      Path to podfly.yaml
 
 Doctor only requires the CLI for the chosen host (not always Fly).
-Supported deploy today: Fly (API), Cloudflare Pages (UI), Neon / Fly PG / SQLite / none.
+Supported deploy today: Fly + Railway (API), Cloudflare Pages (UI), Neon / Fly PG / SQLite / none.
 Dockerfile: prefer Serverpod's *_server/Dockerfile (podfly does not invent hosts).
 
 Examples:
   serverpod create my_app --mini -f && cd my_app
   podfly deploy --yes --smoke
 
+  podfly deploy --host railway --api --yes --smoke
   podfly deploy --yes --dry-run --no-login   # plan
   podfly deploy --api --yes --smoke          # mobile / API-only
   podfly doctor
@@ -200,11 +201,13 @@ Future<int> _init(ArgResults g) async {
   );
   if (!await doctor.run(scope: DoctorScope.baseline)) return 1;
   final explicit = _opt(g, 'config');
+  final hostOpt = _opt(g, 'host');
   final config = await Initer(
     root: root,
     log: log,
     yes: _flag(g, 'yes'),
     configPath: explicit,
+    preferredHost: hostOpt != null ? AppHostX.parse(hostOpt) : null,
   ).run();
   if (!await doctor.run(scope: DoctorScope.configAware, config: config)) {
     return 1;
@@ -240,6 +243,10 @@ Future<int> _deploy(ArgResults g) async {
   final configExists =
       existingPath != null && await File(existingPath).exists();
 
+  final hostOpt = _opt(g, 'host');
+  final preferredHost =
+      hostOpt != null ? AppHostX.parse(hostOpt) : null;
+
   if (forceInit && configExists && !yes) {
     final path = existingPath;
     final overwrite = await confirm(
@@ -256,6 +263,7 @@ Future<int> _deploy(ArgResults g) async {
         log: log,
         yes: yes,
         configPath: explicit ?? path,
+        preferredHost: preferredHost,
       ).run();
     }
   } else if (forceInit || !configExists) {
@@ -264,6 +272,7 @@ Future<int> _deploy(ArgResults g) async {
       log: log,
       yes: yes,
       configPath: explicit ?? existingPath,
+      preferredHost: preferredHost,
     ).run();
   } else {
     // configExists is true only when existingPath is non-null and file exists
@@ -271,7 +280,6 @@ Future<int> _deploy(ArgResults g) async {
     log.detail('config: $existingPath');
   }
 
-  final hostOpt = _opt(g, 'host');
   final modeOpt = _opt(g, 'mode');
   if (hostOpt != null || modeOpt != null) {
     final host =
@@ -288,6 +296,10 @@ Future<int> _deploy(ArgResults g) async {
       server: config.server,
       flutter: config.flutter,
       fly: config.fly,
+      railway: host == AppHost.railway
+          ? (config.railway ??
+              RailwayConfig(project: config.name, service: 'api'))
+          : config.railway,
       cloudflare: (flyMode && modeOpt == 'fly')
           ? null
           : (config.cloudflare ?? CloudflareConfig(project: config.name)),

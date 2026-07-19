@@ -45,12 +45,12 @@ podfly smoke
 
 | Layer | Providers |
 |-------|-----------|
-| API **deploy** | Fly.io only (`host: fly`) |
+| API **deploy** | Fly.io (`host: fly`), Railway (`host: railway`) |
 | API **host choice** | Wizard: fly, railway, render, cloud_run, aws, azure, digitalocean |
 | UI | Cloudflare Pages (`wrangler`) when `mode: split` + `web.enabled` |
-| DB | none, sqlite (+ volume), fly_postgres, neon |
+| DB | none, sqlite (+ volume, Fly), fly_postgres (Fly), neon |
 
-Planned deploys: Railway, Render, Cloud Run, AWS, Azure, DigitalOcean (+ matching Postgres).
+Planned deploys: Render, Cloud Run, AWS, Azure, DigitalOcean (+ matching Postgres).
 
 ## Hard rules for agents
 
@@ -58,9 +58,9 @@ Planned deploys: Railway, Render, Cloud Run, AWS, Azure, DigitalOcean (+ matchin
 2. Build Flutter web inside the Flutter package (podfly does this).
 3. Template Serverpod auth ≠ needs Postgres (soft warning only).
 4. No `web/` + android/ios → API-only (`web.enabled: false`).
-5. Podfly auto-creates Fly apps and sanitizes names (`_` → `-`).
-6. **Do not require Fly CLI** when `host:` is railway/render/etc. — only that host’s CLI.
-7. Non-Fly `host:` may pass doctor; **deploy is Fly-only** until implemented.
+5. Podfly auto-creates Fly apps and sanitizes names (`_` → `-`). Railway: project + service + domain + `railway up`.
+6. **Do not require Fly CLI** when `host:` is railway/render/etc. — only that host’s CLI (`~/.railway/bin` is searched).
+7. Deploy implemented for **fly** and **railway**; other hosts pass doctor only until implemented.
 
 ## Package
 

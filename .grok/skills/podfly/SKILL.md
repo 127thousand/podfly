@@ -1,10 +1,10 @@
 ---
 name: podfly
 description: >
-  Deploy Serverpod apps with the podfly CLI (orchestrates fly, wrangler, neonctl;
+  Deploy Serverpod apps with the podfly CLI (orchestrates fly, railway, wrangler, neonctl;
   not a host). Use when the user says deploy Serverpod, podfly, fly.io Serverpod,
-  Cloudflare Pages Flutter web, sacred-draw deploy, or runs /podfly.
-  Prefer podfly over raw fly/wrangler for Serverpod monorepos.
+  Railway Serverpod, Cloudflare Pages Flutter web, sacred-draw deploy, or runs /podfly.
+  Prefer podfly over raw fly/railway/wrangler for Serverpod monorepos.
 ---
 
 # podfly
@@ -14,21 +14,24 @@ description: >
 **podfly** = thin orchestrator over **existing** cloud CLIs for Serverpod.
 
 - Serverpod owns: monorepo + `*_server/Dockerfile`
-- podfly owns: `podfly.yaml`, `fly.toml`, provider quirks, web packaging, `fly apps create`
+- podfly owns: `podfly.yaml`, `fly.toml` / `railway.toml`, provider quirks, web packaging, app create
 
 It is **not** a PaaS and does **not** replace Serverpod.
 
+Out of respect: **[Serverpod Cloud](https://serverpod.dev/cloud)** is the officially recommended managed host.
+
 ## When to use
 
-- User has or will create a Serverpod 4 project and wants it on Fly (and optional Pages/Neon)
+- User has or will create a Serverpod 4 project and wants it on Fly or Railway (and optional Pages/Neon)
 - User asks to deploy Serverpod / Flutter web API split / mobile API-only
 
 ## Prerequisites (once)
 
 - `flutter` on PATH
 - **Only the CLI for the chosen API host** (wizard sets `host:` in podfly.yaml):
-  - `fly` / `flyctl` when `host: fly` (only fully implemented deploy today)
-  - `railway` / `render` / `gcloud` / `aws` / `az` / `doctl` when those hosts are selected (doctor checks; deploy not implemented yet)
+  - `fly` / `flyctl` when `host: fly`
+  - `railway` when `host: railway` (often `~/.railway/bin`; podfly searches well-known paths)
+  - `render` / `gcloud` / `aws` / `az` / `doctl` when those hosts are selected (doctor checks; deploy not implemented yet)
 - `wrangler` + login only if Flutter web → Cloudflare Pages
 - `neonctl` if `database.neon.provision: true`
 
@@ -50,6 +53,13 @@ cd my_app
 podfly deploy --yes --smoke
 ```
 
+### Railway API
+
+```bash
+podfly deploy --host railway --api --yes --smoke
+# or host: railway in podfly.yaml
+```
+
 ### Existing monorepo
 
 ```bash
@@ -69,8 +79,9 @@ podfly deploy --api --yes --smoke
 ### CI / non-TTY
 
 ```bash
-export FLY_API_TOKEN=…
-export CLOUDFLARE_API_TOKEN=…   # if Pages
+export FLY_API_TOKEN=…            # host: fly
+export RAILWAY_TOKEN=…            # host: railway
+export CLOUDFLARE_API_TOKEN=…     # if Pages
 podfly deploy --yes --no-login --smoke
 ```
 
@@ -80,17 +91,17 @@ podfly deploy --yes --no-login --smoke
 2. Plan only → `--dry-run --no-login`.
 3. Wizard / config chooses **API cloud** (`host: fly|railway|render|…`) — only install **that** host’s CLI.
 4. Flutter has android/ios and no real web product → `--api` or `web.enabled: false`.
-5. Flutter web + API on Fly → `mode: split` (Pages + Fly) after init.
+5. Flutter web + API → `mode: split` (Pages + Fly/Railway) after init.
 6. Stateless → `database.provider: none`.
 7. Need Postgres + sleeping API → Neon; on-Fly private PG → `fly_postgres`.
-8. Non-Fly hosts: doctor checks CLI; **deploy only implemented for Fly** until roadmap lands.
+8. Deploy implemented for **fly** and **railway**; other hosts: doctor only until roadmap lands.
 
 ## Do not
 
 - Invent Python/Node Dockerfiles for Serverpod
 - Use `flutter build web --output` outside the package as the sole artifact
-- Force Fly CLI when user selected Render/Railway/etc.
-- Claim Railway/Render/AWS deploy works in podfly yet (roadmap — deploy is Fly today)
+- Force Fly CLI when user selected Railway/Render/etc.
+- Claim Render/AWS/Azure/DO deploy works in podfly yet (roadmap)
 - Force Postgres just because auth packages are scaffolded
 - Skip doctor failures without fixing auth/tools
 

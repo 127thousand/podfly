@@ -43,6 +43,11 @@ class DatabaseEnsure {
   }
 
   Future<void> _sqliteVolume() async {
+    if (config.host != AppHost.fly) {
+      log.warn(
+          'sqlite volume automation is Fly-only; on ${config.host.label} mount storage yourself or use neon');
+      return;
+    }
     final s = config.database.sqlite;
     if (s == null || !s.volumeCreate) {
       log.detail('sqlite volume create skipped');
@@ -126,11 +131,21 @@ class DatabaseEnsure {
         '--region-id',
         n.region,
       ]);
-      log.warn(
-          'Copy connection string into: fly secrets set ${n.connectionStringSecret}=… -a ${config.fly.app}');
+      log.warn(_neonSecretHint(n.connectionStringSecret));
     } else {
-      log.detail(
-          'Neon: ensure fly secrets set ${n.connectionStringSecret}=… -a ${config.fly.app}');
+      log.detail(_neonSecretHint(n.connectionStringSecret));
+    }
+  }
+
+  String _neonSecretHint(String secret) {
+    switch (config.host) {
+      case AppHost.railway:
+        final svc = config.railway?.service ?? 'api';
+        return 'Neon: railway variable set $secret=… -s $svc';
+      case AppHost.fly:
+        return 'Neon: fly secrets set $secret=… -a ${config.fly.app}';
+      default:
+        return 'Neon: set $secret on your API host';
     }
   }
 }

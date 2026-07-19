@@ -18,12 +18,15 @@ class Initer {
     this.yes = false,
     /// When set, save to this path instead of `<root>/podfly.yaml`.
     this.configPath,
+    /// Preferred API host (e.g. from `podfly deploy --host railway`).
+    this.preferredHost,
   });
 
   final String root;
   final Log log;
   final bool yes;
   final String? configPath;
+  final AppHost? preferredHost;
 
   Future<PodflyConfig> run() async {
     log.step('Init');
@@ -63,7 +66,7 @@ class Initer {
       name = nameDefault;
       server = discovered.server ?? '${nameDefault}_server';
       flutter = discovered.flutter ?? '${nameDefault}_flutter';
-      host = AppHost.fly; // safe default for automation
+      host = preferredHost ?? AppHost.fly;
       region = 'iad';
 
       final surface = await detectClientSurface(
@@ -118,7 +121,7 @@ class Initer {
       if (!host.isImplemented) {
         log.warn(
             '${host.label} is planned — you can save config and install its CLI, '
-            'but deploy only works for Fly today.');
+            'but deploy only works for Fly and Railway today.');
       }
 
       final surface = await detectClientSurface(
@@ -180,11 +183,23 @@ class Initer {
         log.warn(w);
       }
 
+      final useFlyDb = host == AppHost.fly;
       final defaultDbIdx = switch (detection.need) {
         DatabaseNeed.none => 0,
-        DatabaseNeed.required => 3, // neon — scale-to-zero friendly default
+        DatabaseNeed.required => useFlyDb ? 3 : 1, // neon
         DatabaseNeed.unknown => 0,
       };
+      final dbChoices = useFlyDb
+          ? [
+              'none — stateless (cheapest, scale-to-zero friendly)',
+              'sqlite — single machine + Fly volume',
+              'fly_postgres — Fly managed Postgres (bills when API sleeps)',
+              'neon — serverless Postgres (good with scale-to-zero)',
+            ]
+          : [
+              'none — stateless (cheapest)',
+              'neon — serverless Postgres',
+            ];
       final dbIdx = await choose(
         detection.need == DatabaseNeed.required
             ? 'Database (app uses tables/auth — DB recommended)'
@@ -193,27 +208,32 @@ class Initer {
                     ? 'Database (looks stateless; template auth unused — none OK)'
                     : 'Database (looks stateless — none recommended)'
                 : 'Database',
-        [
-          'none — stateless (cheapest, scale-to-zero friendly)',
-          'sqlite — single machine + Fly volume',
-          'fly_postgres — Fly managed Postgres (bills when API sleeps)',
-          'neon — serverless Postgres (good with scale-to-zero)',
-        ],
-        defaultIndex: defaultDbIdx,
+        dbChoices,
+        defaultIndex: defaultDbIdx.clamp(0, dbChoices.length - 1),
       );
-      dbProvider = [
-        DatabaseProvider.none,
-        DatabaseProvider.sqlite,
-        DatabaseProvider.flyPostgres,
-        DatabaseProvider.neon,
-      ][dbIdx];
+      if (useFlyDb) {
+        dbProvider = [
+          DatabaseProvider.none,
+          DatabaseProvider.sqlite,
+          DatabaseProvider.flyPostgres,
+          DatabaseProvider.neon,
+        ][dbIdx];
+      } else {
+        dbProvider = [
+          DatabaseProvider.none,
+          DatabaseProvider.neon,
+        ][dbIdx];
+      }
       smokeMethod = await prompt('Smoke HTTP method', defaultValue: 'POST');
       smokePath = await prompt('Smoke API path', defaultValue: '/');
     }
 
     // Fly DNS names prefer hyphens (podfly will create the app if missing).
     final flyApp = sanitizeFlyAppName(name);
-    final apiUrl = 'https://$flyApp.fly.dev/';
+    final railwayProject = sanitizeFlyAppName(name);
+    final apiUrl = host == AppHost.railway
+        ? 'https://REPLACE.up.railway.app/'
+        : 'https://$flyApp.fly.dev/';
 
     DatabaseConfig database;
     switch (dbProvider) {
@@ -261,6 +281,9 @@ class Initer {
       server: server,
       flutter: flutter,
       fly: FlyConfig(app: flyApp, region: region),
+      railway: host == AppHost.railway
+          ? RailwayConfig(project: railwayProject, service: 'api')
+          : null,
       cloudflare: mode == DeployMode.split && webEnabled
           ? CloudflareConfig(project: name)
           : null,

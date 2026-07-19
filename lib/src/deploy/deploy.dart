@@ -37,17 +37,23 @@ class Deployer {
   /// Resolved Fly app name after sanitization / uniqueness (set during deploy).
   String? resolvedFlyApp;
 
+  /// Resolved Railway public host (e.g. xxx.up.railway.app).
+  String? resolvedRailwayHost;
+
   Future<void> run(DeployOptions opts) async {
     if (!config.host.isImplemented) {
       throw StateError(
         '${config.host.label} is not implemented in podfly yet '
-        '(roadmap). Set host: fly in podfly.yaml, or contribute a provider. '
+        '(roadmap). Set host: fly or host: railway in podfly.yaml. '
         'See README provider table.',
       );
     }
 
     await _ensureServerDockerfile();
-    await _patchProductionPublicHosts();
+    // For Railway we may patch again after domain is known.
+    if (config.host == AppHost.fly) {
+      await _patchProductionPublicHosts(_flyPublicHost());
+    }
     await DatabaseEnsure(config: config, runner: runner, log: log).run();
 
     final doWeb = opts.doWeb && config.web.enabled;
@@ -60,18 +66,66 @@ class Deployer {
       await WebBuilder(config: config, runner: runner, log: log).build();
     }
 
+    Future<void> deployApi() async {
+      switch (config.host) {
+        case AppHost.fly:
+          await _deployFly();
+        case AppHost.railway:
+          await _deployRailway();
+        default:
+          throw StateError('${config.host.label} deploy not implemented');
+      }
+    }
+
     if (config.mode == DeployMode.split && doWeb) {
       await _deployPages();
-      if (doApi) await _deployFly();
+      if (doApi) await deployApi();
     } else if (config.mode == DeployMode.split && !doWeb) {
-      if (doApi) await _deployFly();
+      if (doApi) await deployApi();
     } else {
-      if (doWeb) await _copyWebIntoServer();
-      if (doApi || doWeb) await _deployFly();
+      // All-in-one only meaningful on Fly today; Railway is API-first.
+      if (config.host == AppHost.fly && doWeb) {
+        await _copyWebIntoServer();
+      }
+      if (doApi || (config.host == AppHost.fly && doWeb)) {
+        await deployApi();
+      }
     }
 
     if (opts.smoke && !runner.dryRun) {
-      final ok = await SmokeRunner(config: config, log: log).run();
+      // Prefer reloaded yaml so railway.public_host / api_url stick after deploy.
+      PodflyConfig smokeCfg = config;
+      if (await File(config.configPath).exists()) {
+        try {
+          smokeCfg = await PodflyConfig.load(config.configPath);
+        } catch (_) {/* use in-memory */}
+      }
+      if (resolvedRailwayHost != null &&
+          smokeCfg.web.apiUrlNormalized.contains('REPLACE')) {
+        smokeCfg = PodflyConfig(
+          root: smokeCfg.root,
+          host: smokeCfg.host,
+          mode: smokeCfg.mode,
+          name: smokeCfg.name,
+          server: smokeCfg.server,
+          flutter: smokeCfg.flutter,
+          fly: smokeCfg.fly,
+          railway: smokeCfg.railway,
+          cloudflare: smokeCfg.cloudflare,
+          database: smokeCfg.database,
+          web: WebConfig(
+            enabled: smokeCfg.web.enabled,
+            serverUrlDefine: smokeCfg.web.serverUrlDefine,
+            apiUrl: 'https://$resolvedRailwayHost/',
+            patchBootstrap: smokeCfg.web.patchBootstrap,
+            writeHeaders: smokeCfg.web.writeHeaders,
+            baseHref: smokeCfg.web.baseHref,
+            staticDir: smokeCfg.web.staticDir,
+          ),
+          smoke: smokeCfg.smoke,
+        );
+      }
+      final ok = await SmokeRunner(config: smokeCfg, log: log).run();
       if (!ok) throw StateError('smoke checks failed');
     }
 
@@ -83,15 +137,38 @@ class Deployer {
           'UI:  https://${config.cloudflare!.project}.pages.dev');
     }
     if (doApi) {
-      final app = resolvedFlyApp ?? sanitizeFlyAppName(config.fly.app);
-      log.detail('API: https://$app.fly.dev/');
+      if (config.host == AppHost.railway) {
+        final h = resolvedRailwayHost ??
+            config.railway?.publicHost ??
+            '?.up.railway.app';
+        log.detail('API: https://$h/');
+      } else {
+        final app = resolvedFlyApp ?? sanitizeFlyAppName(config.fly.app);
+        log.detail('API: https://$app.fly.dev/');
+      }
     }
+  }
+
+  String _flyPublicHost() {
+    final app = resolvedFlyApp ?? sanitizeFlyAppName(config.fly.app);
+    return '$app.fly.dev';
   }
 
   Future<String> _flyBin() async {
     final fly = await runner.resolve('fly', ['flyctl']);
     if (fly == null) throw StateError('fly not found');
     return fly;
+  }
+
+  Future<String> _railwayBin() async {
+    final r = await runner.resolve('railway');
+    if (r == null) {
+      throw StateError(
+        'railway CLI not found — install: https://docs.railway.app/guides/cli '
+        '(or ensure ~/.railway/bin is on PATH)',
+      );
+    }
+    return r;
   }
 
   /// Write a Serverpod-style Dockerfile if the server package is missing one.
@@ -112,8 +189,8 @@ class Deployer {
     log.ok('wrote $rel (prefer `serverpod create` Dockerfile when available)');
   }
 
-  /// Point production publicHost at the Fly app so Serverpod clients get HTTPS.
-  Future<void> _patchProductionPublicHosts() async {
+  /// Point production publicHost so Serverpod clients get HTTPS.
+  Future<void> _patchProductionPublicHosts(String host) async {
     final prod = File(
       p.join(config.serverPath, 'config', 'production.yaml'),
     );
@@ -122,15 +199,17 @@ class Deployer {
       prod,
       File(p.join(config.serverPath, 'config', 'development.yaml')),
     ];
-    final app = sanitizeFlyAppName(config.fly.app);
-    final host = '$app.fly.dev';
+    final bare = host
+        .replaceFirst(RegExp(r'^https?://'), '')
+        .split('/')
+        .first;
 
     for (final f in candidates) {
       if (!await f.exists()) continue;
       var text = await f.readAsString();
       final original = text;
 
-      // apiServer publicHost
+      // apiServer publicHost — replace placeholders / localhost / previous podfly hosts
       text = text.replaceAllMapped(
         RegExp(
           r'(apiServer:[\s\S]*?publicHost:\s*)(\S+)',
@@ -140,9 +219,12 @@ class Deployer {
           final current = m.group(2)!;
           if (current.contains('localhost') ||
               current.contains('example') ||
+              current.contains('REPLACE') ||
+              current.contains('fly.dev') ||
+              current.contains('railway.app') ||
               current == '""' ||
               current == "''") {
-            return '${m.group(1)}$host';
+            return '${m.group(1)}$bare';
           }
           return m.group(0)!;
         },
@@ -176,13 +258,14 @@ class Deployer {
 
       if (text != original) {
         if (runner.dryRun) {
-          log.dry('patch ${p.relative(f.path, from: config.root)} publicHost → $host');
+          log.dry(
+              'patch ${p.relative(f.path, from: config.root)} publicHost → $bare');
         } else {
           final bak = File('${f.path}.podfly.bak');
           if (!await bak.exists()) await bak.writeAsString(original);
           await f.writeAsString(text);
           log.ok(
-              'patched ${p.relative(f.path, from: config.root)} publicHost → $host');
+              'patched ${p.relative(f.path, from: config.root)} publicHost → $bare');
         }
       }
     }
@@ -329,6 +412,316 @@ class Deployer {
       throw StateError('fly deploy failed (exit ${r.exitCode})');
     }
     log.ok('Fly: https://$app.fly.dev');
+  }
+
+  RailwayConfig get _railwayCfg =>
+      config.railway ??
+      RailwayConfig(project: sanitizeFlyAppName(config.name), service: 'api');
+
+  Future<void> _deployRailway() async {
+    final rcfg = _railwayCfg;
+    final project = sanitizeFlyAppName(rcfg.project);
+    final service = rcfg.service;
+    log.step('Deploy Railway API ($project / $service)');
+    final railway = await _railwayBin();
+
+    await _ensureRailwayToml(rcfg);
+    await _ensureRailwayProject(railway, project, rcfg);
+    await _ensureRailwayService(railway, service);
+    final host = await _ensureRailwayDomain(railway, service, rcfg.port);
+    if (host != null) {
+      resolvedRailwayHost = host;
+      await _patchProductionPublicHosts(host);
+      await _persistRailwayPublicHost(host);
+    }
+
+    // -c: stream build logs then exit (agent/CI friendly). -y: no prompts.
+    final args = <String>[
+      'up',
+      '.',
+      '-y',
+      '-c',
+      '-s',
+      service,
+    ];
+    final r = await runner.run(
+      railway,
+      args,
+      workingDirectory: config.root,
+    );
+    if (!r.ok && !runner.dryRun) {
+      throw StateError('railway up failed (exit ${r.exitCode})');
+    }
+    final display = host ?? rcfg.publicHost ?? 'railway.app';
+    log.ok('Railway: https://$display/');
+  }
+
+  Future<void> _ensureRailwayToml(RailwayConfig rcfg) async {
+    final path = config.railwayTomlPath;
+    final dockerfile = p.join(config.server, 'Dockerfile');
+    final body = '''
+# Generated by podfly — Serverpod monorepo root as Docker context
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "$dockerfile"
+''';
+    if (await File(path).exists()) {
+      // Keep dockerfilePath in sync if we wrote it before
+      var text = await File(path).readAsString();
+      if (!text.contains(dockerfile) && text.contains('dockerfilePath')) {
+        text = text.replaceFirst(
+          RegExp(r'dockerfilePath\s*=\s*"[^"]*"'),
+          'dockerfilePath = "$dockerfile"',
+        );
+        if (!runner.dryRun) {
+          await File(path).writeAsString(text);
+          log.detail('updated ${rcfg.config} dockerfilePath');
+        }
+      }
+      return;
+    }
+    if (runner.dryRun) {
+      log.dry('write $path');
+      return;
+    }
+    await File(path).writeAsString(body);
+    log.ok('wrote ${rcfg.config}');
+  }
+
+  Future<void> _ensureRailwayProject(
+    String railway,
+    String projectName,
+    RailwayConfig rcfg,
+  ) async {
+    if (runner.dryRun) {
+      log.dry('$railway status / init --name $projectName (if unlinked)');
+      return;
+    }
+
+    // Already linked in this directory?
+    final status = await runner.runCapture(
+      railway,
+      ['status', '--json'],
+      workingDirectory: config.root,
+      allowDryRun: false,
+    );
+    if (status.ok && status.stdout.trim().isNotEmpty) {
+      log.detail('Railway project already linked');
+      return;
+    }
+
+    if (rcfg.projectId != null && rcfg.projectId!.isNotEmpty) {
+      log.detail('linking Railway project ${rcfg.projectId}');
+      final link = await runner.run(
+        railway,
+        [
+          'link',
+          '-p',
+          rcfg.projectId!,
+          '-s',
+          rcfg.service,
+          '-e',
+          rcfg.environment,
+        ],
+        workingDirectory: config.root,
+        allowDryRun: false,
+      );
+      if (!link.ok) {
+        throw StateError(
+            'railway link failed (exit ${link.exitCode}) for ${rcfg.projectId}');
+      }
+      log.ok('linked Railway project ${rcfg.projectId}');
+      return;
+    }
+
+    log.detail('creating Railway project $projectName');
+    final init = await runner.runCapture(
+      railway,
+      ['init', '--name', projectName, '--json'],
+      workingDirectory: config.root,
+      allowDryRun: false,
+    );
+    if (!init.ok) {
+      // Project name may already exist in account — try link via list
+      log.warn(
+          'railway init failed (exit ${init.exitCode}); try linking existing project');
+      final combined = init.stdout + init.stderr;
+      if (combined.toLowerCase().contains('already') ||
+          combined.toLowerCase().contains('exists')) {
+        log.detail(
+            'If the project exists: railway link -p <id> -s ${rcfg.service}');
+      }
+      throw StateError(
+        'railway init failed (exit ${init.exitCode}): ${init.stderr}',
+      );
+    }
+    log.ok('created Railway project $projectName');
+    // Persist project id if JSON has it
+    await _tryPersistRailwayProjectId(init.stdout);
+  }
+
+  Future<void> _tryPersistRailwayProjectId(String jsonOut) async {
+    try {
+      // Best-effort: look for "id": "uuid"
+      final m = RegExp(r'"id"\s*:\s*"([0-9a-fA-F-]{36})"').firstMatch(jsonOut);
+      if (m == null) return;
+      final id = m.group(1)!;
+      final cfgFile = File(config.configPath);
+      if (!await cfgFile.exists()) return;
+      var text = await cfgFile.readAsString();
+      if (text.contains('project_id:')) {
+        text = text.replaceFirst(
+          RegExp(r'(^\s*project_id:\s*).+$', multiLine: true),
+          '  project_id: $id',
+        );
+      } else if (text.contains(RegExp(r'^railway:', multiLine: true))) {
+        text = text.replaceFirst(
+          RegExp(r'^(railway:\n)', multiLine: true),
+          'railway:\n  project_id: $id\n',
+        );
+      }
+      await cfgFile.writeAsString(text);
+      log.detail('saved railway.project_id → $id');
+    } catch (_) {/* ignore */}
+  }
+
+  Future<void> _ensureRailwayService(String railway, String service) async {
+    if (runner.dryRun) {
+      log.dry('$railway service list / add --service $service');
+      return;
+    }
+    final list = await runner.runCapture(
+      railway,
+      ['service', 'list', '--json'],
+      workingDirectory: config.root,
+      allowDryRun: false,
+    );
+    final out = list.stdout + list.stderr;
+    if (list.ok &&
+        (out.contains('"$service"') ||
+            RegExp('"name"\\s*:\\s*"${RegExp.escape(service)}"')
+                .hasMatch(out))) {
+      log.detail('Railway service $service exists');
+      // Ensure linked service
+      await runner.run(
+        railway,
+        ['service', 'link', service],
+        workingDirectory: config.root,
+        allowDryRun: false,
+      );
+      return;
+    }
+
+    log.detail('creating Railway service $service');
+    final add = await runner.run(
+      railway,
+      ['add', '--service', service, '--json'],
+      workingDirectory: config.root,
+      allowDryRun: false,
+    );
+    if (!add.ok) {
+      throw StateError('railway add --service $service failed (${add.exitCode})');
+    }
+    await runner.run(
+      railway,
+      ['service', 'link', service],
+      workingDirectory: config.root,
+      allowDryRun: false,
+    );
+    log.ok('created Railway service $service');
+  }
+
+  Future<String?> _ensureRailwayDomain(
+    String railway,
+    String service,
+    int port,
+  ) async {
+    if (runner.dryRun) {
+      log.dry('$railway domain list / domain --port $port -s $service');
+      return config.railway?.publicHost;
+    }
+
+    final list = await runner.runCapture(
+      railway,
+      ['domain', 'list', '-s', service, '--json'],
+      workingDirectory: config.root,
+      allowDryRun: false,
+    );
+    final existing = _parseRailwayDomain(list.stdout);
+    if (existing != null) {
+      log.detail('Railway domain $existing');
+      return existing;
+    }
+
+    log.detail('creating Railway domain (port $port)');
+    final create = await runner.runCapture(
+      railway,
+      ['domain', '--port', '$port', '-s', service, '--json'],
+      workingDirectory: config.root,
+      allowDryRun: false,
+    );
+    final host = _parseRailwayDomain(create.stdout) ??
+        _parseRailwayDomain(create.stderr);
+    if (host != null) {
+      log.ok('Railway domain $host');
+      return host;
+    }
+    // Human-readable fallback: scan for *.up.railway.app
+    final combined = create.stdout + create.stderr;
+    final m = RegExp(r'([a-zA-Z0-9.-]+\.up\.railway\.app)').firstMatch(combined);
+    if (m != null) {
+      log.ok('Railway domain ${m.group(1)}');
+      return m.group(1);
+    }
+    log.warn(
+        'could not parse Railway domain — set railway.public_host in podfly.yaml');
+    return null;
+  }
+
+  String? _parseRailwayDomain(String jsonOrText) {
+    final t = jsonOrText.trim();
+    if (t.isEmpty) return null;
+    // JSON keys commonly: domain, host, name
+    for (final key in ['domain', 'host', 'name', 'serviceDomain']) {
+      final m = RegExp('"$key"\\s*:\\s*"([^"]+)"').firstMatch(t);
+      if (m != null) {
+        final v = m.group(1)!;
+        if (v.contains('.') && !v.contains(' ')) {
+          return v.replaceFirst(RegExp(r'^https?://'), '').split('/').first;
+        }
+      }
+    }
+    final re = RegExp(r'([a-zA-Z0-9.-]+\.up\.railway\.app)');
+    return re.firstMatch(t)?.group(1);
+  }
+
+  Future<void> _persistRailwayPublicHost(String host) async {
+    final bare =
+        host.replaceFirst(RegExp(r'^https?://'), '').split('/').first;
+    final cfgFile = File(config.configPath);
+    if (!await cfgFile.exists()) return;
+    var text = await cfgFile.readAsString();
+    if (RegExp(r'^\s*public_host:', multiLine: true).hasMatch(text)) {
+      text = text.replaceFirst(
+        RegExp(r'(^\s*public_host:\s*).+$', multiLine: true),
+        '  public_host: $bare',
+      );
+    } else {
+      // Insert under railway: block after first nested key line, or after railway:
+      final railwayHeader = RegExp(r'^railway:\s*$', multiLine: true);
+      if (railwayHeader.hasMatch(text)) {
+        text = text.replaceFirst(
+          railwayHeader,
+          'railway:\n  public_host: $bare',
+        );
+      }
+    }
+    text = text.replaceFirst(
+      RegExp(r'(^\s*api_url:\s*).+$', multiLine: true),
+      '  api_url: https://$bare/',
+    );
+    await cfgFile.writeAsString(text);
+    log.ok('updated podfly.yaml railway.public_host → $bare');
   }
 
   Future<void> _deployPages() async {

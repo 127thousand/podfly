@@ -27,9 +27,27 @@ class ProcessRunner {
   final Log log;
   final bool dryRun;
 
+  /// Extra dirs for CLIs installed outside default PATH (agent/non-login shells).
+  static List<String> wellKnownBinDirs() {
+    final home = Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        '';
+    if (home.isEmpty) return const [];
+    return [
+      p.join(home, '.railway', 'bin'),
+      p.join(home, '.fly', 'bin'),
+      p.join(home, '.local', 'bin'),
+      p.join(home, 'bin'),
+    ];
+  }
+
   /// Whether [cmd] is on PATH (Windows uses `where`, elsewhere `which`).
   Future<bool> which(String cmd) async {
-    // Also check PATH directories directly for reliability.
+    return (await resolvePath(cmd)) != null;
+  }
+
+  /// Absolute path or bare command name if found on PATH / well-known dirs.
+  Future<String?> resolvePath(String cmd) async {
     final pathEnv = Platform.environment['PATH'] ?? '';
     final sep = Platform.isWindows ? ';' : ':';
     final exts = Platform.isWindows
@@ -39,18 +57,21 @@ class ProcessRunner {
             .toList()
         : <String>[''];
 
-    for (final dir in pathEnv.split(sep)) {
-      if (dir.isEmpty) continue;
+    final dirs = <String>[
+      ...pathEnv.split(sep).where((d) => d.isNotEmpty),
+      ...wellKnownBinDirs(),
+    ];
+
+    for (final dir in dirs) {
       for (final ext in exts) {
         final candidate = p.join(dir, '$cmd${ext.toLowerCase()}');
-        if (File(candidate).existsSync()) return true;
-        // Windows often has mixed-case extensions
+        if (File(candidate).existsSync()) return candidate;
         final candidate2 = p.join(dir, '$cmd$ext');
-        if (File(candidate2).existsSync()) return true;
+        if (File(candidate2).existsSync()) return candidate2;
       }
-      // Unix: exact name
-      if (!Platform.isWindows && File(p.join(dir, cmd)).existsSync()) {
-        return true;
+      if (!Platform.isWindows) {
+        final unix = p.join(dir, cmd);
+        if (File(unix).existsSync()) return unix;
       }
     }
 
@@ -60,12 +81,17 @@ class ProcessRunner {
       [cmd],
       runInShell: true,
     );
-    return r.exitCode == 0 && (r.stdout as String).trim().isNotEmpty;
+    final out = (r.stdout as String).trim();
+    if (r.exitCode == 0 && out.isNotEmpty) {
+      return out.split('\n').first.trim();
+    }
+    return null;
   }
 
   Future<String?> resolve(String cmd, [List<String> alts = const []]) async {
     for (final c in [cmd, ...alts]) {
-      if (await which(c)) return c;
+      final path = await resolvePath(c);
+      if (path != null) return path;
     }
     return null;
   }

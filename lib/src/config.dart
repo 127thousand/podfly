@@ -60,7 +60,8 @@ extension AppHostX on AppHost {
         AppHost.digitalOcean => 'https://docs.digitalocean.com/reference/doctl/',
       };
 
-  bool get isImplemented => this == AppHost.fly;
+  /// Deploy implemented in podfly today.
+  bool get isImplemented => this == AppHost.fly || this == AppHost.railway;
 
   static AppHost parse(String? s) => switch (s) {
         null || 'fly' => AppHost.fly,
@@ -96,6 +97,49 @@ class FlyConfig {
         'scale_to_zero': scaleToZero,
         'ha': ha,
       };
+}
+
+/// Railway project / service for the Serverpod API.
+class RailwayConfig {
+  RailwayConfig({
+    required this.project,
+    this.service = 'api',
+    this.environment = 'production',
+    this.projectId,
+    this.port = 8080,
+    this.config = 'railway.toml',
+    this.publicHost,
+  });
+
+  /// Human project name (used when creating / as default).
+  final String project;
+  final String service;
+  final String environment;
+  /// Railway project UUID when known (skips name-based create).
+  final String? projectId;
+  /// Internal container port Serverpod listens on (domain targets this).
+  final int port;
+  /// Config-as-code file at monorepo root (dockerfile path).
+  final String config;
+  /// e.g. `xxx.up.railway.app` once domain exists.
+  final String? publicHost;
+
+  Map<String, Object?> toMap() => {
+        'project': project,
+        'service': service,
+        'environment': environment,
+        if (projectId != null) 'project_id': projectId,
+        'port': port,
+        'config': config,
+        if (publicHost != null) 'public_host': publicHost,
+      };
+
+  String? get publicUrl {
+    final h = publicHost;
+    if (h == null || h.isEmpty) return null;
+    final host = h.replaceFirst(RegExp(r'^https?://'), '').split('/').first;
+    return 'https://$host/';
+  }
 }
 
 class CloudflareConfig {
@@ -291,6 +335,7 @@ class PodflyConfig {
     required this.server,
     required this.flutter,
     required this.fly,
+    this.railway,
     this.cloudflare,
     required this.database,
     required this.web,
@@ -305,6 +350,7 @@ class PodflyConfig {
   final String server;
   final String flutter;
   final FlyConfig fly;
+  final RailwayConfig? railway;
   final CloudflareConfig? cloudflare;
   final DatabaseConfig database;
   final WebConfig web;
@@ -313,8 +359,24 @@ class PodflyConfig {
   String get serverPath => p.join(root, server);
   String get flutterPath => p.join(root, flutter);
   String get flyTomlPath => p.join(root, fly.config);
+  String get railwayTomlPath =>
+      p.join(root, railway?.config ?? 'railway.toml');
   String get configPath => p.join(root, 'podfly.yaml');
   String get webOutPath => p.join(root, 'build', 'web');
+
+  /// Best-known public API base URL for this host (trailing slash).
+  String get apiPublicBase {
+    if (host == AppHost.railway) {
+      final u = railway?.publicUrl;
+      if (u != null) return u;
+      // Placeholder until domain is provisioned.
+      return web.apiUrlNormalized;
+    }
+    if (host == AppHost.fly) {
+      return 'https://${fly.app}.fly.dev/';
+    }
+    return web.apiUrlNormalized;
+  }
 
   Map<String, Object?> toMap() => {
         'host': host.yamlName,
@@ -323,6 +385,7 @@ class PodflyConfig {
         'server': server,
         'flutter': flutter,
         'fly': fly.toMap(),
+        if (railway != null) 'railway': railway!.toMap(),
         if (cloudflare != null) 'cloudflare': cloudflare!.toMap(),
         'database': database.toMap(),
         'web': web.toMap(),
@@ -345,6 +408,22 @@ class PodflyConfig {
       buf.writeln('  config: ${fly.config}');
       buf.writeln('  scale_to_zero: ${fly.scaleToZero}');
       buf.writeln('  ha: ${fly.ha}');
+    }
+    if (host == AppHost.railway || railway != null) {
+      final r = railway ??
+          RailwayConfig(project: name, service: 'api');
+      buf.writeln('railway:');
+      buf.writeln('  project: ${r.project}');
+      buf.writeln('  service: ${r.service}');
+      buf.writeln('  environment: ${r.environment}');
+      if (r.projectId != null) {
+        buf.writeln('  project_id: ${r.projectId}');
+      }
+      buf.writeln('  port: ${r.port}');
+      buf.writeln('  config: ${r.config}');
+      if (r.publicHost != null) {
+        buf.writeln('  public_host: ${r.publicHost}');
+      }
     }
     if (cloudflare != null) {
       buf.writeln();
@@ -462,7 +541,22 @@ class PodflyConfig {
       ha: flyMap['ha'] == true,
     );
 
+    RailwayConfig? railway;
+    if (doc['railway'] != null || host == AppHost.railway) {
+      final m = _map(doc['railway']);
+      railway = RailwayConfig(
+        project: m['project']?.toString() ?? name,
+        service: m['service']?.toString() ?? 'api',
+        environment: m['environment']?.toString() ?? 'production',
+        projectId: m['project_id']?.toString(),
+        port: int.tryParse('${m['port'] ?? 8080}') ?? 8080,
+        config: m['config']?.toString() ?? 'railway.toml',
+        publicHost: m['public_host']?.toString(),
+      );
+    }
+
     CloudflareConfig? cf;
+    // Split mode still uses Pages for UI (Fly or Railway API).
     if (doc['cloudflare'] != null || mode == DeployMode.split) {
       final m = _map(doc['cloudflare']);
       cf = CloudflareConfig(
@@ -510,8 +604,10 @@ class PodflyConfig {
     }
 
     final webMap = _map(doc['web']);
-    final apiUrl = webMap['api_url']?.toString() ??
-        'https://${fly.app}.fly.dev/';
+    final defaultApiUrl = host == AppHost.railway
+        ? (railway?.publicUrl ?? 'https://REPLACE.up.railway.app/')
+        : 'https://${fly.app}.fly.dev/';
+    final apiUrl = webMap['api_url']?.toString() ?? defaultApiUrl;
     final web = WebConfig(
       enabled: webMap['enabled'] != false,
       serverUrlDefine:
@@ -556,6 +652,7 @@ class PodflyConfig {
       server: server,
       flutter: flutter,
       fly: fly,
+      railway: railway,
       cloudflare: cf,
       database: DatabaseConfig(
         provider: provider,

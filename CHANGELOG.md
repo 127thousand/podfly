@@ -4,6 +4,7 @@
 
 ### Features
 
+- **Railway deploy** (`host: railway`): project/service create, domain, `railway.toml` + `railway up`, doctor resolves `~/.railway/bin`
 - **Maximum automation pass:** `fly apps create` (+ unique name if taken), name sanitize, Pages project create, optional Dockerfile template if missing, patch production `publicHost` to Fly
 - `PODFLY_AUTO=1` skips Y/n on login prompts
 - Detect **mobile / API-only** Serverpod projects and set `web.enabled: false`

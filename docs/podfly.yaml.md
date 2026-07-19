@@ -8,7 +8,7 @@ Location: project root (walk-up from cwd also finds it).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `host` | `fly` \| `railway` \| `render` \| `cloud_run` \| `aws` \| `azure` \| `digitalocean` | `fly` | **API cloud** — only `fly` deploys today; others are wizard/doctor roadmap |
+| `host` | `fly` \| `railway` \| `render` \| `cloud_run` \| `aws` \| `azure` \| `digitalocean` | `fly` | **API cloud** — `fly` and `railway` deploy today |
 | `mode` | `split` \| `fly` | `split` | Layout: Pages UI + API host vs all-on-API-host (Fly) |
 | `name` | string | directory name | Default for app + Pages project names |
 | `server` | string | discovered `*_server` | Path relative to root |
@@ -23,6 +23,20 @@ Location: project root (walk-up from cwd also finds it).
 | `config` | string | `fly.toml` | Path to fly.toml |
 | `scale_to_zero` | bool | `true` | Documented intent (fly.toml min machines) |
 | `ha` | bool | `false` | When false, deploy with `--ha=false` |
+
+## `railway`
+
+Used when `host: railway`.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `project` | string | `name` | Railway project name (created if unlinked) |
+| `service` | string | `api` | Service name for the Serverpod API |
+| `environment` | string | `production` | Environment to link/deploy |
+| `project_id` | string | — | Optional UUID to `railway link` instead of create |
+| `port` | int | `8080` | Internal port for `railway domain --port` (Serverpod API) |
+| `config` | string | `railway.toml` | Config-as-code with `dockerfilePath` to `*_server/Dockerfile` |
+| `public_host` | string | — | e.g. `xxx.up.railway.app` (filled after first domain) |
 
 ## `cloudflare` (split only)
 

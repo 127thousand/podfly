@@ -55,8 +55,8 @@ podfly deploy --yes --dry-run --no-login
 3. **Do not register Flutter’s stub service worker** for production web — podfly bootstrap fixes this when `patch_bootstrap: true`.
 4. **Do not require Postgres** just because auth packages are scaffolded — template auth is a soft warning; only hard-require DB when tables/`requireLogin`/real auth use.
 5. **Fly app names:** underscores → hyphens (`my_app` → `my-app`). Podfly creates the app if missing.
-6. **Supported API hosts today:** only **`host: fly`**. Wizard may select Railway/Render/GCP/AWS/Azure/DO for config + CLI checks; **deploy throws until implemented**.
-7. **Doctor does not require Fly** unless `host: fly` (or default). UI Pages still needs `wrangler` when `mode: split` and web enabled.
+6. **Supported API hosts today:** **`host: fly`** and **`host: railway`**. Wizard may select Render/GCP/AWS/Azure/DO for config + CLI checks; **deploy throws until implemented**.
+7. **Doctor does not require Fly** unless `host: fly` (or default). Railway needs the `railway` CLI (`~/.railway/bin` is searched). UI Pages still needs `wrangler` when `mode: split` and web enabled.
 
 ## Decision tree
 

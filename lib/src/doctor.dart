@@ -69,7 +69,7 @@ class Doctor {
       if (!config.host.isImplemented) {
         log.warn(
             '${config.host.label} is on the roadmap — deploy will not run yet. '
-            'Use host: fly for production deploys today.');
+            'Use host: fly or host: railway for production deploys today.');
       }
       _configWarnings(config);
     }
@@ -96,7 +96,7 @@ class Doctor {
       case AppHost.fly:
         return _needFlyAuth(resolved);
       case AppHost.railway:
-        return _needGenericAuth(resolved, ['whoami'], 'railway login');
+        return _needRailwayAuth(resolved);
       case AppHost.render:
         log.ok('$resolved  (present — auth via RENDER_API_KEY / login)');
         return true;
@@ -177,6 +177,40 @@ class Doctor {
     }
     log.warn('$bin not authenticated or misconfigured');
     log.detail('Fix: $loginHint');
+    return false;
+  }
+
+  Future<bool> _needRailwayAuth(String railway) async {
+    if (Platform.environment['RAILWAY_TOKEN']?.isNotEmpty == true) {
+      log.ok('$railway  (RAILWAY_TOKEN set)');
+      return true;
+    }
+    if (runner.dryRun) {
+      log.ok('$railway  (auth check skipped in dry-run)');
+      return true;
+    }
+    final who =
+        await runner.runCapture(railway, ['whoami'], allowDryRun: false);
+    final out = (who.stdout + who.stderr).toLowerCase();
+    if (who.ok &&
+        !out.contains('not logged') &&
+        !out.contains('unauthorized') &&
+        who.stdout.trim().isNotEmpty) {
+      final line = who.stdout.trim().split('\n').first;
+      log.ok('$railway  $line');
+      return true;
+    }
+    log.warn('$railway not authenticated');
+    if (_canLogin) {
+      final go = _autoLogin || await confirm('Run `railway login` now?');
+      if (go) {
+        final r =
+            await runner.run(railway, ['login'], allowDryRun: false);
+        if (r.ok) return _needRailwayAuth(railway);
+      }
+    } else {
+      log.detail('Set RAILWAY_TOKEN or run: railway login');
+    }
     return false;
   }
 
@@ -282,6 +316,11 @@ class Doctor {
       if (config.host != AppHost.fly) {
         log.warn('fly_postgres is only available when host: fly');
       }
+    }
+    if (config.host == AppHost.railway &&
+        config.database.provider == DatabaseProvider.sqlite) {
+      log.warn(
+          'sqlite on Railway needs a volume wired manually — prefer neon or none');
     }
     if (config.database.provider == DatabaseProvider.none) {
       final mig = Directory('${config.serverPath}/migrations');
