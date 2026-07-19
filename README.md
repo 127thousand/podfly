@@ -15,7 +15,7 @@ podfly deploy          →  provider CLIs + configs + quirks (podfly)
 
 ## Official recommendation
 
-For the path Serverpod themselves maintain and recommend, use **[Serverpod Cloud](https://serverpod.dev/cloud)** — managed hosting built for Serverpod (API, Insights, and the rest of the product surface).
+Out of respect for the Serverpod team: the **officially recommended** hosting path is **[Serverpod Cloud](https://serverpod.dev/cloud)** — managed infrastructure built for Serverpod (API, web, Insights, and the rest of the product surface).
 
 **podfly** is for teams that want to stay on **their own** infra (Fly, Railway, big clouds, etc.) and still avoid hand-rolling every CLI and config quirk. It complements Serverpod Cloud; it does not replace it.
 
@@ -24,34 +24,35 @@ For the path Serverpod themselves maintain and recommend, use **[Serverpod Cloud
 ## Provider roadmap
 
 **podfly status** = first-class in this tool.  
-**Fit** = how well that host matches Serverpod’s process model (multi-port monolith vs API-only), independent of podfly.
+**Fit** = how well that host matches Serverpod’s process model, independent of whether podfly implements the deploy yet.
 
-### Topology keys
+### Topology keys (what’s possible)
 
-| Topology | Meaning |
-|----------|---------|
-| 📱 **API-only** | Serverpod API (≈ one public port). Mobile or other clients. |
-| 🔀 **Split** | Static Flutter web on a CDN/Pages host; API on an app host. |
-| 🧱 **All-in-one** | API + web (and often Insights) as multi-port / multi-role on one machine. |
-| 📊 **Insights** | Serverpod Insights (separate port/process in full setups). **Not automated by podfly yet.** |
+| Topology | Meaning | When it fits |
+|----------|---------|--------------|
+| 📱 **API-only** | One public API port. Mobile or other clients. | Any container/PaaS that runs a single process + port. |
+| 🔀 **Split** | Static Flutter web on a CDN; API on an app host. | Best of both: CDN for multi‑MB WASM; API can scale to zero. |
+| 🧱 **All-in-one** | API + static web on one machine (multi-port / multi-role). | Hosts that allow multi-port Machines or a reverse proxy. |
+
+Serverpod **Insights** is not covered by podfly (and is not in this table). For Insights and the full managed product surface, use **[Serverpod Cloud](https://serverpod.dev/cloud)**.
 
 ### 🚀 App hosts
 
-| Provider | CLI | podfly | 📱 API-only | 🔀 Split UI+API | 🧱 All-in-one | 📊 Insights | Notes |
-|----------|-----|--------|:-----------:|:---------------:|:-------------:|:-----------:|-------|
-| 💜 [**Serverpod Cloud**](https://serverpod.dev/cloud) | Serverpod Cloud | — | ✅ | ✅ | ✅ | ✅ | **Official** managed option |
-| 🟣 [**Fly.io**](https://fly.io) | `fly` / `flyctl` | ✅ | ✅ | ✅ | ✅ | 🟡 | Default podfly path; multi-port Machines OK |
-| 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | — | Static Flutter web only; **not** the API |
-| 🚂 [**Railway**](https://railway.app) | `railway` | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | Great DX; one service/port is simplest |
-| 🟦 [**Render**](https://render.com) | Render CLI | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | Same: prefer API service + static site |
-| ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | 🗺️ | 🟡 | 🟡 | ❌ | ❌ | Request-scoped, one public port; cold starts; sidecars only help routing — **not** a drop-in multi-port monolith |
-| 📦 [**AWS**](https://aws.amazon.com) App Runner / ECS | `aws` | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | App Runner ≈ API-only; ECS freer for multi-service |
-| 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | Similar to Cloud Run / containers |
-| 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | 🗺️ | ✅ | ✅ | 🟡 | 🟡 | Simple PaaS |
+| Provider | CLI | podfly | 📱 API-only | 🔀 Split UI+API | 🧱 All-in-one | Notes |
+|----------|-----|--------|:-----------:|:---------------:|:-------------:|-------|
+| 💜 [**Serverpod Cloud**](https://serverpod.dev/cloud) | Serverpod Cloud | — | ✅ | ✅ | ✅ | **Officially recommended** managed option |
+| 🟣 [**Fly.io**](https://fly.io) | `fly` / `flyctl` | ✅ | ✅ | ✅ | ✅ | Default podfly path; multi-port Machines OK |
+| 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | Static Flutter web only; **not** the API |
+| 🚂 [**Railway**](https://railway.app) | `railway` | 🗺️ | ✅ | ✅ | 🟡 | Great DX; one service/port is simplest |
+| 🟦 [**Render**](https://render.com) | Render CLI | 🗺️ | ✅ | ✅ | 🟡 | Same: prefer API service + static site |
+| ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | 🗺️ | 🟡 | 🟡 | ❌ | One public port, request-scoped; cold starts; **not** a multi-port monolith |
+| 📦 [**AWS**](https://aws.amazon.com) App Runner / ECS | `aws` | 🗺️ | ✅ | ✅ | 🟡 | App Runner ≈ API-only; ECS freer for multi-service |
+| 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ | ✅ | ✅ | 🟡 | Similar constraints to Cloud Run / containers |
+| 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | 🗺️ | ✅ | ✅ | 🟡 | Simple PaaS |
 
 **Fit legend:** ✅ natural · 🟡 possible with constraints (single port, split services, always-on, etc.) · ❌ poor fit · 🗺️ podfly not implemented yet · — N/A
 
-**Cloud Run in particular:** fine for **API-only** (or split with UI elsewhere) if you pin one port and accept cold starts / min instances. **Not** a first-class target for stock multi-port Serverpod (API + web + Insights) without redesign or multi-service layout.
+**Cloud Run in particular:** usable for **API-only** (or split with UI on Pages/elsewhere) if you pin one port and accept cold starts / min instances. **Not** a good target for stock multi-port Serverpod all-in-one without redesign or multi-service layout.
 
 ### 🐘 Hosted Postgres
 
@@ -77,11 +78,11 @@ Want another provider? Open an issue — preference is **excellent DX** or **clo
 
 ## What you get today (podfly)
 
-| Mode | UI | API | Insights |
-|------|----|-----|----------|
-| 🔀 **`split`** | 🟠 Cloudflare Pages | 🟣 Fly.io | ⛔ not wired |
-| 🪰 **`fly`** | Optional static on Fly | 🟣 Fly.io | ⛔ not wired |
-| 📱 **API-only** | — (mobile / other clients) | 🟣 Fly.io | ⛔ not wired |
+| Mode | UI | API |
+|------|----|-----|
+| 🔀 **`split`** | 🟠 Cloudflare Pages | 🟣 Fly.io |
+| 🪰 **`fly`** | Optional static on Fly | 🟣 Fly.io |
+| 📱 **API-only** | — (mobile / other clients) | 🟣 Fly.io |
 
 | Database | When |
 |----------|------|
@@ -90,7 +91,7 @@ Want another provider? Open an issue — preference is **excellent DX** or **clo
 | 🟣 **`fly_postgres`** | Classic Serverpod on Fly |
 | 🟢 **`neon`** | Serverless PG |
 
-Serverpod **Insights** is part of full Serverpod deployments (and of [Serverpod Cloud](https://serverpod.dev/cloud)); podfly does not deploy or configure Insights yet.
+Insights and full managed Serverpod ops: **[Serverpod Cloud](https://serverpod.dev/cloud)** (not podfly).
 
 ---
 
