@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- Detect **mobile / API-only** Serverpod projects (`android`/`ios` without real web) and set `web.enabled: false` so deploy only runs Fly API
+- Sample fixture: `examples/mobile_api_only`
+- Discover `*_flutter` packages even without a `web/` directory
+
 ## 0.1.0
 
 ### Features

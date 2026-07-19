@@ -1,0 +1,3 @@
+name: mobile_api_client
+environment:
+  sdk: ^3.5.0

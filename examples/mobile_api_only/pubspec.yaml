@@ -1,0 +1,8 @@
+name: _
+publish_to: none
+environment:
+  sdk: ^3.5.0
+workspace:
+  - mobile_api_server
+  - mobile_api_flutter
+  - mobile_api_client

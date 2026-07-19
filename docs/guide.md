@@ -105,6 +105,31 @@ my_app/
 
 If `server` / `flutter` are omitted from config, podfly scans for `*_server` and `*_flutter` directories.
 
+## Mobile vs web (client surface)
+
+podfly inspects the Flutter package at init:
+
+| Layout | Result |
+|--------|--------|
+| `android/` / `ios/` **without** `web/` | **API only** (`web.enabled: false`, `mode: fly`) |
+| Custom production `web/` (bootstrap, `_headers`, etc.) | **API + web** |
+| Stock `web/` scaffold + mobile dirs | Tends toward **API only** (warning; force with `web.enabled: true`) |
+| No Flutter package | **API only** |
+
+```yaml
+web:
+  enabled: false   # mobile clients hit the API; no Pages / no flutter build web
+```
+
+Override anytime:
+
+```bash
+podfly deploy --api          # force API only
+podfly deploy --web          # force web half (even if enabled: false)
+```
+
+Sample fixture: [`examples/mobile_api_only`](../examples/mobile_api_only).
+
 ## Modes
 
 ### `split` (recommended for most web apps)

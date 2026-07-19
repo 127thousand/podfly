@@ -79,6 +79,7 @@ database:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `enabled` | bool | `true` (inferred at init) | When `false`, skip Flutter web build and Pages — API only (mobile) |
 | `server_url_define` | string | `SERVER_URL` | `--dart-define` name for API URL |
 | `api_url` | string | `https://<fly.app>.fly.dev/` | Trailing slash normalized |
 | `patch_bootstrap` | bool | `true` | Install podfly Flutter bootstrap if missing |

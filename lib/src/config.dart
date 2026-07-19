@@ -149,6 +149,7 @@ class DatabaseConfig {
 
 class WebConfig {
   WebConfig({
+    this.enabled = true,
     this.serverUrlDefine = 'SERVER_URL',
     required this.apiUrl,
     this.patchBootstrap = true,
@@ -157,6 +158,8 @@ class WebConfig {
     this.staticDir,
   });
 
+  /// When false, podfly deploys API only (mobile / non-web clients).
+  final bool enabled;
   final String serverUrlDefine;
   final String apiUrl;
   final bool patchBootstrap;
@@ -170,6 +173,7 @@ class WebConfig {
   }
 
   Map<String, Object?> toMap() => {
+        'enabled': enabled,
         'server_url_define': serverUrlDefine,
         'api_url': apiUrlNormalized,
         'patch_bootstrap': patchBootstrap,
@@ -308,6 +312,7 @@ class PodflyConfig {
     }
     buf.writeln();
     buf.writeln('web:');
+    buf.writeln('  enabled: ${web.enabled}');
     buf.writeln('  server_url_define: ${web.serverUrlDefine}');
     buf.writeln('  api_url: ${web.apiUrlNormalized}');
     buf.writeln('  patch_bootstrap: ${web.patchBootstrap}');
@@ -433,6 +438,7 @@ class PodflyConfig {
     final apiUrl = webMap['api_url']?.toString() ??
         'https://${fly.app}.fly.dev/';
     final web = WebConfig(
+      enabled: webMap['enabled'] != false,
       serverUrlDefine:
           webMap['server_url_define']?.toString() ?? 'SERVER_URL',
       apiUrl: apiUrl,

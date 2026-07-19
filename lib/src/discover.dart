@@ -19,10 +19,13 @@ class DiscoveredProject {
 }
 
 /// Find Serverpod monorepo packages under [root].
+///
+/// Flutter packages may be **mobile-only** (no `web/`); still discover them.
 Future<DiscoveredProject> discover(String root) async {
   final abs = p.normalize(Directory(root).absolute.path);
   String? server;
   String? flutter;
+  String? flutterWithWeb;
   String? client;
 
   await for (final ent in Directory(abs).list(followLinks: false)) {
@@ -31,44 +34,41 @@ Future<DiscoveredProject> discover(String root) async {
     final pubspec = File(p.join(ent.path, 'pubspec.yaml'));
     if (!await pubspec.exists()) continue;
     final text = await pubspec.readAsString();
+    final rel = p.relative(ent.path, from: abs);
 
-    if (name.endsWith('_server') || text.contains('serverpod:')) {
-      if (text.contains('serverpod:') &&
-          (name.endsWith('_server') ||
-              await File(p.join(ent.path, 'Dockerfile')).exists() ||
-              await Directory(p.join(ent.path, 'config')).exists())) {
-        server ??= p.relative(ent.path, from: abs);
+    final isServerpodServer = text.contains('serverpod:') &&
+        (name.endsWith('_server') ||
+            await File(p.join(ent.path, 'Dockerfile')).exists() ||
+            await Directory(p.join(ent.path, 'config')).exists());
+    if (isServerpodServer) {
+      server ??= rel;
+    }
+
+    final isFlutterPkg = name.endsWith('_flutter') ||
+        (text.contains('flutter:') && text.contains('sdk: flutter'));
+    if (isFlutterPkg) {
+      final hasWeb = await Directory(p.join(ent.path, 'web')).exists();
+      if (name.endsWith('_flutter')) {
+        flutter ??= rel;
+        if (hasWeb) flutterWithWeb ??= rel;
+      } else if (flutter == null) {
+        flutter = rel;
+        if (hasWeb) flutterWithWeb ??= rel;
       }
     }
-    if (name.endsWith('_flutter') ||
-        (text.contains('flutter:') &&
-            text.contains('sdk: flutter') &&
-            await Directory(p.join(ent.path, 'web')).exists())) {
-      // Prefer *_flutter naming
-      if (name.endsWith('_flutter') || flutter == null) {
-        if (await Directory(p.join(ent.path, 'web')).exists()) {
-          flutter = p.relative(ent.path, from: abs);
-        }
-      }
-    }
+
     if (name.endsWith('_client')) {
-      client = p.relative(ent.path, from: abs);
+      client = rel;
     }
   }
 
-  // Workspace-style root pubspec
-  final rootPub = File(p.join(abs, 'pubspec.yaml'));
-  if (await rootPub.exists()) {
-    final t = await rootPub.readAsString();
-    if (t.contains('workspace:')) {
-      // already scanned children
-    }
-  }
+  // Prefer a Flutter package that includes web/ when several exist.
+  final chosenFlutter = flutterWithWeb ?? flutter;
 
   return DiscoveredProject(
     root: abs,
     server: server,
-    flutter: flutter,
+    flutter: chosenFlutter,
     client: client,
   );
 }

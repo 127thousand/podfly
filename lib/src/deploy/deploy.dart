@@ -35,16 +35,26 @@ class Deployer {
   Future<void> run(DeployOptions opts) async {
     await DatabaseEnsure(config: config, runner: runner, log: log).run();
 
-    if (opts.doWeb) {
+    // web.enabled: false → API-only (mobile clients, etc.)
+    final doWeb = opts.doWeb && config.web.enabled;
+    final doApi = opts.doApi;
+    if (opts.doWeb && !config.web.enabled) {
+      log.detail('web.enabled: false — skipping Flutter web build/deploy');
+    }
+
+    if (doWeb) {
       await WebBuilder(config: config, runner: runner, log: log).build();
     }
 
-    if (config.mode == DeployMode.split) {
-      if (opts.doWeb) await _deployPages();
-      if (opts.doApi) await _deployFly();
+    if (config.mode == DeployMode.split && doWeb) {
+      await _deployPages();
+      if (doApi) await _deployFly();
+    } else if (config.mode == DeployMode.split && !doWeb) {
+      // Split mode without web: still deploy API only.
+      if (doApi) await _deployFly();
     } else {
-      if (opts.doWeb) await _copyWebIntoServer();
-      if (opts.doApi || opts.doWeb) await _deployFly();
+      if (doWeb) await _copyWebIntoServer();
+      if (doApi || doWeb) await _deployFly();
     }
 
     if (opts.smoke && !runner.dryRun) {
@@ -53,11 +63,15 @@ class Deployer {
     }
 
     log.step('Done');
-    if (config.mode == DeployMode.split) {
+    if (doWeb &&
+        config.mode == DeployMode.split &&
+        config.cloudflare != null) {
       log.detail(
           'UI:  https://${config.cloudflare!.project}.pages.dev');
     }
-    log.detail('API: ${config.web.apiUrlNormalized}');
+    if (doApi) {
+      log.detail('API: ${config.web.apiUrlNormalized}');
+    }
   }
 
   Future<String> _flyBin() async {

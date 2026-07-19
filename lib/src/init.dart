@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import 'config.dart';
 import 'database/detect.dart';
+import 'detect_surface.dart';
 import 'discover.dart';
 import 'log.dart';
 import 'tty.dart';
@@ -40,13 +41,29 @@ class Initer {
     final DatabaseProvider dbProvider;
     final String smokePath;
     final String smokeMethod;
+    late final bool webEnabled;
 
     if (yes || !isTty) {
       name = nameDefault;
-      mode = DeployMode.split;
       server = discovered.server ?? '${nameDefault}_server';
       flutter = discovered.flutter ?? '${nameDefault}_flutter';
       region = 'iad';
+
+      final surface = await detectClientSurface(
+        serverPath: p.join(root, server),
+        flutterPath: p.join(root, flutter),
+      );
+      log.detail('Client surface: ${surface.surface.name}');
+      for (final r in surface.reasons.take(5)) {
+        log.detail('  · $r');
+      }
+      for (final w in surface.warnings.take(3)) {
+        log.warn(w);
+      }
+      webEnabled = surface.deployWeb;
+      // API-only apps don't need Cloudflare Pages.
+      mode = webEnabled ? DeployMode.split : DeployMode.fly;
+
       final detection = await detectDatabaseNeed(
         p.join(root, server),
         flutterPath: p.join(root, flutter),
@@ -66,14 +83,6 @@ class Initer {
       log.detail('using defaults (--yes / non-TTY)');
     } else {
       name = await prompt('App name', defaultValue: nameDefault);
-      final modeIdx = await choose(
-        'Deploy mode',
-        [
-          'split — Cloudflare Pages (UI) + Fly (API)',
-          'fly — everything on Fly',
-        ],
-      );
-      mode = modeIdx == 1 ? DeployMode.fly : DeployMode.split;
       server = await prompt(
         'Server package path',
         defaultValue: discovered.server ?? '${name}_server',
@@ -82,6 +91,48 @@ class Initer {
         'Flutter package path',
         defaultValue: discovered.flutter ?? '${name}_flutter',
       );
+
+      final surface = await detectClientSurface(
+        serverPath: p.join(root, server),
+        flutterPath: p.join(root, flutter),
+      );
+      log.detail('Client surface: ${surface.surface.name}');
+      for (final r in surface.reasons.take(6)) {
+        log.detail('  · $r');
+      }
+      for (final w in surface.warnings.take(4)) {
+        log.warn(w);
+      }
+
+      final defaultWeb = surface.deployWeb;
+      final webIdx = await choose(
+        surface.deployApiOnly
+            ? 'What should podfly deploy? (looks like mobile/API-only)'
+            : 'What should podfly deploy?',
+        [
+          'API + Flutter web (Pages and/or Fly static)',
+          'API only (mobile or other non-web clients)',
+        ],
+        defaultIndex: defaultWeb ? 0 : 1,
+      );
+      webEnabled = webIdx == 0;
+
+      final modeIdx = await choose(
+        'API hosting mode',
+        webEnabled
+            ? [
+                'split — Cloudflare Pages (UI) + Fly (API)',
+                'fly — API + optional static web on Fly',
+              ]
+            : [
+                'fly — API on Fly (recommended for mobile)',
+                'fly — API on Fly',
+              ],
+        defaultIndex: 0,
+      );
+      // When web disabled, always fly mode (no Pages).
+      mode = (!webEnabled || modeIdx == 1) ? DeployMode.fly : DeployMode.split;
+
       region = await prompt('Fly region', defaultValue: 'iad');
 
       final detection = await detectDatabaseNeed(
@@ -175,18 +226,24 @@ class Initer {
       server: server,
       flutter: flutter,
       fly: FlyConfig(app: flyApp, region: region),
-      cloudflare: mode == DeployMode.split
+      cloudflare: mode == DeployMode.split && webEnabled
           ? CloudflareConfig(project: name)
           : null,
       database: database,
-      web: WebConfig(apiUrl: apiUrl),
+      web: WebConfig(
+        enabled: webEnabled,
+        apiUrl: apiUrl,
+        // No need to patch bootstrap/headers when not deploying web.
+        patchBootstrap: webEnabled,
+        writeHeaders: webEnabled,
+      ),
       smoke: SmokeConfig(
         api: SmokeEndpoint(
           method: smokeMethod,
           path: smokePath,
           body: smokeMethod.toUpperCase() == 'POST' ? '{}' : null,
         ),
-        web: SmokeEndpoint(path: '/'),
+        web: webEnabled ? SmokeEndpoint(path: '/') : null,
       ),
     );
 

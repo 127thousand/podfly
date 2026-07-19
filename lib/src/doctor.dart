@@ -40,7 +40,8 @@ class Doctor {
     }
 
     if (scope == DoctorScope.configAware && config != null) {
-      if (config.mode == DeployMode.split) {
+      // Wrangler only when we actually deploy Flutter web to Pages.
+      if (config.mode == DeployMode.split && config.web.enabled) {
         ok = await _needWrangler() && ok;
       }
       if (config.database.provider == DatabaseProvider.neon &&

@@ -270,9 +270,23 @@ Future<int> _deploy(ArgResults g) async {
   }
 
   var doApi = true;
-  var doWeb = true;
+  var doWeb = config.web.enabled;
+  // Explicit flags override config.
   if (_flag(g, 'api') && !_flag(g, 'web')) doWeb = false;
-  if (_flag(g, 'web') && !_flag(g, 'api')) doApi = false;
+  if (_flag(g, 'web') && !_flag(g, 'api')) {
+    doApi = false;
+    doWeb = true; // force web even if web.enabled was false
+  }
+  if (_flag(g, 'web') && _flag(g, 'api')) {
+    doWeb = true;
+    doApi = true;
+  }
+
+  if (!doWeb) {
+    log.detail(
+        'Deploy targets: API only'
+        '${config.web.enabled ? '' : ' (web.enabled: false)'}');
+  }
 
   await Deployer(config: config, runner: runner, log: log).run(
     DeployOptions(
