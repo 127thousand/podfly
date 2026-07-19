@@ -8,8 +8,9 @@ Location: project root (walk-up from cwd also finds it).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `mode` | `split` \| `fly` | `split` | Hosting topology |
-| `name` | string | directory name | Default for Fly app + Pages project names |
+| `host` | `fly` \| `railway` \| `render` \| `cloud_run` \| `aws` \| `azure` \| `digitalocean` | `fly` | **API cloud** — only `fly` deploys today; others are wizard/doctor roadmap |
+| `mode` | `split` \| `fly` | `split` | Layout: Pages UI + API host vs all-on-API-host (Fly) |
+| `name` | string | directory name | Default for app + Pages project names |
 | `server` | string | discovered `*_server` | Path relative to root |
 | `flutter` | string | discovered `*_flutter` | Path relative to root |
 

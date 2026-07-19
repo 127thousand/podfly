@@ -35,6 +35,7 @@ class Initer {
 
     final nameDefault = p.basename(root);
     final String name;
+    late final AppHost host;
     final DeployMode mode;
     final String server;
     final String flutter;
@@ -44,10 +45,25 @@ class Initer {
     final String smokeMethod;
     late final bool webEnabled;
 
+    // Shared host menu (✅ = deploy implemented today)
+    const hostOptions = <AppHost>[
+      AppHost.fly,
+      AppHost.railway,
+      AppHost.render,
+      AppHost.cloudRun,
+      AppHost.aws,
+      AppHost.azure,
+      AppHost.digitalOcean,
+    ];
+    String hostMenuLabel(AppHost h) =>
+        '${h.isImplemented ? '✅' : '🗺️'} ${h.label}'
+        '${h.isImplemented ? '' : ' (planned — doctor only for now)'}';
+
     if (yes || !isTty) {
       name = nameDefault;
       server = discovered.server ?? '${nameDefault}_server';
       flutter = discovered.flutter ?? '${nameDefault}_flutter';
+      host = AppHost.fly; // safe default for automation
       region = 'iad';
 
       final surface = await detectClientSurface(
@@ -81,7 +97,7 @@ class Initer {
           : DatabaseProvider.none;
       smokePath = '/';
       smokeMethod = 'GET';
-      log.detail('using defaults (--yes / non-TTY)');
+      log.detail('using defaults (--yes / non-TTY); host: ${host.yamlName}');
     } else {
       name = await prompt('App name', defaultValue: nameDefault);
       server = await prompt(
@@ -92,6 +108,18 @@ class Initer {
         'Flutter package path',
         defaultValue: discovered.flutter ?? '${name}_flutter',
       );
+
+      final hostIdx = await choose(
+        'Where should the Serverpod API run?',
+        hostOptions.map(hostMenuLabel).toList(),
+        defaultIndex: 0,
+      );
+      host = hostOptions[hostIdx];
+      if (!host.isImplemented) {
+        log.warn(
+            '${host.label} is planned — you can save config and install its CLI, '
+            'but deploy only works for Fly today.');
+      }
 
       final surface = await detectClientSurface(
         serverPath: p.join(root, server),
@@ -111,30 +139,34 @@ class Initer {
             ? 'What should podfly deploy? (looks like mobile/API-only)'
             : 'What should podfly deploy?',
         [
-          'API + Flutter web (Pages and/or Fly static)',
+          'API + Flutter web (static UI host)',
           'API only (mobile or other non-web clients)',
         ],
         defaultIndex: defaultWeb ? 0 : 1,
       );
       webEnabled = webIdx == 0;
 
-      final modeIdx = await choose(
-        'API hosting mode',
-        webEnabled
-            ? [
-                'split — Cloudflare Pages (UI) + Fly (API)',
-                'fly — API + optional static web on Fly',
-              ]
-            : [
-                'fly — API on Fly (recommended for mobile)',
-                'fly — API on Fly',
-              ],
-        defaultIndex: 0,
-      );
-      // When web disabled, always fly mode (no Pages).
-      mode = (!webEnabled || modeIdx == 1) ? DeployMode.fly : DeployMode.split;
+      // Layout mode: only meaningful for Fly (Pages split vs all-on-Fly).
+      if (host == AppHost.fly && webEnabled) {
+        final modeIdx = await choose(
+          'How should web + API be hosted?',
+          [
+            'split — Cloudflare Pages (UI) + Fly (API)',
+            'fly — everything on Fly',
+          ],
+          defaultIndex: 0,
+        );
+        mode = modeIdx == 1 ? DeployMode.fly : DeployMode.split;
+      } else if (host == AppHost.fly) {
+        mode = DeployMode.fly;
+      } else {
+        // Non-Fly: treat as "API on host"; web UI still may use Pages later.
+        mode = webEnabled ? DeployMode.split : DeployMode.fly;
+      }
 
-      region = await prompt('Fly region', defaultValue: 'iad');
+      region = host == AppHost.fly
+          ? await prompt('Fly region', defaultValue: 'iad')
+          : 'iad';
 
       final detection = await detectDatabaseNeed(
         p.join(root, server),
@@ -201,14 +233,14 @@ class Initer {
         );
       case DatabaseProvider.neon:
         var provision = false;
-        String? host;
+        String? neonHost;
         if (isTty && !yes) {
           provision = await confirm('Provision Neon project with neonctl?',
               defaultYes: false);
           if (!provision) {
-            host = await prompt('Neon host (or leave blank)',
+            neonHost = await prompt('Neon host (or leave blank)',
                 defaultValue: '');
-            if (host.isEmpty) host = null;
+            if (neonHost.isEmpty) neonHost = null;
           }
         }
         database = DatabaseConfig(
@@ -216,13 +248,14 @@ class Initer {
           neon: NeonConfig(
             provision: provision,
             projectName: name,
-            host: host,
+            host: neonHost,
           ),
         );
     }
 
     final config = PodflyConfig(
       root: root,
+      host: host,
       mode: mode,
       name: name,
       server: server,

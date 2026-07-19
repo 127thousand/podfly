@@ -81,8 +81,8 @@ Ensure `~/.pub-cache/bin` is on your `PATH`.
 | Tool | When |
 |------|------|
 | [Flutter](https://flutter.dev) | Always |
-| [flyctl](https://fly.io/docs/hands-on/install-flyctl/) | Current default host |
-| [wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/) | Split UI (Pages) |
+| Host CLI (`fly`, `railway`, `gcloud`, …) | **Only for the `host:` you chose** (wizard asks) |
+| [wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/) | Flutter web on Cloudflare Pages (`mode: split`) |
 | [neonctl](https://neon.tech/docs/reference/neon-cli) | `database.neon.provision: true` |
 
 `podfly doctor` checks these and can open login flows on a TTY.

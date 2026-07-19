@@ -74,6 +74,17 @@ ArgParser _buildParser() {
     ..addFlag('no-login', negatable: false, help: 'No browser logins')
     ..addFlag('init', negatable: false, help: 'Force init wizard')
     ..addOption('mode', allowed: ['split', 'fly'])
+    ..addOption('host',
+        allowed: [
+          'fly',
+          'railway',
+          'render',
+          'cloud_run',
+          'aws',
+          'azure',
+          'digitalocean',
+        ],
+        help: 'API cloud host (default: fly; only fly deploys today)')
     ..addOption('config', help: 'Path to podfly.yaml')
     ..addOption('root', help: 'Project root');
 
@@ -106,11 +117,14 @@ Deploy options:
   --yes / -y    Non-interactive init defaults
   --no-login    Do not open browser logins (CI: use FLY_API_TOKEN, etc.)
   --init        Force wizard; confirms before overwriting podfly.yaml
-  --mode        split | fly   (split = Pages UI + Fly API)
+  --host        API cloud: fly | railway | render | cloud_run | aws | azure | digitalocean
+                (wizard asks this; only fly deploys today — others check CLI only)
+  --mode        split | fly   (split = Pages UI + API host)
   --root        Project root (default: cwd)
   --config      Path to podfly.yaml
 
-Supported today: Fly (API), Cloudflare Pages (UI), Neon / Fly PG / SQLite / none.
+Doctor only requires the CLI for the chosen host (not always Fly).
+Supported deploy today: Fly (API), Cloudflare Pages (UI), Neon / Fly PG / SQLite / none.
 Dockerfile: prefer Serverpod's *_server/Dockerfile (podfly does not invent hosts).
 
 Examples:
@@ -257,18 +271,24 @@ Future<int> _deploy(ArgResults g) async {
     log.detail('config: $existingPath');
   }
 
+  final hostOpt = _opt(g, 'host');
   final modeOpt = _opt(g, 'mode');
-  if (modeOpt != null) {
-    final flyMode = modeOpt == 'fly';
+  if (hostOpt != null || modeOpt != null) {
+    final host =
+        hostOpt != null ? AppHostX.parse(hostOpt) : config.host;
+    final flyMode = modeOpt == 'fly' ||
+        (modeOpt == null && config.mode == DeployMode.fly);
+    final split = modeOpt == 'split' ||
+        (modeOpt == null && config.mode == DeployMode.split);
     config = PodflyConfig(
       root: config.root,
-      mode: flyMode ? DeployMode.fly : DeployMode.split,
+      host: host,
+      mode: flyMode && !split ? DeployMode.fly : DeployMode.split,
       name: config.name,
       server: config.server,
       flutter: config.flutter,
       fly: config.fly,
-      // Clear Cloudflare block in fly mode so config stays consistent.
-      cloudflare: flyMode
+      cloudflare: (flyMode && modeOpt == 'fly')
           ? null
           : (config.cloudflare ?? CloudflareConfig(project: config.name)),
       database: config.database,

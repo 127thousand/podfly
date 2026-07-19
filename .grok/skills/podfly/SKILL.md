@@ -25,8 +25,11 @@ It is **not** a PaaS and does **not** replace Serverpod.
 
 ## Prerequisites (once)
 
-- `flutter`, `fly`/`flyctl` on PATH; logged in (`fly auth login` or `FLY_API_TOKEN`)
-- `wrangler` + login if deploying Flutter web to Pages
+- `flutter` on PATH
+- **Only the CLI for the chosen API host** (wizard sets `host:` in podfly.yaml):
+  - `fly` / `flyctl` when `host: fly` (only fully implemented deploy today)
+  - `railway` / `render` / `gcloud` / `aws` / `az` / `doctl` when those hosts are selected (doctor checks; deploy not implemented yet)
+- `wrangler` + login only if Flutter web → Cloudflare Pages
 - `neonctl` if `database.neon.provision: true`
 
 Install podfly:
@@ -75,16 +78,19 @@ podfly deploy --yes --no-login --smoke
 
 1. No Serverpod project → `serverpod create` first (never fake a random Dockerfile).
 2. Plan only → `--dry-run --no-login`.
-3. Flutter has android/ios and no real web product → `--api` or `web.enabled: false`.
-4. Flutter web + API → default split (Pages + Fly) after init.
-5. Stateless → `database.provider: none`.
-6. Need Postgres + sleeping API → Neon; on-Fly private PG → `fly_postgres`.
+3. Wizard / config chooses **API cloud** (`host: fly|railway|render|…`) — only install **that** host’s CLI.
+4. Flutter has android/ios and no real web product → `--api` or `web.enabled: false`.
+5. Flutter web + API on Fly → `mode: split` (Pages + Fly) after init.
+6. Stateless → `database.provider: none`.
+7. Need Postgres + sleeping API → Neon; on-Fly private PG → `fly_postgres`.
+8. Non-Fly hosts: doctor checks CLI; **deploy only implemented for Fly** until roadmap lands.
 
 ## Do not
 
 - Invent Python/Node Dockerfiles for Serverpod
 - Use `flutter build web --output` outside the package as the sole artifact
-- Assume Railway/Render/AWS work in podfly yet (roadmap only — use Fly today)
+- Force Fly CLI when user selected Render/Railway/etc.
+- Claim Railway/Render/AWS deploy works in podfly yet (roadmap — deploy is Fly today)
 - Force Postgres just because auth packages are scaffolded
 - Skip doctor failures without fixing auth/tools
 

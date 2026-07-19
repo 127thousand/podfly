@@ -38,6 +38,14 @@ class Deployer {
   String? resolvedFlyApp;
 
   Future<void> run(DeployOptions opts) async {
+    if (!config.host.isImplemented) {
+      throw StateError(
+        '${config.host.label} is not implemented in podfly yet '
+        '(roadmap). Set host: fly in podfly.yaml, or contribute a provider. '
+        'See README provider table.',
+      );
+    }
+
     await _ensureServerDockerfile();
     await _patchProductionPublicHosts();
     await DatabaseEnsure(config: config, runner: runner, log: log).run();
