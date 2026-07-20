@@ -19,6 +19,9 @@ class ProductionYamlPatcher {
   /// Written after Railway Postgres plugin vars are readable.
   static const railwayPgSidecarName = '.podfly_railway_pg.json';
 
+  /// Written after DigitalOcean Managed Postgres connection is fetched.
+  static const digitalOceanPgSidecarName = '.podfly_do_pg.json';
+
   File get file =>
       File(p.join(config.serverPath, 'config', 'production.yaml'));
 
@@ -116,6 +119,32 @@ class ProductionYamlPatcher {
           });
           log.warn(
               'railway_postgres: no $railwayPgSidecarName yet — host placeholder written');
+        }
+      case DatabaseProvider.digitalOceanPostgres:
+        final sidecar = await _readSidecarMap(digitalOceanPgSidecarName);
+        if (sidecar != null) {
+          text = _upsertDatabaseBlock(text, {
+            'host': sidecar['host'] ?? 'localhost',
+            'port': sidecar['port'] ?? '25060',
+            'name': sidecar['name'] ?? 'defaultdb',
+            'user': sidecar['user'] ?? 'doadmin',
+            'requireSsl': sidecar['requireSsl'] ?? 'true',
+          });
+          final password = sidecar['password'];
+          if (password != null && password.isNotEmpty) {
+            await _patchPasswordsYaml(password);
+          }
+        } else {
+          text = _upsertDatabaseBlock(text, {
+            'host': 'YOUR_DO_DB_HOST',
+            'port': '25060',
+            'name': 'defaultdb',
+            'user': 'doadmin',
+            'requireSsl': 'true',
+          });
+          log.warn(
+            'digitalocean_postgres: no $digitalOceanPgSidecarName yet — placeholder written',
+          );
         }
     }
 

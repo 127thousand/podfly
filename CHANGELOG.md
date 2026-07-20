@@ -9,9 +9,17 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`host: digitalocean`** (alias `do`): App Platform deploy via `doctl` + DOCR
+  - Local Docker build/push (linux/amd64), app spec upsert, API + optional separate web app
+  - **`digitalocean_postgres`**: Managed Postgres DBaaS, public host + SSL, app firewall trust
+  - Starter DOCR: one repository with tags `api` / `web`
+
 ### Changed
 
 - **`mode: monolith`** replaces `mode: fly` for “UI with API host / no Pages” layout. `mode: fly` remains a legacy alias.
+- Native web hosts (Railway / DO): deploy **API before web** so Flutter can bake live `SERVER_URL`
 
 ---
 

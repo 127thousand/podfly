@@ -303,8 +303,14 @@ Future<int> _deploy(ArgResults g) async {
           ? (config.railway ??
               RailwayConfig(project: config.name, service: 'api'))
           : config.railway,
+      digitalOcean: host == AppHost.digitalOcean
+          ? (config.digitalOcean ??
+              DigitalOceanConfig(app: config.name.replaceAll('_', '-')))
+          : config.digitalOcean,
       // Explicit monolith CLI: drop Pages block; otherwise keep / default cloudflare for split
-      cloudflare: monolith && modeOpt != null
+      cloudflare: (monolith && modeOpt != null) ||
+              host == AppHost.digitalOcean ||
+              host == AppHost.railway
           ? null
           : (config.cloudflare ??
               (monolith

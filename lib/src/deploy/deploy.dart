@@ -99,6 +99,13 @@ class Deployer {
 
     await DatabaseEnsure(config: cfg, runner: runner, log: log).run();
 
+    // DB ensure may write cluster_id / credentials into podfly.yaml + sidecars.
+    if (await File(cfg.configPath).exists()) {
+      try {
+        cfg = await PodflyConfig.load(cfg.configPath);
+      } catch (_) {/* keep in-memory */}
+    }
+
     final doWeb = opts.doWeb && cfg.web.enabled;
     final doApi = opts.doApi;
     if (opts.doWeb && !cfg.web.enabled) {
@@ -117,14 +124,41 @@ class Deployer {
       ),
     );
 
+    // When the host deploys web natively (Railway / DO), ship API first so
+    // Flutter can bake the live API URL into SERVER_URL.
+    final nativeWeb = adapter.deploysWebNatively;
+
+    if (doApi && nativeWeb) {
+      lastApiResult = await adapter.deployApi(buildCtx);
+      final live = lastApiResult?.displayUrl ?? lastApiResult?.publicHost;
+      if (live != null) {
+        final url = live.startsWith('http')
+            ? (live.endsWith('/') ? live : '$live/')
+            : 'https://$live/';
+        cfg = _withApiUrl(cfg, url);
+      }
+    }
+
     if (doWeb) {
       await WebBuilder(config: cfg, runner: runner, log: log).build();
     }
 
-    // Separate web service (Railway) or Pages / all-in-one copy — not siamese.
+    // Separate web service (Railway / DO) or Pages / all-in-one copy — not siamese.
     if (doWeb) {
-      if (adapter.deploysWebNatively) {
-        lastWebResult = await adapter.deployWeb(buildCtx);
+      if (nativeWeb) {
+        lastWebResult = await adapter.deployWeb(
+          DeployContext(
+            config: cfg,
+            runner: runner,
+            log: log,
+            patchPublicHosts: (host) => patchProductionPublicHosts(
+              config: cfg,
+              runner: runner,
+              log: log,
+              host: host,
+            ),
+          ),
+        );
       } else if (cfg.mode == DeployMode.split) {
         await _deployPages();
       } else if (adapter.supportsAllInOneWeb) {
@@ -133,7 +167,7 @@ class Deployer {
         log.warn('no web deploy path for ${adapter.label}');
       }
     }
-    if (doApi) {
+    if (doApi && !nativeWeb) {
       lastApiResult = await adapter.deployApi(buildCtx);
     }
 
@@ -171,6 +205,7 @@ class Deployer {
       flutter: c.flutter,
       fly: c.fly,
       railway: c.railway,
+      digitalOcean: c.digitalOcean,
       cloudflare: c.cloudflare,
       database: c.database,
       web: WebConfig(
@@ -195,13 +230,10 @@ class Deployer {
     }
     final host = lastApiResult?.publicHost;
     if (host != null &&
-        (smokeCfg.web.apiUrlNormalized.contains('REPLACE') ||
-            smokeCfg.web.apiUrlNormalized.contains('fly.dev'))) {
-      // Prefer live Railway API host for smoke after railway deploy.
-      if (fallback.host == AppHost.railway ||
-          smokeCfg.web.apiUrlNormalized.contains('REPLACE')) {
-        smokeCfg = _withApiUrl(smokeCfg, 'https://$host/');
-      }
+        (fallback.host == AppHost.railway ||
+            fallback.host == AppHost.digitalOcean ||
+            smokeCfg.web.apiUrlNormalized.contains('REPLACE'))) {
+      smokeCfg = _withApiUrl(smokeCfg, 'https://$host/');
     }
     return smokeCfg;
   }

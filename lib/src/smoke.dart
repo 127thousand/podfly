@@ -41,6 +41,12 @@ class SmokeRunner {
   String? _webBase() {
     final rw = config.railway?.webPublicUrl;
     if (rw != null) return rw;
+    final doWeb = config.digitalOcean?.webPublicHost;
+    if (doWeb != null && doWeb.isNotEmpty) {
+      return doWeb.startsWith('http')
+          ? (doWeb.endsWith('/') ? doWeb : '$doWeb/')
+          : 'https://$doWeb/';
+    }
     if (config.mode == DeployMode.split && config.cloudflare != null) {
       return 'https://${config.cloudflare!.project}.pages.dev/';
     }

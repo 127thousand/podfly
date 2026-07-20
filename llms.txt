@@ -50,12 +50,13 @@ podfly smoke
 
 | Layer | Providers |
 |-------|-----------|
-| API **deploy** | Fly.io (`host: fly`), Railway (`host: railway`) |
+| API **deploy** | Fly.io (`host: fly`), Railway (`host: railway`), DigitalOcean (`host: digitalocean`) |
 | API **host choice** | Wizard: fly, railway, render, cloud_run, aws, azure, digitalocean |
 | UI | Cloudflare Pages (`wrangler`) when `mode: split` + `web.enabled`; Railway static nginx when `host: railway` |
-| DB | none, sqlite (+ volume, Fly), fly_postgres, railway_postgres, neon |
+| DB | none, sqlite (+ volume, Fly), fly_postgres, railway_postgres, digitalocean_postgres, neon |
+| UI (native) | Railway static nginx; DigitalOcean separate web app (nginx image) |
 
-Planned deploys: Render, Cloud Run, AWS, Azure, DigitalOcean (+ matching Postgres).
+Planned deploys: Render, Cloud Run, AWS, Azure.
 
 ## Hard rules for agents
 

@@ -36,6 +36,8 @@ class DatabaseEnsure {
         await _neon();
       case DatabaseProvider.railwayPostgres:
         await _railwayPostgres();
+      case DatabaseProvider.digitalOceanPostgres:
+        await _digitalOceanPostgres();
     }
 
     if (!runner.dryRun) {
@@ -284,6 +286,217 @@ class DatabaseEnsure {
     final sidecar = File(p.join(config.serverPath, 'config', filename));
     await sidecar.parent.create(recursive: true);
     await sidecar.writeAsString(jsonEncode(creds.toSidecarMap()));
+  }
+
+  Future<void> _digitalOceanPostgres() async {
+    ensureHostsRegistered();
+    if (config.host != AppHost.digitalOcean) {
+      throw StateError(
+        'database.provider digitalocean_postgres requires host: digitalocean',
+      );
+    }
+    final pg = config.database.digitalOceanPostgres ??
+        DigitalOceanPostgresConfig(
+          clusterName: '${config.name.replaceAll('_', '-')}-db',
+        );
+    final doctl = await runner.resolve('doctl');
+    if (doctl == null) throw StateError('doctl required for digitalocean_postgres');
+
+    final name = pg.clusterName ?? '${config.name.replaceAll('_', '-')}-db';
+    if (runner.dryRun) {
+      log.dry(
+        '$doctl databases create $name --engine pg --region ${pg.region} …',
+      );
+      return;
+    }
+
+    var clusterId = pg.clusterId;
+    // Lookup existing by name
+    if (clusterId == null || clusterId.isEmpty) {
+      final list = await runner.runCapture(
+        doctl,
+        ['databases', 'list', '-o', 'json'],
+        allowDryRun: false,
+      );
+      clusterId = _findDoDbId(list.stdout, name);
+    }
+
+    if (clusterId == null && pg.create) {
+      log.detail('creating DigitalOcean Postgres $name (${pg.region})');
+      // Prefer size; fall back if slug invalid
+      var create = await runner.runCapture(
+        doctl,
+        [
+          'databases',
+          'create',
+          name,
+          '--engine',
+          'pg',
+          '--version',
+          pg.engineVersion,
+          '--region',
+          pg.region,
+          '--size',
+          pg.size,
+          '--num-nodes',
+          '1',
+          '-o',
+          'json',
+        ],
+        allowDryRun: false,
+      );
+      if (!create.ok) {
+        // try alternate size slug used by some accounts
+        log.warn('create with ${pg.size} failed — trying db-s-1vcpu-1gb / db-amd-1vcpu-1gb');
+        for (final size in ['db-s-1vcpu-1gb', 'db-amd-1vcpu-1gb', 'db-intel-1vcpu-1gb']) {
+          if (size == pg.size) continue;
+          create = await runner.runCapture(
+            doctl,
+            [
+              'databases',
+              'create',
+              name,
+              '--engine',
+              'pg',
+              '--version',
+              pg.engineVersion,
+              '--region',
+              pg.region,
+              '--size',
+              size,
+              '--num-nodes',
+              '1',
+              '-o',
+              'json',
+            ],
+            allowDryRun: false,
+          );
+          if (create.ok) break;
+        }
+      }
+      if (!create.ok) {
+        throw StateError(
+          'doctl databases create failed: '
+          '${create.stderr.isNotEmpty ? create.stderr : create.stdout}',
+        );
+      }
+      clusterId = _jsonField(create.stdout, 'id');
+      log.ok('created DigitalOcean Postgres $name');
+      // Wait until online
+      await _waitDoDatabase(doctl, clusterId ?? name);
+    } else if (clusterId == null) {
+      throw StateError(
+        'DigitalOcean Postgres $name not found and create: false',
+      );
+    } else {
+      log.detail('using DigitalOcean Postgres id $clusterId');
+      await _waitDoDatabase(doctl, clusterId);
+    }
+
+    final id = clusterId!;
+    // Prefer public host: App Platform reaches DBaaS over public SSL without
+    // a pre-configured VPC; private hostnames fail health checks otherwise.
+    final conn = await runner.runCapture(
+      doctl,
+      ['databases', 'connection', id, '-o', 'json'],
+      allowDryRun: false,
+    );
+    var connOut = conn.stdout;
+    if (!conn.ok) {
+      throw StateError('could not get database connection for $id');
+    }
+
+    final host = _jsonField(connOut, 'host') ??
+        _jsonField(connOut, 'private_host');
+    final port = _jsonField(connOut, 'port') ?? '25060';
+    final user = _jsonField(connOut, 'user') ?? 'doadmin';
+    final password = _jsonField(connOut, 'password') ?? '';
+    final database = _jsonField(connOut, 'database') ?? 'defaultdb';
+    if (host == null || password.isEmpty) {
+      throw StateError('incomplete DO database connection: $connOut');
+    }
+
+    await _writePgSidecar(
+      ProductionYamlPatcher.digitalOceanPgSidecarName,
+      PostgresUrl(
+        user: user,
+        password: password,
+        host: host,
+        port: port,
+        database: database,
+        requireSsl: true,
+      ),
+    );
+    log.ok('DigitalOcean Postgres credentials → sidecar ($user@$host/$database)');
+
+    // Firewall: prefer app-scoped rules after the App Platform app exists
+    // (see DigitalOceanHost._trustAppForDatabase). DO rejects 0.0.0.0/0.
+
+    // Persist cluster id into podfly.yaml if possible
+    await _persistDoDbClusterId(id, name);
+  }
+
+  String? _findDoDbId(String json, String name) {
+    try {
+      final list = jsonDecode(json);
+      if (list is! List) return null;
+      for (final item in list) {
+        if (item is Map && item['name']?.toString() == name) {
+          return item['id']?.toString();
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String? _jsonField(String raw, String key) {
+    try {
+      final m = jsonDecode(raw);
+      if (m is Map && m[key] != null) return m[key].toString();
+      if (m is List && m.isNotEmpty && m.first is Map) {
+        final v = (m.first as Map)[key];
+        if (v != null) return v.toString();
+      }
+    } catch (_) {}
+    final re = RegExp('"$key"\\s*:\\s*"([^"]*)"');
+    return re.firstMatch(raw)?.group(1);
+  }
+
+  Future<void> _waitDoDatabase(String doctl, String idOrName) async {
+    for (var i = 0; i < 60; i++) {
+      final r = await runner.runCapture(
+        doctl,
+        ['databases', 'get', idOrName, '-o', 'json'],
+        allowDryRun: false,
+      );
+      final status = (_jsonField(r.stdout, 'status') ?? '').toLowerCase();
+      if (status == 'online' || status == 'active') {
+        log.detail('database online');
+        return;
+      }
+      log.detail('waiting for database ($status)…');
+      await Future<void>.delayed(const Duration(seconds: 10));
+    }
+    log.warn('database not online after wait — continuing');
+  }
+
+  Future<void> _persistDoDbClusterId(String id, String name) async {
+    final f = File(config.configPath);
+    if (!await f.exists()) return;
+    var text = await f.readAsString();
+    if (!text.contains('digitalocean_postgres:')) return;
+    if (RegExp(r'cluster_id:\s*\S+').hasMatch(text)) {
+      text = text.replaceFirst(
+        RegExp(r'(cluster_id:\s*).+'),
+        'cluster_id: $id',
+      );
+    } else {
+      text = text.replaceFirst(
+        RegExp(r'(digitalocean_postgres:\n)'),
+        'digitalocean_postgres:\n    cluster_id: $id\n    cluster_name: $name\n',
+      );
+    }
+    await f.writeAsString(text);
   }
 
   Future<void> _neon() async {

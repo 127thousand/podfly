@@ -251,6 +251,13 @@ class Initer {
           provider: DatabaseProvider.railwayPostgres,
           railwayPostgres: RailwayPostgresConfig(),
         );
+      case DatabaseProvider.digitalOceanPostgres:
+        database = DatabaseConfig(
+          provider: DatabaseProvider.digitalOceanPostgres,
+          digitalOceanPostgres: DigitalOceanPostgresConfig(
+            clusterName: '$flyApp-db',
+          ),
+        );
     }
 
     final config = PodflyConfig(
@@ -264,9 +271,13 @@ class Initer {
       railway: host == AppHost.railway
           ? RailwayConfig(project: railwayProject, service: 'api')
           : null,
+      digitalOcean: host == AppHost.digitalOcean
+          ? DigitalOceanConfig(app: flyApp)
+          : null,
       cloudflare: mode == DeployMode.split &&
               webEnabled &&
-              host != AppHost.railway
+              host != AppHost.railway &&
+              host != AppHost.digitalOcean
           ? CloudflareConfig(project: name)
           : null,
       database: database,
@@ -311,5 +322,7 @@ class Initer {
           'neon — serverless Postgres (good with scale-to-zero)',
         DatabaseProvider.railwayPostgres =>
           'railway_postgres — Postgres plugin on Railway project',
+        DatabaseProvider.digitalOceanPostgres =>
+          'digitalocean_postgres — Managed Postgres (DBaaS) for App Platform',
       };
 }

@@ -1,5 +1,6 @@
 import '../config.dart';
 import 'adapter.dart';
+import 'digitalocean_host.dart';
 import 'fly_host.dart';
 import 'planned_host.dart';
 import 'railway_host.dart';
@@ -16,6 +17,7 @@ void ensureHostsRegistered() {
   HostRegistry.bootstrap([
     FlyHost(),
     RailwayHost(),
+    DigitalOceanHost(),
     PlannedHost(
       id: 'render',
       label: 'Render',
@@ -56,17 +58,6 @@ void ensureHostsRegistered() {
       auth: PlannedAuth.command,
       checkArgs: const ['account', 'show'],
       loginHint: 'az login',
-    ),
-    PlannedHost(
-      id: 'digitalocean',
-      label: 'DigitalOcean App Platform',
-      cliBinaries: const ['doctl'],
-      installHint: 'https://docs.digitalocean.com/reference/doctl/',
-      appHost: AppHost.digitalOcean,
-      aliases: const ['do'],
-      auth: PlannedAuth.command,
-      checkArgs: const ['account', 'get'],
-      loginHint: 'doctl auth init',
     ),
   ]);
 }

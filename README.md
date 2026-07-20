@@ -88,9 +88,9 @@ podfly smoke
 
 | Mode | UI | API |
 |------|----|-----|
-| 🔀 **`split`** | 🟠 Cloudflare Pages (CDN) + API host | 🟣 Fly.io or 🚂 Railway |
-| 🧱 **`monolith`** | UI with the API host (or no web) | 🟣 Fly.io or 🚂 Railway |
-| 📱 **API-only** | — (`web.enabled: false`; usually `mode: monolith`) | 🟣 Fly.io or 🚂 Railway |
+| 🔀 **`split`** | 🟠 Cloudflare Pages (CDN) + API host | 🟣 Fly / 🚂 Railway / 🌊 DO |
+| 🧱 **`monolith`** | UI with the API host (or DO native web app) | 🟣 Fly / 🚂 Railway / 🌊 DO |
+| 📱 **API-only** | — (`web.enabled: false`; usually `mode: monolith`) | 🟣 Fly / 🚂 Railway / 🌊 DO |
 
 `mode: fly` is still accepted as a **legacy alias** for `monolith`.
 
@@ -100,6 +100,7 @@ podfly smoke
 | 💾 **`sqlite`** | Single machine + volume (Fly) |
 | 🟣 **`fly_postgres`** | Classic Serverpod on Fly (attach → Serverpod config) |
 | 🚂 **`railway_postgres`** | Railway Postgres plugin (`host: railway`) |
+| 🌊 **`digitalocean_postgres`** | DO Managed Postgres (`host: digitalocean`) |
 | 🟢 **`neon`** | Serverless PG |
 
 Insights and full managed Serverpod ops: **[Serverpod Cloud](https://serverpod.dev/cloud)** (not podfly).
@@ -133,7 +134,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | 🗺️ | 🟡 | 🟡 | ❌ | One public port; cold starts |
 | 📦 [**AWS**](https://aws.amazon.com) App Runner / ECS | `aws` | 🗺️ | ✅ | ✅ | 🟡 | App Runner ≈ API-only |
 | 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ | ✅ | ✅ | 🟡 | Similar to other container PaaS |
-| 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | 🗺️ | ✅ | ✅ | 🟡 | Simple PaaS |
+| 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | ✅ | ✅ | ✅ | 🟡 | DOCR images + App Spec; web = separate app |
 
 **Fit legend:** ✅ natural · 🟡 possible with constraints · ❌ poor fit · 🗺️ podfly not implemented yet · — N/A
 
@@ -151,7 +152,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 📦 [**AWS RDS**](https://aws.amazon.com/rds/) | `aws` | 🗺️ | Enterprise default |
 | ☁️ [**Google Cloud SQL**](https://cloud.google.com/sql) | `gcloud` | 🗺️ | GCP default |
 | 🔷 [**Azure Database for PostgreSQL**](https://azure.microsoft.com/products/postgresql) | `az` | 🗺️ | Azure default |
-| 🌊 [**DigitalOcean Managed Postgres**](https://www.digitalocean.com/products/managed-databases) | `doctl` | 🗺️ | Simple managed PG |
+| 🌊 [**DigitalOcean Managed Postgres**](https://www.digitalocean.com/products/managed-databases) | `doctl` | ✅ | `digitalocean_postgres` + app firewall |
 
 **podfly legend:** ✅ supported today · 🗺️ planned  
 
