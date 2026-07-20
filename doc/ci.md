@@ -92,15 +92,27 @@ CI runners need Docker (remote build/push to DOCR). Prefer pinning `linux/amd64`
 
 ## Example: Fly API-only (GitHub Actions)
 
+**Full working tree** (workflow + `podfly.yaml` + Serverpod mini):  
+[`example/mobile_api_only`](../example/mobile_api_only) — deploys on every push to `main`.
+
+| File | Role |
+|------|------|
+| [`.github/workflows/deploy.yml`](../example/mobile_api_only/.github/workflows/deploy.yml) | `podfly deploy --api` → Fly |
+| [`.github/workflows/plan.yml`](../example/mobile_api_only/.github/workflows/plan.yml) | PR dry-run |
+| [`podfly.yaml`](../example/mobile_api_only/podfly.yaml) | `host: fly`, `web.enabled: false`, smoke |
+
+### Minimal workflow (copy into monorepo root)
+
 ```yaml
-name: Deploy API
+name: Deploy API (Fly)
 on:
   push:
     branches: [main]
-    paths:
-      - '**/*_server/**'
-      - 'podfly.yaml'
-      - 'fly.toml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-fly-api-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -117,14 +129,17 @@ jobs:
 
       - name: Install podfly
         run: |
-          dart pub global activate podfly
+          dart pub global activate podfly 0.2.0
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
 
       - name: Deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          PODFLY_AUTO: '1'
         run: podfly deploy --api --yes --no-login --smoke
 ```
+
+**Secret:** `FLY_API_TOKEN` from `fly tokens create deploy -x 999999h`.
 
 ---
 

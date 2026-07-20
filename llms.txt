@@ -21,7 +21,7 @@
 
 ## Examples
 
-- [example/mobile_api_only](example/mobile_api_only) — Serverpod mini, android+ios only, API-only deploy
+- [example/mobile_api_only](example/mobile_api_only) — API-only Serverpod on Fly + GitHub Actions (`deploy.yml` on every push to main)
 
 ## Default commands (copy-paste)
 

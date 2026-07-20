@@ -1,0 +1,37 @@
+# Plan-only check on pull requests (no Fly mutations).
+# Safe to enable without FLY_API_TOKEN; dry-run skips live auth.
+
+name: Plan deploy (dry-run)
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: plan-fly-api-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: podfly dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.10.3
+
+      - name: Install podfly
+        run: |
+          dart pub global activate podfly 0.2.0
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+
+      - name: Dry-run deploy plan
+        env:
+          PODFLY_AUTO: '1'
+        run: podfly deploy --api --yes --no-login --dry-run

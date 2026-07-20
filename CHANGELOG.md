@@ -11,7 +11,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- (nothing yet)
+- **Example CI:** `example/mobile_api_only` GitHub Actions workflows for Fly API-only deploy on every push to `main` (+ PR dry-run)
 
 ---
 

@@ -1,0 +1,60 @@
+# Deploy the Serverpod API to Fly.io on every push to main.
+#
+# Prerequisites (once):
+# 1. Fly account: https://fly.io
+# 2. Create a deploy token: fly tokens create deploy -x 999999h
+# 3. GitHub repo → Settings → Secrets and variables → Actions
+#      Name:  FLY_API_TOKEN
+#      Value: <token from step 2>
+# 4. Edit podfly.yaml / fly.toml: set fly.app to a unique name (global on Fly)
+#
+# Local dry-run (no secrets needed for plan):
+#   podfly deploy --api --yes --no-login --dry-run
+#
+# This workflow assumes the monorepo root is this directory
+# (example/mobile_api_only as the repo root, or copy the workflow to your Serverpod monorepo root).
+
+name: Deploy API (Fly)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-fly-api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: podfly → Fly
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          # Match mobile_api_only_server/Dockerfile (and Serverpod 4 beta).
+          sdk: 3.10.3
+
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Install podfly
+        run: |
+          dart pub global activate podfly 0.2.0
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+          podfly --help | head -5
+
+      - name: Deploy API
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          # Optional: auto-accept non-interactive doctor install prompts
+          PODFLY_AUTO: '1'
+        run: podfly deploy --api --yes --no-login --smoke

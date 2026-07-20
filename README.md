@@ -62,6 +62,9 @@ cd my_app
 podfly deploy --yes --smoke         # podfly: provider CLIs + config quirks
 ```
 
+**API-only + GitHub Actions → Fly (every push to `main`):**  
+see [`example/mobile_api_only`](example/mobile_api_only) (workflow, `podfly.yaml`, smoke).
+
 Typical automation (Fly today):
 
 1. Doctor tools + auth  
