@@ -81,8 +81,9 @@ That’s the happy path. No prior `podfly.yaml`, no prior host config — only a
 
 Same idea for `podfly.yaml`: created on first deploy (`--yes` = non-interactive defaults). Commit both when you care about stable names and settings in git; delete them and redeploy to regenerate starters.
 
-**API-only + GitHub Actions → Fly (every push to `main`):**  
-see [`example/mobile_api_only`](example/mobile_api_only) — that tree **ships** `fly.toml` so the public demo app name and scale-to-zero knobs are fixed in CI. Locally you could still start from `serverpod create` + `podfly deploy` alone.
+**Examples by cloud** (separate repo, monorepo leaves):  
+[github.com/127thousand/podfly_examples](https://github.com/127thousand/podfly_examples) — e.g. `fly/api_only`, `render/api_postgres`.  
+Package pointer: [`example/mobile_api_only`](example/mobile_api_only) (Fly API-only).
 
 What deploy automates (Fly path today):
 
@@ -179,7 +180,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 🟣 [**Fly.io**](https://fly.io) | `fly` / `flyctl` | ✅ | ✅ | ✅ | ✅ | Default podfly path; multi-port Machines OK |
 | 🚂 [**Railway**](https://railway.app) | `railway` | ✅ | ✅ | ✅ | 🟡 | Separate API + static web services |
 | 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | Static Flutter web only; **not** the API |
-| 🟦 [**Render**](https://render.com) | Render CLI | 🗺️ | ✅ | ✅ | 🟡 | Prefer API service + static site |
+| 🟦 [**Render**](https://render.com) | `render` | ✅ | ✅ | 🟡 | 🟡 | Git + Docker; monorepo `rootDir`; `render_postgres` |
 | ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | 🗺️ | 🟡 | 🟡 | ❌ | One public port; cold starts |
 | 📦 [**AWS**](https://aws.amazon.com) App Runner / ECS | `aws` | 🗺️ | ✅ | ✅ | 🟡 | App Runner ≈ API-only |
 | 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ | ✅ | ✅ | 🟡 | Similar to other container PaaS |
@@ -197,7 +198,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 🚂 [**Railway Postgres**](https://railway.app) | Railway CLI | ✅ | `database.provider: railway_postgres` |
 | 💾 **SQLite** (+ Fly volume) | `fly volumes` | ✅ | Single-machine only |
 | ⚡ [**Supabase**](https://supabase.com) | CLI / URL | 🗺️ | Managed PG |
-| 🟦 [**Render Postgres**](https://render.com) | API / dashboard | 🗺️ | Bundle with Render |
+| 🟦 [**Render Postgres**](https://render.com) | `render postgres` | ✅ | `database.provider: render_postgres` |
 | 📦 [**AWS RDS**](https://aws.amazon.com/rds/) | `aws` | 🗺️ | Enterprise default |
 | ☁️ [**Google Cloud SQL**](https://cloud.google.com/sql) | `gcloud` | 🗺️ | GCP default |
 | 🔷 [**Azure Database for PostgreSQL**](https://azure.microsoft.com/products/postgresql) | `az` | 🗺️ | Azure default |

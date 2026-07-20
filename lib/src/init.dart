@@ -258,6 +258,11 @@ class Initer {
             clusterName: '$flyApp-db',
           ),
         );
+      case DatabaseProvider.renderPostgres:
+        database = DatabaseConfig(
+          provider: DatabaseProvider.renderPostgres,
+          renderPostgres: RenderPostgresConfig(name: '$flyApp-db'),
+        );
     }
 
     final config = PodflyConfig(
@@ -274,10 +279,14 @@ class Initer {
       digitalOcean: host == AppHost.digitalOcean
           ? DigitalOceanConfig(app: flyApp)
           : null,
+      render: host == AppHost.render
+          ? RenderConfig(service: flyApp)
+          : null,
       cloudflare: mode == DeployMode.split &&
               webEnabled &&
               host != AppHost.railway &&
-              host != AppHost.digitalOcean
+              host != AppHost.digitalOcean &&
+              host != AppHost.render
           ? CloudflareConfig(project: name)
           : null,
       database: database,
@@ -324,5 +333,7 @@ class Initer {
           'railway_postgres — Postgres plugin on Railway project',
         DatabaseProvider.digitalOceanPostgres =>
           'digitalocean_postgres — Managed Postgres (DBaaS) for App Platform',
+        DatabaseProvider.renderPostgres =>
+          'render_postgres — Render managed Postgres (free plan expires ~30d)',
       };
 }

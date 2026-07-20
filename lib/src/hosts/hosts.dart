@@ -4,6 +4,7 @@ import 'digitalocean_host.dart';
 import 'fly_host.dart';
 import 'planned_host.dart';
 import 'railway_host.dart';
+import 'render_host.dart';
 
 export 'adapter.dart';
 export 'public_host_patch.dart';
@@ -18,15 +19,7 @@ void ensureHostsRegistered() {
     FlyHost(),
     RailwayHost(),
     DigitalOceanHost(),
-    PlannedHost(
-      id: 'render',
-      label: 'Render',
-      cliBinaries: const ['render'],
-      installHint: 'https://render.com/docs/cli',
-      appHost: AppHost.render,
-      auth: PlannedAuth.presentOnly,
-      loginHint: 'auth via RENDER_API_KEY / login',
-    ),
+    RenderHost(),
     PlannedHost(
       id: 'cloud_run',
       label: 'Google Cloud Run',

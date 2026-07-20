@@ -22,6 +22,9 @@ class ProductionYamlPatcher {
   /// Written after DigitalOcean Managed Postgres connection is fetched.
   static const digitalOceanPgSidecarName = '.podfly_do_pg.json';
 
+  /// Written after Render Postgres connection is fetched.
+  static const renderPgSidecarName = '.podfly_render_pg.json';
+
   File get file =>
       File(p.join(config.serverPath, 'config', 'production.yaml'));
 
@@ -144,6 +147,34 @@ class ProductionYamlPatcher {
           });
           log.warn(
             'digitalocean_postgres: no $digitalOceanPgSidecarName yet — placeholder written',
+          );
+        }
+      case DatabaseProvider.renderPostgres:
+        final sidecar = await _readSidecarMap(renderPgSidecarName);
+        if (sidecar != null) {
+          text = _upsertDatabaseBlock(text, {
+            'host': sidecar['host'] ?? 'localhost',
+            'port': sidecar['port'] ?? '5432',
+            'name': sidecar['name'] ?? 'serverpod',
+            'user': sidecar['user'] ?? 'serverpod',
+            'requireSsl': sidecar['requireSsl'] ?? 'true',
+          });
+          final password = sidecar['password'];
+          if (password != null && password.isNotEmpty) {
+            await _patchPasswordsYaml(password);
+          }
+        } else {
+          final dbName =
+              config.database.renderPostgres?.name ?? '${config.name}-db';
+          text = _upsertDatabaseBlock(text, {
+            'host': 'YOUR_RENDER_PG_HOST',
+            'port': '5432',
+            'name': dbName.replaceAll('-', '_'),
+            'user': 'YOUR_RENDER_PG_USER',
+            'requireSsl': 'true',
+          });
+          log.warn(
+            'render_postgres: no $renderPgSidecarName yet — placeholder written',
           );
         }
     }

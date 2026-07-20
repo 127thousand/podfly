@@ -38,6 +38,8 @@ class DatabaseEnsure {
         await _railwayPostgres();
       case DatabaseProvider.digitalOceanPostgres:
         await _digitalOceanPostgres();
+      case DatabaseProvider.renderPostgres:
+        await _renderPostgres();
     }
 
     if (!runner.dryRun) {
@@ -727,5 +729,231 @@ class DatabaseEnsure {
           'railway init failed (${init.exitCode}): ${init.stderr}');
     }
     log.ok('created Railway project $name');
+  }
+
+  Future<void> _renderPostgres() async {
+    final pg = config.database.renderPostgres;
+    if (pg == null) return;
+    ensureHostsRegistered();
+    if (config.host != AppHost.render) {
+      log.warn(
+        'render_postgres is only available when host: render — skipping',
+      );
+      return;
+    }
+
+    final render = await runner.resolve('render');
+    if (render == null) throw StateError('render CLI not found');
+
+    if (runner.dryRun) {
+      log.dry(
+        '$render postgres create --name ${pg.name} --plan ${pg.plan} '
+        '--region ${pg.region} (if missing)',
+      );
+      return;
+    }
+
+    var id = pg.databaseId;
+    if (id == null || id.isEmpty) {
+      id = await _findRenderPostgresId(render, pg.name);
+    }
+
+    if (id == null && pg.create) {
+      log.detail('creating Render Postgres ${pg.name}');
+      final create = await runner.runCapture(
+        render,
+        [
+          'postgres',
+          'create',
+          '--name',
+          pg.name,
+          '--plan',
+          pg.plan,
+          '--region',
+          pg.region,
+          // Empty allow-list blocks all TCP; open for Serverpod on free/public.
+          '--ip-allow-list',
+          'cidr=0.0.0.0/0,description=everywhere',
+          '--confirm',
+          '-o',
+          'json',
+        ],
+        allowDryRun: false,
+      );
+      if (!create.ok) {
+        throw StateError(
+          'render postgres create failed (exit ${create.exitCode}): '
+          '${create.stderr.isNotEmpty ? create.stderr : create.stdout}',
+        );
+      }
+      id = _parseRenderJsonId(create.stdout);
+      if (id == null) {
+        id = await _findRenderPostgresId(render, pg.name);
+      }
+      if (id == null) {
+        throw StateError('Render Postgres created but id not found');
+      }
+      log.ok('created Render Postgres ${pg.name} ($id)');
+      await _waitRenderPostgresAvailable(render, id);
+    } else if (id == null) {
+      log.warn('Render Postgres ${pg.name} not found and create: false');
+      return;
+    } else {
+      log.detail('Render Postgres ${pg.name} exists ($id)');
+      await _waitRenderPostgresAvailable(render, id);
+      // Ensure external connections work (create may have empty allow-list).
+      await runner.run(
+        render,
+        [
+          'postgres',
+          'update',
+          id,
+          '--ip-allow-list',
+          'cidr=0.0.0.0/0,description=everywhere',
+          '--confirm',
+          '-o',
+          'json',
+        ],
+        allowDryRun: false,
+      );
+    }
+
+    final get = await runner.runCapture(
+      render,
+      [
+        'postgres',
+        'get',
+        id,
+        '--include-sensitive-connection-info',
+        '--confirm',
+        '-o',
+        'json',
+      ],
+      allowDryRun: false,
+    );
+    if (!get.ok) {
+      log.warn('render postgres get failed — cannot patch Serverpod config');
+      return;
+    }
+
+    final creds = _parseRenderPostgresGet(get.stdout);
+    if (creds == null) {
+      log.warn(
+        'could not parse Render Postgres connectionInfo — '
+        'set production database manually',
+      );
+      return;
+    }
+    await _writePgSidecar(
+      ProductionYamlPatcher.renderPgSidecarName,
+      creds,
+    );
+    log.ok(
+      'Render Postgres credentials for Serverpod '
+      '(${creds.user}@${creds.host}/${creds.database})',
+    );
+  }
+
+  Future<String?> _findRenderPostgresId(String render, String name) async {
+    final list = await runner.runCapture(
+      render,
+      ['postgres', 'list', '-o', 'json', '--confirm'],
+      allowDryRun: false,
+    );
+    if (!list.ok) return null;
+    final raw = list.stdout.trim();
+    if (raw.isEmpty || raw == 'null') return null;
+    try {
+      final decoded = jsonDecode(raw);
+      final items = decoded is Map && decoded['data'] is List
+          ? decoded['data'] as List
+          : (decoded is List ? decoded : const []);
+      for (final item in items) {
+        if (item is! Map) continue;
+        if (item['name']?.toString() == name) {
+          return item['id']?.toString();
+        }
+      }
+    } catch (_) {/* ignore */}
+    return null;
+  }
+
+  String? _parseRenderJsonId(String stdout) {
+    try {
+      final decoded = jsonDecode(stdout);
+      if (decoded is Map) {
+        final data = decoded['data'] ?? decoded;
+        if (data is Map && data['id'] != null) return data['id'].toString();
+      }
+    } catch (_) {/* ignore */}
+    return RegExp(r'dpg-[a-z0-9-]+').firstMatch(stdout)?.group(0);
+  }
+
+  Future<void> _waitRenderPostgresAvailable(String render, String id) async {
+    for (var i = 0; i < 36; i++) {
+      final get = await runner.runCapture(
+        render,
+        ['postgres', 'get', id, '--confirm', '-o', 'json'],
+        allowDryRun: false,
+      );
+      if (get.ok) {
+        try {
+          final decoded = jsonDecode(get.stdout);
+          final data = decoded is Map ? (decoded['data'] ?? decoded) : null;
+          final status =
+              data is Map ? data['status']?.toString() ?? '' : '';
+          if (status == 'available') {
+            log.detail('Render Postgres $id available');
+            return;
+          }
+          log.detail('waiting for Render Postgres ($status)…');
+        } catch (_) {/* retry */}
+      }
+      await Future<void>.delayed(const Duration(seconds: 5));
+    }
+    log.warn('Render Postgres $id not available yet — continuing');
+  }
+
+  PostgresUrl? _parseRenderPostgresGet(String stdout) {
+    try {
+      final decoded = jsonDecode(stdout);
+      if (decoded is! Map) return null;
+      final data = decoded['data'] ?? decoded;
+      if (data is! Map) return null;
+      final info = data['connectionInfo'];
+      if (info is Map) {
+        // Prefer *internal* hostname for services in the same Render workspace
+        // (private network; no public SSL dance). Fall back to external+SSL.
+        final internal = info['internalConnectionString']?.toString();
+        if (internal != null) {
+          final u = parsePostgresUrl(internal);
+          if (u != null) {
+            return PostgresUrl(
+              user: u.user,
+              password: u.password,
+              host: u.host,
+              port: u.port,
+              database: u.database,
+              requireSsl: false,
+            );
+          }
+        }
+        final ext = info['externalConnectionString']?.toString();
+        if (ext != null) {
+          final u = parsePostgresUrl(ext);
+          if (u != null) {
+            return PostgresUrl(
+              user: u.user,
+              password: u.password,
+              host: u.host,
+              port: u.port,
+              database: u.database,
+              requireSsl: true,
+            );
+          }
+        }
+      }
+    } catch (_) {/* fall through */}
+    return parsePostgresUrlFromText(stdout);
   }
 }

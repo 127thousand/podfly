@@ -15,6 +15,23 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.0] — 2026-07-20
+
+### Added
+
+- **`host: render`**: Render web service (git + Docker) via `render` CLI
+  - Monorepo support via `render.root_dir` (maps to Render `rootDir`)
+  - Generates starter `render.yaml` Blueprint when missing
+  - Auth: `render login` or `RENDER_API_KEY`
+- **`database.provider: render_postgres`**: create/lookup free/paid PG, fetch connection info, sidecar + Serverpod config patch
+- Examples monorepo: [podfly_examples](https://github.com/127thousand/podfly_examples) (`fly/api_only`, `render/api_postgres`)
+
+### Changed
+
+- Provider roadmap: Render marked supported (was planned)
+
+---
+
 ## [0.2.2] — 2026-07-20
 
 ### Added

@@ -53,6 +53,7 @@ enum DatabaseProvider {
   neon,
   railwayPostgres,
   digitalOceanPostgres,
+  renderPostgres,
 }
 
 extension AppHostX on AppHost {
@@ -269,6 +270,76 @@ class NeonConfig {
       };
 }
 
+/// Render Postgres settings.
+class RenderPostgresConfig {
+  RenderPostgresConfig({
+    required this.name,
+    this.create = true,
+    this.plan = 'free',
+    this.region = 'oregon',
+    this.databaseId,
+  });
+
+  final String name;
+  final bool create;
+  final String plan;
+  final String region;
+  /// Filled after create / lookup (`dpg-…`).
+  final String? databaseId;
+
+  Map<String, Object?> toMap() => {
+        'name': name,
+        'create': create,
+        'plan': plan,
+        'region': region,
+        if (databaseId != null) 'database_id': databaseId,
+      };
+}
+
+/// Render web service settings (git + Docker; monorepo via [rootDir]).
+class RenderConfig {
+  RenderConfig({
+    required this.service,
+    this.region = 'oregon',
+    this.plan = 'free',
+    this.branch = 'main',
+    this.repo,
+    this.rootDir,
+    this.dockerfilePath,
+    this.blueprint = 'render.yaml',
+    this.serviceId,
+    this.publicHost,
+  });
+
+  final String service;
+  final String region;
+  /// Instance plan slug (e.g. free, starter).
+  final String plan;
+  final String branch;
+  /// Git repo URL Render builds from (required for deploy).
+  final String? repo;
+  /// Monorepo root directory for this service (e.g. `render/api_postgres`).
+  final String? rootDir;
+  /// Dockerfile path relative to [rootDir] (or repo root). Default: server Dockerfile.
+  final String? dockerfilePath;
+  final String blueprint;
+  final String? serviceId;
+  final String? publicHost;
+
+  Map<String, Object?> toMap() => {
+        'service': service,
+        'region': region,
+        'plan': plan,
+        'branch': branch,
+        if (repo != null) 'repo': repo,
+        if (rootDir != null) 'root_dir': rootDir,
+        if (dockerfilePath != null) 'dockerfile_path': dockerfilePath,
+        'blueprint': blueprint,
+        if (serviceId != null) 'service_id': serviceId,
+        if (publicHost != null) 'public_host': publicHost,
+      };
+}
+
 /// DigitalOcean Managed Postgres (DBaaS) for App Platform apps.
 class DigitalOceanPostgresConfig {
   DigitalOceanPostgresConfig({
@@ -368,6 +439,7 @@ class DatabaseConfig {
     this.neon,
     this.railwayPostgres,
     this.digitalOceanPostgres,
+    this.renderPostgres,
   });
 
   final DatabaseProvider provider;
@@ -376,6 +448,7 @@ class DatabaseConfig {
   final NeonConfig? neon;
   final RailwayPostgresConfig? railwayPostgres;
   final DigitalOceanPostgresConfig? digitalOceanPostgres;
+  final RenderPostgresConfig? renderPostgres;
 
   Map<String, Object?> toMap() {
     final m = <String, Object?>{'provider': _providerName(provider)};
@@ -388,6 +461,9 @@ class DatabaseConfig {
     if (digitalOceanPostgres != null) {
       m['digitalocean_postgres'] = digitalOceanPostgres!.toMap();
     }
+    if (renderPostgres != null) {
+      m['render_postgres'] = renderPostgres!.toMap();
+    }
     return m;
   }
 
@@ -398,6 +474,7 @@ class DatabaseConfig {
         DatabaseProvider.neon => 'neon',
         DatabaseProvider.railwayPostgres => 'railway_postgres',
         DatabaseProvider.digitalOceanPostgres => 'digitalocean_postgres',
+        DatabaseProvider.renderPostgres => 'render_postgres',
       };
 
   static DatabaseProvider parseProvider(String? s) => switch (s) {
@@ -413,6 +490,8 @@ class DatabaseConfig {
         'do_postgres' ||
         'do-postgres' =>
           DatabaseProvider.digitalOceanPostgres,
+        'render_postgres' || 'render-postgres' || 'render' =>
+          DatabaseProvider.renderPostgres,
         _ => throw FormatException('Unknown database.provider: $s'),
       };
 }
@@ -496,6 +575,7 @@ class PodflyConfig {
     required this.fly,
     this.railway,
     this.digitalOcean,
+    this.render,
     this.cloudflare,
     required this.database,
     required this.web,
@@ -512,6 +592,7 @@ class PodflyConfig {
   final FlyConfig fly;
   final RailwayConfig? railway;
   final DigitalOceanConfig? digitalOcean;
+  final RenderConfig? render;
   final CloudflareConfig? cloudflare;
   final DatabaseConfig database;
   final WebConfig web;
@@ -541,6 +622,7 @@ class PodflyConfig {
         'fly': fly.toMap(),
         if (railway != null) 'railway': railway!.toMap(),
         if (digitalOcean != null) 'digitalocean': digitalOcean!.toMap(),
+        if (render != null) 'render': render!.toMap(),
         if (cloudflare != null) 'cloudflare': cloudflare!.toMap(),
         'database': database.toMap(),
         'web': web.toMap(),
@@ -609,10 +691,30 @@ class PodflyConfig {
       buf.writeln('  spec_file: ${d.specFile}');
       buf.writeln('  platform: ${d.platform}');
     }
-    // Cloudflare only when UI is on Pages (not Railway / DO native web)
+    if (host == AppHost.render || render != null) {
+      final r = render ??
+          RenderConfig(service: name.replaceAll('_', '-'));
+      buf.writeln('render:');
+      buf.writeln('  service: ${r.service}');
+      buf.writeln('  region: ${r.region}');
+      buf.writeln('  plan: ${r.plan}');
+      buf.writeln('  branch: ${r.branch}');
+      if (r.repo != null) buf.writeln('  repo: ${r.repo}');
+      if (r.rootDir != null) buf.writeln('  root_dir: ${r.rootDir}');
+      if (r.dockerfilePath != null) {
+        buf.writeln('  dockerfile_path: ${r.dockerfilePath}');
+      }
+      buf.writeln('  blueprint: ${r.blueprint}');
+      if (r.serviceId != null) buf.writeln('  service_id: ${r.serviceId}');
+      if (r.publicHost != null) {
+        buf.writeln('  public_host: ${r.publicHost}');
+      }
+    }
+    // Cloudflare only when UI is on Pages (not Railway / DO / Render native API)
     if (cloudflare != null &&
         host != AppHost.railway &&
-        host != AppHost.digitalOcean) {
+        host != AppHost.digitalOcean &&
+        host != AppHost.render) {
       buf.writeln();
       buf.writeln('cloudflare:');
       buf.writeln('  project: ${cloudflare!.project}');
@@ -670,6 +772,17 @@ class PodflyConfig {
       buf.writeln('    engine_version: ${d.engineVersion}');
       if (d.clusterId != null) {
         buf.writeln('    cluster_id: ${d.clusterId}');
+      }
+    }
+    if (database.renderPostgres != null) {
+      final r = database.renderPostgres!;
+      buf.writeln('  render_postgres:');
+      buf.writeln('    name: ${r.name}');
+      buf.writeln('    create: ${r.create}');
+      buf.writeln('    plan: ${r.plan}');
+      buf.writeln('    region: ${r.region}');
+      if (r.databaseId != null) {
+        buf.writeln('    database_id: ${r.databaseId}');
       }
     }
     buf.writeln();
@@ -789,10 +902,28 @@ class PodflyConfig {
       );
     }
 
+    RenderConfig? render;
+    if (doc['render'] != null || host == AppHost.render) {
+      final m = _map(doc['render']);
+      render = RenderConfig(
+        service: m['service']?.toString() ?? name.replaceAll('_', '-'),
+        region: m['region']?.toString() ?? 'oregon',
+        plan: m['plan']?.toString() ?? 'free',
+        branch: m['branch']?.toString() ?? 'main',
+        repo: m['repo']?.toString(),
+        rootDir: m['root_dir']?.toString(),
+        dockerfilePath: m['dockerfile_path']?.toString(),
+        blueprint: m['blueprint']?.toString() ?? 'render.yaml',
+        serviceId: m['service_id']?.toString(),
+        publicHost: m['public_host']?.toString(),
+      );
+    }
+
     CloudflareConfig? cf;
-    // Pages UI for Fly split; Railway/DO host static web natively.
+    // Pages UI for Fly split; Railway/DO/Render host API without Pages.
     final wantPages = host != AppHost.railway &&
         host != AppHost.digitalOcean &&
+        host != AppHost.render &&
         (doc['cloudflare'] != null || mode == DeployMode.split);
     if (wantPages) {
       final m = _map(doc['cloudflare']);
@@ -863,12 +994,26 @@ class PodflyConfig {
         clusterId: d['cluster_id']?.toString(),
       );
     }
+    RenderPostgresConfig? renderPg;
+    if (provider == DatabaseProvider.renderPostgres) {
+      final r = _map(dbMap['render_postgres']);
+      renderPg = RenderPostgresConfig(
+        name: r['name']?.toString() ?? '${name.replaceAll('_', '-')}-db',
+        create: r['create'] != false,
+        plan: r['plan']?.toString() ?? 'free',
+        region: r['region']?.toString() ??
+            render?.region ??
+            'oregon',
+        databaseId: r['database_id']?.toString(),
+      );
+    }
 
     final webMap = _map(doc['web']);
     final sanitized = name.replaceAll('_', '-');
     final defaultApiUrl = host.adapter.defaultApiUrl(
       name: name,
-      sanitizedName: digitalOcean?.app ??
+      sanitizedName: render?.service ??
+          digitalOcean?.app ??
           flyMap['app']?.toString() ??
           sanitized,
     );
@@ -919,6 +1064,7 @@ class PodflyConfig {
       fly: fly,
       railway: railway,
       digitalOcean: digitalOcean,
+      render: render,
       cloudflare: cf,
       database: DatabaseConfig(
         provider: provider,
@@ -927,6 +1073,7 @@ class PodflyConfig {
         neon: neon,
         railwayPostgres: railwayPg,
         digitalOceanPostgres: doPg,
+        renderPostgres: renderPg,
       ),
       web: web,
       smoke: smoke,

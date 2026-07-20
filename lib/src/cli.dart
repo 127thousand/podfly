@@ -323,10 +323,15 @@ Future<int> _deploy(ArgResults g) async {
           ? (config.digitalOcean ??
               DigitalOceanConfig(app: config.name.replaceAll('_', '-')))
           : config.digitalOcean,
+      render: host == AppHost.render
+          ? (config.render ??
+              RenderConfig(service: config.name.replaceAll('_', '-')))
+          : config.render,
       // Explicit monolith CLI: drop Pages block; otherwise keep / default cloudflare for split
       cloudflare: (monolith && modeOpt != null) ||
               host == AppHost.digitalOcean ||
-              host == AppHost.railway
+              host == AppHost.railway ||
+              host == AppHost.render
           ? null
           : (config.cloudflare ??
               (monolith

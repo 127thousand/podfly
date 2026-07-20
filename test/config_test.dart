@@ -40,6 +40,44 @@ void main() {
     expect(DatabaseConfig.parseProvider('neon'), DatabaseProvider.neon);
     expect(
         DatabaseConfig.parseProvider('fly_postgres'), DatabaseProvider.flyPostgres);
+    expect(
+        DatabaseConfig.parseProvider('render_postgres'),
+        DatabaseProvider.renderPostgres);
+  });
+
+  test('render host round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_render_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.render,
+      mode: DeployMode.monolith,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      render: RenderConfig(
+        service: 'demo-api',
+        repo: 'https://github.com/org/podfly_examples',
+        rootDir: 'render/api_postgres',
+      ),
+      database: DatabaseConfig(
+        provider: DatabaseProvider.renderPostgres,
+        renderPostgres: RenderPostgresConfig(name: 'demo-db'),
+      ),
+      web: WebConfig(
+        enabled: false,
+        apiUrl: 'https://demo-api.onrender.com/',
+      ),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.host, AppHost.render);
+    expect(loaded.render?.service, 'demo-api');
+    expect(loaded.render?.rootDir, 'render/api_postgres');
+    expect(loaded.database.provider, DatabaseProvider.renderPostgres);
+    expect(loaded.database.renderPostgres?.name, 'demo-db');
+    expect(loaded.toYaml(), contains('host: render'));
+    await dir.delete(recursive: true);
   });
 
   test('parseDeployMode: monolith preferred, fly is legacy alias', () async {
