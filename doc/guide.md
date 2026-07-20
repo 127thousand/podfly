@@ -60,7 +60,7 @@ podfly deploy
 | `--no-login` | Never open browser auth (CI; use env tokens) |
 | `--init` | Force init wizard even if `podfly.yaml` exists |
 | `--host fly\|railway\|…` | Override API cloud for this run |
-| `--mode split\|fly` | Override config mode for this run |
+| `--mode split\|monolith` | Override layout (`fly` = legacy alias for monolith) |
 | `--root path` | Project root (default: cwd) |
 | `--config path` | Explicit `podfly.yaml` path |
 
@@ -166,19 +166,25 @@ podfly deploy --yes --smoke
 
 ## Modes
 
+`mode` is **UI layout**, not which cloud (`host:`).
+
 ### `split` (recommended for most web apps)
 
 | Layer | Host | Content |
 |-------|------|---------|
-| Browser UI | Pages (`*.pages.dev`) or Railway static | Flutter web + CanvasKit |
+| Browser UI | Cloudflare Pages (`*.pages.dev`) | Flutter web + CanvasKit |
 | API | Fly (`*.fly.dev`) or Railway | Serverpod (port 8080) |
 
 Benefits: CDN for multi‑MB WASM/assets; API can scale to zero (DB choice matters).
 
-### `fly` (everything on the API host)
+### `monolith` (UI with the API host)
 
-On Fly: optional copy of Flutter web into the server static dir + single deploy.  
-On Railway: still separate API vs web **services** when web is enabled (not one process).
+UI is not on Pages. On Fly: optional copy of Flutter web into the server static dir + single deploy.  
+On Railway: still separate API vs web **services** when web is enabled (not one process) — just no Cloudflare Pages.
+
+API-only apps usually use `mode: monolith` + `web.enabled: false`.
+
+Legacy: `mode: fly` means the same as `monolith`.
 
 ## Doctor
 

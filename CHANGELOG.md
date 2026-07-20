@@ -9,9 +9,9 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- (nothing yet)
+- **`mode: monolith`** replaces `mode: fly` for “UI with API host / no Pages” layout. `mode: fly` remains a legacy alias.
 
 ---
 

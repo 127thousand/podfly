@@ -91,7 +91,7 @@ podfly deploy --yes --no-login --smoke
 2. Plan only → `--dry-run --no-login`.
 3. Wizard / config chooses **API cloud** (`host: fly|railway|render|…`) — only install **that** host’s CLI.
 4. Flutter has android/ios and no real web product → `--api` or `web.enabled: false`.
-5. Flutter web + API → `mode: split` (Pages + Fly/Railway) after init.
+5. Flutter web + API → `mode: split` (Pages + API) or `mode: monolith` (UI with API host).
 6. Stateless → `database.provider: none`.
 7. Need Postgres + sleeping API → Neon; on-Fly private PG → `fly_postgres`.
 8. Deploy implemented for **fly** and **railway**; other hosts: doctor only until roadmap lands.

@@ -9,7 +9,7 @@ Location: project root (walk-up from cwd also finds it).
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `host` | `fly` \| `railway` \| `render` \| `cloud_run` \| `aws` \| `azure` \| `digitalocean` | `fly` | **API cloud** — `fly` and `railway` deploy today. Railway also hosts static web + optional Postgres. |
-| `mode` | `split` \| `fly` | `split` | Layout: Pages UI + API host vs all-on-API-host (Fly) |
+| `mode` | `split` \| `monolith` | `split` | Layout: CDN UI + API vs UI with API host. Alias: `fly` → monolith (legacy) |
 | `name` | string | directory name | Default for app + Pages project names |
 | `server` | string | discovered `*_server` | Path relative to root |
 | `flutter` | string | discovered `*_flutter` | Path relative to root |
@@ -122,7 +122,7 @@ database:
 | `patch_bootstrap` | bool | `true` | Install podfly Flutter bootstrap if missing |
 | `write_headers` | bool | `true` | Install Pages `_headers` / `_redirects` if missing |
 | `base_href` | string | `/` | `flutter build web --base-href` |
-| `static_dir` | string | `server/web/app` | Target for mono `fly` mode copy |
+| `static_dir` | string | `server/web/app` | Target for monolith mode copy into the server tree |
 
 See [caching.md](caching.md) for bootstrap and header semantics.
 
@@ -143,7 +143,7 @@ smoke:
 | Key | Description |
 |-----|-------------|
 | `api` | Checked against `web.api_url` |
-| `web` | Split: Pages URL; fly mode: often same host as API |
+| `web` | Split: Pages URL; monolith: often same host as API |
 
 Omit `smoke:` if you do not use `--smoke` / `podfly smoke`.
 

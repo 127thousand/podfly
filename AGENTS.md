@@ -70,7 +70,7 @@ podfly deploy --yes --dry-run --no-login
 Deploy Serverpod?
   ├─ Need plan only → podfly deploy --dry-run --yes --no-login
   ├─ Mobile / no Flutter web product → web.enabled: false or --api
-  ├─ Flutter web + API → mode: split (Pages + Fly) or mode: fly
+  ├─ Flutter web + API → mode: split (Pages + API) or mode: monolith
   ├─ Stateless API → database.provider: none
   └─ Needs PG + scale-to-zero API → neon (or fly_postgres if staying on Fly network)
 ```

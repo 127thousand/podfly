@@ -146,7 +146,7 @@ production:
 
     final cfg = PodflyConfig(
       root: dir.path,
-      mode: DeployMode.fly,
+      mode: DeployMode.monolith,
       name: 'my-app',
       server: 's',
       flutter: 'f',

@@ -42,12 +42,39 @@ void main() {
         DatabaseConfig.parseProvider('fly_postgres'), DatabaseProvider.flyPostgres);
   });
 
+  test('parseDeployMode: monolith preferred, fly is legacy alias', () async {
+    expect(parseDeployMode('split'), DeployMode.split);
+    expect(parseDeployMode('monolith'), DeployMode.monolith);
+    expect(parseDeployMode('fly'), DeployMode.monolith);
+    expect(parseDeployMode('mono'), DeployMode.monolith);
+
+    final dir = await Directory.systemTemp.createTemp('podfly_mode_');
+    final f = File('${dir.path}/podfly.yaml');
+    await f.writeAsString('''
+host: fly
+mode: fly
+name: demo
+server: s
+flutter: f
+fly:
+  app: demo
+database:
+  provider: none
+web:
+  api_url: https://demo.fly.dev/
+''');
+    final loaded = await PodflyConfig.load(f.path);
+    expect(loaded.mode, DeployMode.monolith);
+    expect(loaded.toYaml(), contains('mode: monolith'));
+    await dir.delete(recursive: true);
+  });
+
   test('railway host round-trip', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_railway_');
     final cfg = PodflyConfig(
       root: dir.path,
       host: AppHost.railway,
-      mode: DeployMode.fly,
+      mode: DeployMode.monolith,
       name: 'demo',
       server: 'demo_server',
       flutter: 'demo_flutter',

@@ -146,7 +146,7 @@ fly:
   scale_to_zero: true
   ha: false                 # fly deploy --ha=false by default for cheap hobby
 
-cloudflare:                 # ignored when mode: fly
+cloudflare:                 # ignored when mode: monolith (legacy: mode: fly)
   project: my-app
   branch: main
 

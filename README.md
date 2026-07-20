@@ -88,9 +88,11 @@ podfly smoke
 
 | Mode | UI | API |
 |------|----|-----|
-| 🔀 **`split`** | 🟠 Cloudflare Pages **or** 🚂 Railway static (`host: railway`) | 🟣 Fly.io or 🚂 Railway |
-| 🪰 **`fly`** | Optional static on Fly | 🟣 Fly.io |
-| 📱 **API-only** | — (mobile / other clients) | 🟣 Fly.io or 🚂 Railway |
+| 🔀 **`split`** | 🟠 Cloudflare Pages (CDN) + API host | 🟣 Fly.io or 🚂 Railway |
+| 🧱 **`monolith`** | UI with the API host (or no web) | 🟣 Fly.io or 🚂 Railway |
+| 📱 **API-only** | — (`web.enabled: false`; usually `mode: monolith`) | 🟣 Fly.io or 🚂 Railway |
+
+`mode: fly` is still accepted as a **legacy alias** for `monolith`.
 
 | Database | When |
 |----------|------|
@@ -161,7 +163,7 @@ Want another provider? Open an issue — preference is **excellent DX** or **clo
 
 ```yaml
 host: fly
-mode: split
+mode: split   # or monolith — UI with API host, no Pages
 name: sacred-draw
 server: tarot_draw_server
 flutter: tarot_draw_flutter
@@ -202,7 +204,7 @@ Railway API-only sketch:
 
 ```yaml
 host: railway
-mode: fly
+mode: monolith
 name: my-api
 server: my_app_server
 web:

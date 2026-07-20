@@ -76,7 +76,7 @@ class Initer {
       }
       webEnabled = surface.deployWeb;
       // API-only apps don't need Cloudflare Pages.
-      mode = webEnabled ? DeployMode.split : DeployMode.fly;
+      mode = webEnabled ? DeployMode.split : DeployMode.monolith;
 
       final detection = await detectDatabaseNeed(
         p.join(root, server),
@@ -150,15 +150,15 @@ class Initer {
           'How should web + API be hosted?',
           [
             'split — Cloudflare Pages (UI) + ${hostAdapter.label} (API)',
-            'all-in-one — everything on ${hostAdapter.label}',
+            'monolith — UI + API on ${hostAdapter.label}',
           ],
           defaultIndex: 0,
         );
-        mode = modeIdx == 1 ? DeployMode.fly : DeployMode.split;
+        mode = modeIdx == 1 ? DeployMode.monolith : DeployMode.split;
       } else if (hostAdapter.supportsAllInOneWeb) {
-        mode = DeployMode.fly;
+        mode = DeployMode.monolith;
       } else {
-        mode = webEnabled ? DeployMode.split : DeployMode.fly;
+        mode = webEnabled ? DeployMode.split : DeployMode.monolith;
       }
 
       region = host == AppHost.fly

@@ -75,7 +75,11 @@ ArgParser _buildParser() {
     ..addFlag('yes', abbr: 'y', negatable: false, help: 'Non-interactive defaults')
     ..addFlag('no-login', negatable: false, help: 'No browser logins')
     ..addFlag('init', negatable: false, help: 'Force init wizard')
-    ..addOption('mode', allowed: ['split', 'fly'])
+    ..addOption(
+      'mode',
+      allowed: ['split', 'monolith', 'fly'],
+      help: 'split = CDN UI + API; monolith = UI with API host (fly = legacy alias)',
+    )
     ..addOption('host',
         allowed: HostRegistry.cliAllowedIds,
         help: 'API cloud host (default: fly; fly + railway deploy today)')
@@ -113,7 +117,7 @@ Deploy options:
   --init        Force wizard; confirms before overwriting podfly.yaml
   --host        API cloud: fly | railway | render | cloud_run | aws | azure | digitalocean
                 (wizard asks this; fly + railway deploy today)
-  --mode        split | fly   (split = Pages UI + API host)
+  --mode        split | monolith   (fly = legacy alias for monolith)
   --root        Project root (default: cwd)
   --config      Path to podfly.yaml
 
@@ -283,14 +287,14 @@ Future<int> _deploy(ArgResults g) async {
   if (hostOpt != null || modeOpt != null) {
     final host =
         hostOpt != null ? AppHostX.parse(hostOpt) : config.host;
-    final flyMode = modeOpt == 'fly' ||
-        (modeOpt == null && config.mode == DeployMode.fly);
-    final split = modeOpt == 'split' ||
-        (modeOpt == null && config.mode == DeployMode.split);
+    final mode = modeOpt != null
+        ? parseDeployMode(modeOpt)
+        : config.mode;
+    final monolith = mode == DeployMode.monolith;
     config = PodflyConfig(
       root: config.root,
       host: host,
-      mode: flyMode && !split ? DeployMode.fly : DeployMode.split,
+      mode: mode,
       name: config.name,
       server: config.server,
       flutter: config.flutter,
@@ -299,9 +303,13 @@ Future<int> _deploy(ArgResults g) async {
           ? (config.railway ??
               RailwayConfig(project: config.name, service: 'api'))
           : config.railway,
-      cloudflare: (flyMode && modeOpt == 'fly')
+      // Explicit monolith CLI: drop Pages block; otherwise keep / default cloudflare for split
+      cloudflare: monolith && modeOpt != null
           ? null
-          : (config.cloudflare ?? CloudflareConfig(project: config.name)),
+          : (config.cloudflare ??
+              (monolith
+                  ? null
+                  : CloudflareConfig(project: config.name))),
       database: config.database,
       web: config.web,
       smoke: config.smoke,

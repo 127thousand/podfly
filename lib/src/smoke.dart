@@ -44,7 +44,7 @@ class SmokeRunner {
     if (config.mode == DeployMode.split && config.cloudflare != null) {
       return 'https://${config.cloudflare!.project}.pages.dev/';
     }
-    if (config.mode == DeployMode.fly) {
+    if (config.mode == DeployMode.monolith) {
       return config.web.apiUrlNormalized;
     }
     return null;
