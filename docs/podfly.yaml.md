@@ -41,6 +41,7 @@ Used when `host: railway`.
 | `web_port` | int | `80` | Domain port for nginx web |
 | `web_public_host` | string | — | Filled after web domain |
 | `enable_cdn` | bool | `true` | `railway cdn enable` on web service |
+| `serverless` | bool | `true` | Railway Serverless for **api** + **web** (`sleepApplication` in railway.toml). Off by default on Railway itself; podfly turns it **on**. Does not sleep Postgres. |
 
 ### `database.railway_postgres`
 

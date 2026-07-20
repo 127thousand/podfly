@@ -85,6 +85,7 @@ class RailwayConfig {
     this.publicHost,
     this.webPublicHost,
     this.enableCdn = true,
+    this.serverless = true,
   });
 
   /// Human project name (used when creating / as default).
@@ -106,6 +107,8 @@ class RailwayConfig {
   final String? webPublicHost;
   /// Enable Railway edge CDN on the web service.
   final bool enableCdn;
+  /// Railway Serverless (sleep ~10m idle). Default on for podfly — not Postgres.
+  final bool serverless;
 
   Map<String, Object?> toMap() => {
         'project': project,
@@ -119,6 +122,7 @@ class RailwayConfig {
         if (publicHost != null) 'public_host': publicHost,
         if (webPublicHost != null) 'web_public_host': webPublicHost,
         'enable_cdn': enableCdn,
+        'serverless': serverless,
       };
 
   String? get publicUrl {
@@ -438,6 +442,8 @@ class PodflyConfig {
       buf.writeln('  web_port: ${r.webPort}');
       buf.writeln('  config: ${r.config}');
       buf.writeln('  enable_cdn: ${r.enableCdn}');
+      buf.writeln(
+          '  serverless: ${r.serverless}  # sleep API/web when idle (~10m)');
       if (r.publicHost != null) {
         buf.writeln('  public_host: ${r.publicHost}');
       }
@@ -585,6 +591,7 @@ class PodflyConfig {
         publicHost: m['public_host']?.toString(),
         webPublicHost: m['web_public_host']?.toString(),
         enableCdn: m['enable_cdn'] != false,
+        serverless: m['serverless'] != false,
       );
     }
 
