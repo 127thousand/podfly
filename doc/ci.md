@@ -61,7 +61,7 @@ echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"   # GitHub Actions
 Pin a version when you want reproducibility:
 
 ```bash
-dart pub global activate podfly 0.2.0
+dart pub global activate podfly 0.2.1
 ```
 
 ---
@@ -129,7 +129,7 @@ jobs:
 
       - name: Install podfly
         run: |
-          dart pub global activate podfly 0.2.0
+          dart pub global activate podfly 0.2.1
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
 
       - name: Deploy

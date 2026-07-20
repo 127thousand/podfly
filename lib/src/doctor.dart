@@ -28,9 +28,13 @@ class Doctor {
       Platform.environment['CI'] == 'true';
 
   /// Returns true if all required checks passed.
+  ///
+  /// [requireFlutter]: when false, skip the hard Flutter requirement (API-only
+  /// deploys / CI without a Flutter SDK). Defaults to true for baseline.
   Future<bool> run({
     required DoctorScope scope,
     PodflyConfig? config,
+    bool? requireFlutter,
   }) async {
     ensureHostsRegistered();
     log.step(scope == DoctorScope.baseline
@@ -40,12 +44,17 @@ class Doctor {
     var ok = true;
 
     if (scope == DoctorScope.baseline) {
-      ok = await _needBinary(
-            'flutter',
-            installHint:
-                'https://docs.flutter.dev/get-started/install (no safe one-liner)',
-          ) &&
-          ok;
+      final needFlutter = requireFlutter ?? true;
+      if (needFlutter) {
+        ok = await _needBinary(
+              'flutter',
+              installHint:
+                  'https://docs.flutter.dev/get-started/install (no safe one-liner)',
+            ) &&
+            ok;
+      } else {
+        log.detail('flutter optional (API-only / web.enabled: false)');
+      }
       if (config != null) {
         ok = await _needHost(config.host) && ok;
       } else {
@@ -58,6 +67,15 @@ class Doctor {
 
       // Cloudflare Pages only when host does not deploy web natively.
       final adapter = HostRegistry.require(config.host);
+      final needFlutter = requireFlutter ?? config.web.enabled;
+      if (needFlutter) {
+        ok = await _needBinary(
+              'flutter',
+              installHint:
+                  'https://docs.flutter.dev/get-started/install (no safe one-liner)',
+            ) &&
+            ok;
+      }
       if (config.web.enabled &&
           config.mode == DeployMode.split &&
           !adapter.deploysWebNatively) {
@@ -70,7 +88,7 @@ class Doctor {
       if (!adapter.canDeploy) {
         log.warn(
             '${adapter.label} is on the roadmap — deploy will not run yet. '
-            'Use host: fly or host: railway for production deploys today.');
+            'Use host: fly, railway, or digitalocean for production deploys today.');
       }
       _configWarnings(config);
     }

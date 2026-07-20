@@ -11,7 +11,20 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- (nothing yet)
+
+---
+
+## [0.2.1] — 2026-07-20
+
+### Added
+
 - **Example CI:** `example/mobile_api_only` GitHub Actions workflows for Fly API-only deploy on every push to `main` (+ PR dry-run)
+- Live demo repo: [127thousand/podfly-api-only-demo](https://github.com/127thousand/podfly-api-only-demo)
+
+### Fixed
+
+- Doctor no longer hard-requires **Flutter** for API-only deploys (`--api` or `web.enabled: false`) — unblocks GitHub Actions without Flutter SDK
 
 ---
 

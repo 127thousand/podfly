@@ -235,17 +235,32 @@ Future<int> _deploy(ArgResults g) async {
   log.step('podfly deploy${dry ? ' (dry-run)' : ''}');
   log.detail('root: $root');
 
-  if (!await doctor.run(scope: DoctorScope.baseline)) return 1;
-
   final explicit = _opt(g, 'config');
   var cfgPath = explicit ?? await PodflyConfig.findConfigPath(root);
   final forceInit = _flag(g, 'init');
   final yes = _flag(g, 'yes');
+  final apiOnlyFlag = _flag(g, 'api');
 
   late PodflyConfig config;
   final existingPath = cfgPath;
   final configExists =
       existingPath != null && await File(existingPath).exists();
+
+  // Peek config so API-only deploys can skip the Flutter SDK requirement.
+  PodflyConfig? peekConfig;
+  if (configExists) {
+    try {
+      peekConfig = await PodflyConfig.load(existingPath);
+    } catch (_) {/* init/overwrite path may fix */}
+  }
+  final needFlutter = !apiOnlyFlag &&
+      (peekConfig == null || peekConfig.web.enabled);
+  if (!await doctor.run(
+    scope: DoctorScope.baseline,
+    requireFlutter: needFlutter,
+  )) {
+    return 1;
+  }
 
   final hostOpt = _opt(g, 'host');
   final preferredHost =
@@ -323,10 +338,6 @@ Future<int> _deploy(ArgResults g) async {
     );
   }
 
-  if (!await doctor.run(scope: DoctorScope.configAware, config: config)) {
-    return 1;
-  }
-
   var doApi = true;
   var doWeb = config.web.enabled;
   // Explicit flags override config.
@@ -338,6 +349,14 @@ Future<int> _deploy(ArgResults g) async {
   if (_flag(g, 'web') && _flag(g, 'api')) {
     doWeb = true;
     doApi = true;
+  }
+
+  if (!await doctor.run(
+    scope: DoctorScope.configAware,
+    config: config,
+    requireFlutter: doWeb,
+  )) {
+    return 1;
   }
 
   if (!doWeb) {

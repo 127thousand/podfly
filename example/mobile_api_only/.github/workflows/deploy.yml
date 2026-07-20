@@ -48,7 +48,7 @@ jobs:
 
       - name: Install podfly
         run: |
-          dart pub global activate podfly 0.2.0
+          dart pub global activate podfly 0.2.1
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
           podfly --help | head -5
 
