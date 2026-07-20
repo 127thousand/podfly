@@ -47,6 +47,12 @@ class SmokeRunner {
           ? (doWeb.endsWith('/') ? doWeb : '$doWeb/')
           : 'https://$doWeb/';
     }
+    final renderWeb = config.render?.webPublicHost;
+    if (renderWeb != null && renderWeb.isNotEmpty) {
+      return renderWeb.startsWith('http')
+          ? (renderWeb.endsWith('/') ? renderWeb : '$renderWeb/')
+          : 'https://$renderWeb/';
+    }
     if (config.mode == DeployMode.split && config.cloudflare != null) {
       return 'https://${config.cloudflare!.project}.pages.dev/';
     }

@@ -15,6 +15,20 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.1] — 2026-07-20
+
+### Added
+
+- **Render static sites** for Flutter web (`deployWeb`): stage `site/`, git push, `static_site` service
+- Example: [podfly_examples/render/api_and_static](https://github.com/127thousand/podfly_examples/tree/main/render/api_and_static)
+
+### Fixed
+
+- Resolve Render service URL by service id (avoid picking another `*.onrender.com`)
+- Smoke `web:` uses `render.web_public_host` when set
+
+---
+
 ## [0.3.0] — 2026-07-20
 
 ### Added

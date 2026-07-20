@@ -49,6 +49,9 @@ class RenderHost extends HostAdapter {
   bool get canDeploy => true;
 
   @override
+  bool get deploysWebNatively => true;
+
+  @override
   AppHost get appHost => AppHost.render;
 
   @override
@@ -116,6 +119,336 @@ class RenderHost extends HostAdapter {
         'Render free Postgres expires ~30 days; use a paid plan for production',
       );
     }
+  }
+
+  @override
+  Future<String?> ensureApiPublicHost(DeployContext ctx) async {
+    final r = ctx.config.render;
+    if (r?.publicHost != null && r!.publicHost!.isNotEmpty) {
+      return r.publicHost;
+    }
+    final name = sanitizeFlyAppName(r?.service ?? ctx.config.name);
+    return '$name.onrender.com';
+  }
+
+  @override
+  Future<HostDeployResult?> deployWeb(DeployContext ctx) async {
+    final config = ctx.config;
+    final runner = ctx.runner;
+    final log = ctx.log;
+    final rcfg = config.render ??
+        RenderConfig(service: sanitizeFlyAppName(config.name));
+    final webName = sanitizeFlyAppName(rcfg.webServiceName);
+    log.step('Deploy Render static site ($webName)');
+
+    final render = await runner.resolve('render');
+    if (render == null) throw StateError('render CLI not found');
+
+    final repo = rcfg.repo?.trim();
+    if (repo == null || repo.isEmpty) {
+      throw StateError('render.repo is required for static site deploys');
+    }
+
+    // Stage Flutter build → site/ (Render static sites deploy from git).
+    await _stageStaticSite(ctx, rcfg);
+    await _gitCommitAndPushSite(ctx, rcfg);
+
+    final serviceId = await _ensureStaticSite(
+      ctx,
+      render: render,
+      rcfg: rcfg,
+      webName: webName,
+      repo: repo,
+    );
+
+    log.detail('trigger static deploy $serviceId');
+    if (!runner.dryRun) {
+      final dep = await runner.run(
+        render,
+        [
+          'deploys',
+          'create',
+          serviceId,
+          '--wait',
+          '--confirm',
+          '-o',
+          'json',
+        ],
+        allowDryRun: false,
+      );
+      if (!dep.ok) {
+        log.warn(
+          'render deploys create (static) exited ${dep.exitCode} '
+          '— check Dashboard',
+        );
+      }
+    } else {
+      log.dry('$render deploys create $serviceId --wait');
+    }
+
+    final publicHost = await _resolveServiceHost(
+      runner,
+      render,
+      serviceId,
+      webName,
+    );
+    await _persistWebHost(ctx, publicHost, serviceId);
+    final url = 'https://$publicHost';
+    log.ok('Render static: $url');
+    return HostDeployResult(publicHost: publicHost, displayUrl: url);
+  }
+
+  /// Copy `flutter/build/web` → `{siteDir}/` under the monorepo leaf.
+  Future<void> _stageStaticSite(DeployContext ctx, RenderConfig rcfg) async {
+    final log = ctx.log;
+    final src = p.join(ctx.config.flutterPath, 'build', 'web');
+    final dest = p.join(ctx.config.root, rcfg.siteDir);
+    if (ctx.runner.dryRun) {
+      log.dry('stage $src → $dest');
+      return;
+    }
+    final srcDir = Directory(src);
+    if (!await srcDir.exists()) {
+      throw StateError(
+        'Missing Flutter web build at $src — flutter build web should run first',
+      );
+    }
+    final destDir = Directory(dest);
+    if (await destDir.exists()) {
+      await destDir.delete(recursive: true);
+    }
+    await destDir.create(recursive: true);
+    // Prefer rsync; fall back to recursive copy.
+    final rsync = await ctx.runner.resolve('rsync');
+    if (rsync != null) {
+      final r = await ctx.runner.run(
+        rsync,
+        ['-a', '--delete', '$src/', '$dest/'],
+        allowDryRun: false,
+      );
+      if (!r.ok) {
+        throw StateError('rsync site failed (exit ${r.exitCode})');
+      }
+    } else {
+      await for (final entity in srcDir.list(recursive: true)) {
+        final rel = p.relative(entity.path, from: src);
+        final target = p.join(dest, rel);
+        if (entity is Directory) {
+          await Directory(target).create(recursive: true);
+        } else if (entity is File) {
+          await entity.copy(target);
+        }
+      }
+    }
+    // SPA fallback for Flutter client routes (Render serves _redirects on static).
+    final redirects = File(p.join(dest, '_redirects'));
+    if (!await redirects.exists()) {
+      await redirects.writeAsString('/*    /index.html   200\n');
+    }
+    log.ok('staged static site → ${rcfg.siteDir}/');
+  }
+
+  /// Commit + push `site/` so Render's git-based static deploy can see it.
+  Future<void> _gitCommitAndPushSite(
+    DeployContext ctx,
+    RenderConfig rcfg,
+  ) async {
+    final log = ctx.log;
+    final runner = ctx.runner;
+    if (runner.dryRun) {
+      log.dry('git add ${rcfg.siteDir} && commit && push');
+      return;
+    }
+    // Find git root (podfly_examples monorepo, not necessarily leaf).
+    var dir = Directory(ctx.config.root);
+    String? gitRoot;
+    while (true) {
+      if (await Directory(p.join(dir.path, '.git')).exists()) {
+        gitRoot = dir.path;
+        break;
+      }
+      final parent = dir.parent;
+      if (parent.path == dir.path) break;
+      dir = parent;
+    }
+    if (gitRoot == null) {
+      log.warn(
+        'No .git above ${ctx.config.root} — commit/push ${rcfg.siteDir}/ '
+        'yourself so Render can deploy the static site',
+      );
+      return;
+    }
+
+    final siteRel = p.relative(
+      p.join(ctx.config.root, rcfg.siteDir),
+      from: gitRoot,
+    );
+    await runner.run(
+      'git',
+      ['add', '-A', siteRel],
+      workingDirectory: gitRoot,
+      allowDryRun: false,
+    );
+    final st = await runner.runCapture(
+      'git',
+      ['status', '--porcelain', siteRel],
+      workingDirectory: gitRoot,
+      allowDryRun: false,
+    );
+    if (st.stdout.trim().isEmpty) {
+      log.detail('site/ already committed — push if needed');
+    } else {
+      final commit = await runner.run(
+        'git',
+        [
+          '-c',
+          'user.email=podfly@local',
+          '-c',
+          'user.name=podfly',
+          'commit',
+          '-m',
+          'chore: podfly render static site publish (${rcfg.siteDir})',
+        ],
+        workingDirectory: gitRoot,
+        allowDryRun: false,
+      );
+      if (!commit.ok) {
+        log.warn('git commit site/ failed — push manually if needed');
+        return;
+      }
+      log.ok('committed $siteRel');
+    }
+    final push = await runner.run(
+      'git',
+      ['push', 'origin', 'HEAD'],
+      workingDirectory: gitRoot,
+      allowDryRun: false,
+    );
+    if (!push.ok) {
+      log.warn(
+        'git push failed — push $siteRel to origin so Render can build',
+      );
+    } else {
+      log.ok('pushed static site to origin');
+    }
+  }
+
+  Future<String> _ensureStaticSite(
+    DeployContext ctx, {
+    required String render,
+    required RenderConfig rcfg,
+    required String webName,
+    required String repo,
+  }) async {
+    final runner = ctx.runner;
+    final log = ctx.log;
+    if (rcfg.webServiceId != null && rcfg.webServiceId!.isNotEmpty) {
+      return rcfg.webServiceId!;
+    }
+    final existing = await _findServiceId(runner, render, webName);
+    if (existing != null) {
+      log.detail('Render static site $webName exists ($existing)');
+      return existing;
+    }
+    if (runner.dryRun) {
+      log.dry(
+        '$render services create --type static_site --name $webName …',
+      );
+      return 'srv-static-dry-run';
+    }
+    final args = <String>[
+      'services',
+      'create',
+      '--name',
+      webName,
+      '--type',
+      'static_site',
+      '--repo',
+      repo,
+      '--branch',
+      rcfg.branch,
+      '--build-command',
+      'true',
+      '--publish-directory',
+      rcfg.siteDir,
+      '--confirm',
+      '-o',
+      'json',
+    ];
+    if (rcfg.rootDir != null && rcfg.rootDir!.isNotEmpty) {
+      args.addAll(['--root-directory', rcfg.rootDir!]);
+    }
+    log.detail('creating Render static site $webName');
+    final create = await runner.runCapture(
+      render,
+      args,
+      allowDryRun: false,
+    );
+    if (!create.ok) {
+      throw StateError(
+        'render services create (static_site) failed '
+        '(exit ${create.exitCode}): '
+        '${create.stderr.isNotEmpty ? create.stderr : create.stdout}',
+      );
+    }
+    final id = _extractServiceId(create.stdout) ??
+        await _findServiceId(runner, render, webName);
+    if (id == null) {
+      throw StateError('static site created but id not parsed');
+    }
+    log.ok('created Render static site $webName ($id)');
+    await _persistWebServiceId(ctx, id);
+    return id;
+  }
+
+  Future<void> _persistWebServiceId(DeployContext ctx, String id) async {
+    final cfg = ctx.config;
+    final r = cfg.render;
+    if (r == null) return;
+    final updated = PodflyConfig(
+      root: cfg.root,
+      host: cfg.host,
+      mode: cfg.mode,
+      name: cfg.name,
+      server: cfg.server,
+      flutter: cfg.flutter,
+      fly: cfg.fly,
+      railway: cfg.railway,
+      digitalOcean: cfg.digitalOcean,
+      render: r.copyWith(webServiceId: id),
+      cloudflare: cfg.cloudflare,
+      database: cfg.database,
+      web: cfg.web,
+      smoke: cfg.smoke,
+    );
+    await updated.save();
+  }
+
+  Future<void> _persistWebHost(
+    DeployContext ctx,
+    String host,
+    String serviceId,
+  ) async {
+    final cfg = ctx.config;
+    final r = cfg.render;
+    if (r == null) return;
+    final updated = PodflyConfig(
+      root: cfg.root,
+      host: cfg.host,
+      mode: cfg.mode,
+      name: cfg.name,
+      server: cfg.server,
+      flutter: cfg.flutter,
+      fly: cfg.fly,
+      railway: cfg.railway,
+      digitalOcean: cfg.digitalOcean,
+      render: r.copyWith(webServiceId: serviceId, webPublicHost: host),
+      cloudflare: cfg.cloudflare,
+      database: cfg.database,
+      web: cfg.web,
+      smoke: cfg.smoke,
+    );
+    await updated.save();
   }
 
   @override
@@ -436,22 +769,34 @@ class RenderHost extends HostAdapter {
     String serviceName,
   ) async {
     if (runner.dryRun) return '$serviceName.onrender.com';
-    final get = await runner.runCapture(
+    // Prefer list JSON and match by id — bare `services <id>` is unreliable
+    // and scanning all services can pick the wrong onrender.com host.
+    final list = await runner.runCapture(
       render,
-      ['services', serviceId, '-o', 'json', '--confirm'],
+      ['services', '-o', 'json', '--confirm'],
       allowDryRun: false,
     );
-    // CLI may use `services` list only — try parse or fallback.
-    final text = get.stdout + get.stderr;
-    final urlMatch = RegExp(
-      r'https?://([a-zA-Z0-9.-]+\.onrender\.com)',
-    ).firstMatch(text);
-    if (urlMatch != null) return urlMatch.group(1)!;
-    try {
-      final decoded = jsonDecode(get.stdout);
-      final host = _findOnRenderHost(decoded);
-      if (host != null) return host;
-    } catch (_) {/* fallback */}
+    if (list.ok) {
+      try {
+        final decoded = jsonDecode(list.stdout);
+        for (final item in _asList(decoded)) {
+          if (item is! Map) continue;
+          final nested = item['service'] ?? item;
+          if (nested is! Map) continue;
+          if (nested['id']?.toString() != serviceId) continue;
+          final details = nested['serviceDetails'];
+          if (details is Map && details['url'] != null) {
+            final u = details['url'].toString()
+                .replaceFirst(RegExp(r'^https?://'), '');
+            return u.split('/').first;
+          }
+          final name = nested['name']?.toString();
+          if (name != null && name.isNotEmpty) {
+            return '$name.onrender.com';
+          }
+        }
+      } catch (_) {/* fall through */}
+    }
     return '$serviceName.onrender.com';
   }
 
@@ -496,18 +841,7 @@ class RenderHost extends HostAdapter {
       fly: cfg.fly,
       railway: cfg.railway,
       digitalOcean: cfg.digitalOcean,
-      render: RenderConfig(
-        service: r.service,
-        region: r.region,
-        plan: r.plan,
-        branch: r.branch,
-        repo: r.repo,
-        rootDir: r.rootDir,
-        dockerfilePath: r.dockerfilePath,
-        blueprint: r.blueprint,
-        serviceId: id,
-        publicHost: r.publicHost,
-      ),
+      render: r.copyWith(serviceId: id),
       cloudflare: cfg.cloudflare,
       database: cfg.database,
       web: cfg.web,
@@ -535,18 +869,7 @@ class RenderHost extends HostAdapter {
       fly: cfg.fly,
       railway: cfg.railway,
       digitalOcean: cfg.digitalOcean,
-      render: RenderConfig(
-        service: r.service,
-        region: r.region,
-        plan: r.plan,
-        branch: r.branch,
-        repo: r.repo,
-        rootDir: r.rootDir,
-        dockerfilePath: r.dockerfilePath,
-        blueprint: r.blueprint,
-        serviceId: serviceId,
-        publicHost: host,
-      ),
+      render: r.copyWith(serviceId: serviceId, publicHost: host),
       cloudflare: cfg.cloudflare,
       database: cfg.database,
       web: WebConfig(
@@ -563,4 +886,5 @@ class RenderHost extends HostAdapter {
     await updated.save();
   }
 }
+
 

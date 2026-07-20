@@ -309,6 +309,10 @@ class RenderConfig {
     this.blueprint = 'render.yaml',
     this.serviceId,
     this.publicHost,
+    this.webService,
+    this.webServiceId,
+    this.webPublicHost,
+    this.siteDir = 'site',
   });
 
   final String service;
@@ -325,6 +329,19 @@ class RenderConfig {
   final String blueprint;
   final String? serviceId;
   final String? publicHost;
+  /// Static site service name (Flutter web). Defaults to `{service}-web`.
+  final String? webService;
+  final String? webServiceId;
+  final String? webPublicHost;
+  /// Directory under monorepo leaf with published Flutter web (git-synced).
+  final String siteDir;
+
+  String get webServiceName =>
+      webService ?? '${sanitizeLike(service)}-web';
+
+  /// DNS-friendly name helper without importing fly_name (hyphens).
+  static String sanitizeLike(String s) =>
+      s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]+'), '-');
 
   Map<String, Object?> toMap() => {
         'service': service,
@@ -337,7 +354,44 @@ class RenderConfig {
         'blueprint': blueprint,
         if (serviceId != null) 'service_id': serviceId,
         if (publicHost != null) 'public_host': publicHost,
+        if (webService != null) 'web_service': webService,
+        if (webServiceId != null) 'web_service_id': webServiceId,
+        if (webPublicHost != null) 'web_public_host': webPublicHost,
+        'site_dir': siteDir,
       };
+
+  RenderConfig copyWith({
+    String? service,
+    String? region,
+    String? plan,
+    String? branch,
+    String? repo,
+    String? rootDir,
+    String? dockerfilePath,
+    String? blueprint,
+    String? serviceId,
+    String? publicHost,
+    String? webService,
+    String? webServiceId,
+    String? webPublicHost,
+    String? siteDir,
+  }) =>
+      RenderConfig(
+        service: service ?? this.service,
+        region: region ?? this.region,
+        plan: plan ?? this.plan,
+        branch: branch ?? this.branch,
+        repo: repo ?? this.repo,
+        rootDir: rootDir ?? this.rootDir,
+        dockerfilePath: dockerfilePath ?? this.dockerfilePath,
+        blueprint: blueprint ?? this.blueprint,
+        serviceId: serviceId ?? this.serviceId,
+        publicHost: publicHost ?? this.publicHost,
+        webService: webService ?? this.webService,
+        webServiceId: webServiceId ?? this.webServiceId,
+        webPublicHost: webPublicHost ?? this.webPublicHost,
+        siteDir: siteDir ?? this.siteDir,
+      );
 }
 
 /// DigitalOcean Managed Postgres (DBaaS) for App Platform apps.
@@ -709,6 +763,16 @@ class PodflyConfig {
       if (r.publicHost != null) {
         buf.writeln('  public_host: ${r.publicHost}');
       }
+      if (r.webService != null) {
+        buf.writeln('  web_service: ${r.webService}');
+      }
+      if (r.webServiceId != null) {
+        buf.writeln('  web_service_id: ${r.webServiceId}');
+      }
+      if (r.webPublicHost != null) {
+        buf.writeln('  web_public_host: ${r.webPublicHost}');
+      }
+      buf.writeln('  site_dir: ${r.siteDir}');
     }
     // Cloudflare only when UI is on Pages (not Railway / DO / Render native API)
     if (cloudflare != null &&
@@ -916,6 +980,10 @@ class PodflyConfig {
         blueprint: m['blueprint']?.toString() ?? 'render.yaml',
         serviceId: m['service_id']?.toString(),
         publicHost: m['public_host']?.toString(),
+        webService: m['web_service']?.toString(),
+        webServiceId: m['web_service_id']?.toString(),
+        webPublicHost: m['web_public_host']?.toString(),
+        siteDir: m['site_dir']?.toString() ?? 'site',
       );
     }
 
