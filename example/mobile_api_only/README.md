@@ -19,6 +19,17 @@ Then Flutter `web/` / desktop were removed so the surface is mobile/API-only.
 
 ---
 
+
+## Live demo repo
+
+A public copy of this example is wired for CI:
+
+- **GitHub:** https://github.com/127thousand/podfly-api-only-demo  
+- **Fly app:** `podfly-api-only-demo` → https://podfly-api-only-demo.fly.dev/  
+- **Secret:** `FLY_API_TOKEN` (Fly org deploy token, set via `gh secret set`)
+
+Every push to `main` runs `.github/workflows/deploy.yml`.
+
 ## Layout
 
 ```text

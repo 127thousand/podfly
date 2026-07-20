@@ -14,7 +14,7 @@ flutter: mobile_api_only_flutter
 
 fly:
   # Must be unique across all of Fly.io (DNS-style, hyphens only).
-  app: mobile-api-only
+  app: podfly-api-only-demo
   region: iad
   config: fly.toml
   scale_to_zero: true
@@ -26,7 +26,7 @@ database:
 
 web:
   enabled: false
-  api_url: https://mobile-api-only.fly.dev/
+  api_url: https://podfly-api-only-demo.fly.dev/
 
 smoke:
   api:

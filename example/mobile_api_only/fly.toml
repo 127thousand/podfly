@@ -1,7 +1,7 @@
 # Fly.io — Serverpod API only (scale to zero).
 # Change `app` to a unique name (must match podfly.yaml fly.app).
 
-app = "mobile-api-only"
+app = "podfly-api-only-demo"
 primary_region = "iad"
 
 [build]
