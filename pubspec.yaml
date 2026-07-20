@@ -1,10 +1,20 @@
 name: podfly
 description: >
-  Orchestrate Serverpod deploys on existing clouds via their CLIs (fly, wrangler,
-  neonctl, …). Encodes config quirks; not a host. Fly + Pages + Neon today.
+  Deploy Serverpod apps on Fly.io, Railway, and more via existing cloud CLIs.
+  Thin orchestrator (not a host): podfly.yaml, Dockerfile/fly/railway quirks,
+  Flutter web packaging, Postgres wiring, smoke checks.
 version: 0.1.0
 repository: https://github.com/127thousand/podfly
 homepage: https://github.com/127thousand/podfly
+issue_tracker: https://github.com/127thousand/podfly/issues
+documentation: https://github.com/127thousand/podfly/blob/main/doc/README.md
+
+topics:
+  - serverpod
+  - deploy
+  - cli
+  - fly
+  - railway
 
 environment:
   sdk: ^3.5.0

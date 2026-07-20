@@ -100,6 +100,18 @@ class FlyHost extends HostAdapter {
   }
 
   @override
+  Future<String?> ensureApiApp(DeployContext ctx) async {
+    final preferred = sanitizeFlyAppName(ctx.config.fly.app);
+    if (preferred != ctx.config.fly.app) {
+      ctx.log.detail(
+          'Fly app name sanitized: ${ctx.config.fly.app} → $preferred');
+    }
+    final fly = await ctx.runner.resolve('fly', ['flyctl']);
+    if (fly == null) throw StateError('fly not found');
+    return _ensureFlyApp(ctx, fly, preferred);
+  }
+
+  @override
   Future<HostDeployResult> deployApi(DeployContext ctx) async {
     final config = ctx.config;
     final runner = ctx.runner;

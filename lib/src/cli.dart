@@ -118,8 +118,11 @@ Deploy options:
   --config      Path to podfly.yaml
 
 Doctor only requires the CLI for the chosen host (not always Fly).
-Supported deploy today: Fly + Railway (API), Cloudflare Pages (UI), Neon / Fly PG / SQLite / none.
+Supported deploy today: Fly + Railway (API), Cloudflare Pages (UI),
+Neon / Fly PG / Railway PG / SQLite / none.
 Dockerfile: prefer Serverpod's *_server/Dockerfile (podfly does not invent hosts).
+
+Install: dart pub global activate podfly
 
 Examples:
   serverpod create my_app --mini -f && cd my_app
@@ -130,7 +133,7 @@ Examples:
   podfly deploy --api --yes --smoke          # mobile / API-only
   podfly doctor
 
-Docs: https://github.com/127thousand/podfly (README, AGENTS.md, llms.txt)
+Docs: https://pub.dev/packages/podfly · https://github.com/127thousand/podfly
 ''');
 }
 

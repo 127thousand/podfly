@@ -61,6 +61,13 @@ abstract class HostAdapter {
   /// so `SERVER_URL` / `api_url` can be real. Default: no-op.
   Future<String?> ensureApiPublicHost(DeployContext ctx) async => null;
 
+  /// Ensure the API **app/project shell** exists before DB attach/provision.
+  ///
+  /// Fly needs this so `fly postgres attach -a <api>` has a target app.
+  /// Returns the resolved app name when known (may differ if name was taken).
+  /// Default: no-op.
+  Future<String?> ensureApiApp(DeployContext ctx) async => null;
+
   /// Deploy the API container. May update podfly.yaml / production.yaml.
   Future<HostDeployResult> deployApi(DeployContext ctx);
 

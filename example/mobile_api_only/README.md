@@ -14,7 +14,7 @@ Server Dockerfile is the one **Serverpod created** (Dart multi-stage build).
 ## Podfly expectation
 
 ```bash
-cd examples/mobile_api_only
+cd example/mobile_api_only
 podfly deploy --yes --dry-run
 # → web.enabled: false, only fly deploy (no Pages / no flutter build web)
 ```

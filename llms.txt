@@ -1,31 +1,33 @@
 # podfly
 
 > Deploy Serverpod on existing cloud infrastructure via each provider’s CLI.
-> Not a host — orchestrates fly, wrangler, neonctl, etc., and encodes config quirks.
+> Not a host — orchestrates fly, railway, wrangler, neonctl, etc., and encodes config quirks.
 
 ## Start here
 
-- [README](README.md) — mission, provider roadmap, quick start
+- [README](README.md) — mission, provider roadmap, install from pub.dev, quick start
 - [AGENTS.md](AGENTS.md) — agent rules and decision tree
-- [docs/guide.md](docs/guide.md) — commands, flags, automation, troubleshooting
-- [docs/podfly.yaml.md](docs/podfly.yaml.md) — full config reference
+- [doc/guide.md](doc/guide.md) — commands, flags, automation, troubleshooting
+- [doc/ci.md](doc/ci.md) — GitHub Actions / CI tokens and workflows
+- [doc/podfly.yaml.md](doc/podfly.yaml.md) — full config reference
 
 ## Core docs
 
-- [docs/caching.md](docs/caching.md) — Flutter web WASM, service worker, Cache-Control
-- [docs/database.md](docs/database.md) — none / sqlite / fly_postgres / neon + detection
-- [docs/README.md](docs/README.md) — docs index
-- [docs/specs/2026-07-18-podfly-design.md](docs/specs/2026-07-18-podfly-design.md) — design history
+- [doc/caching.md](doc/caching.md) — Flutter web WASM, service worker, Cache-Control
+- [doc/database.md](doc/database.md) — none / sqlite / fly_postgres / railway_postgres / neon
+- [doc/README.md](doc/README.md) — docs index
+- [CHANGELOG.md](CHANGELOG.md) — releases
+- [doc/specs/](doc/specs/) — design history
 
 ## Examples
 
-- [examples/mobile_api_only](examples/mobile_api_only) — Serverpod mini, android+ios only, API-only deploy
+- [example/mobile_api_only](example/mobile_api_only) — Serverpod mini, android+ios only, API-only deploy
 
 ## Default commands (copy-paste)
 
 ```bash
-# Install
-dart pub global activate --source git https://github.com/127thousand/podfly.git
+# Install (pub.dev)
+dart pub global activate podfly
 
 # After serverpod create (or in existing Serverpod monorepo)
 podfly deploy --yes --smoke
@@ -35,6 +37,9 @@ podfly deploy --yes --dry-run --no-login
 
 # API only (mobile clients)
 podfly deploy --api --yes --smoke
+
+# Railway
+podfly deploy --host railway --api --yes --smoke
 
 # Checks
 podfly doctor
@@ -47,8 +52,8 @@ podfly smoke
 |-------|-----------|
 | API **deploy** | Fly.io (`host: fly`), Railway (`host: railway`) |
 | API **host choice** | Wizard: fly, railway, render, cloud_run, aws, azure, digitalocean |
-| UI | Cloudflare Pages (`wrangler`) when `mode: split` + `web.enabled` |
-| DB | none, sqlite (+ volume, Fly), fly_postgres (Fly), neon |
+| UI | Cloudflare Pages (`wrangler`) when `mode: split` + `web.enabled`; Railway static nginx when `host: railway` |
+| DB | none, sqlite (+ volume, Fly), fly_postgres, railway_postgres, neon |
 
 Planned deploys: Render, Cloud Run, AWS, Azure, DigitalOcean (+ matching Postgres).
 
@@ -61,9 +66,11 @@ Planned deploys: Render, Cloud Run, AWS, Azure, DigitalOcean (+ matching Postgre
 5. Podfly auto-creates Fly apps and sanitizes names (`_` → `-`). Railway: project + service + domain + `railway up`.
 6. **Do not require Fly CLI** when `host:` is railway/render/etc. — only that host’s CLI (`~/.railway/bin` is searched).
 7. Deploy implemented for **fly** and **railway**; other hosts pass doctor only until implemented.
+8. Fly Postgres: ensure API app **before** attach; use attach `DATABASE_URL` (sidecar), not superuser placeholders.
 
 ## Package
 
 - Binary: `podfly`
+- pub.dev: https://pub.dev/packages/podfly
 - Repo: https://github.com/127thousand/podfly
-- Skill: `.grok/skills/podfly/SKILL.md` (also installable under `~/.grok/skills/podfly/`)
+- Skill: `.grok/skills/podfly/SKILL.md`

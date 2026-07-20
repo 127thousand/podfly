@@ -38,9 +38,9 @@ Out of respect: **[Serverpod Cloud](https://serverpod.dev/cloud)** is the offici
 Install podfly:
 
 ```bash
-dart pub global activate --source git https://github.com/127thousand/podfly.git
-# or path to local clone
+dart pub global activate podfly
 export PATH="$PATH:$HOME/.pub-cache/bin"
+# contributors: --source git https://github.com/127thousand/podfly.git
 ```
 
 ## Default actions
@@ -116,5 +116,5 @@ podfly smoke
 
 If the podfly repo is available, prefer:
 
-- `AGENTS.md`, `llms.txt`, `README.md`
-- `docs/guide.md`, `docs/podfly.yaml.md`, `docs/caching.md`, `docs/database.md`
+- `AGENTS.md`, `llms.txt`, `README.md`, `CHANGELOG.md`
+- `doc/guide.md`, `doc/ci.md`, `doc/podfly.yaml.md`, `doc/caching.md`, `doc/database.md`

@@ -1,0 +1,24 @@
+# Keep the published package small and free of local/agent junk.
+.dart_tool/
+.git/
+.github/
+.grok/
+.idea/
+.vscode/
+*.iml
+.DS_Store
+*.log
+.podfly/
+CODE_REVIEW.md
+
+# Example build artifacts / local agent noise (if present)
+**/build/
+**/.dart_tool/
+**/.packages
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/local.properties
+**/ephemeral/
+**/.agents/
+example/**/ios/Flutter/ephemeral/
+example/**/android/local.properties

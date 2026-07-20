@@ -384,7 +384,7 @@ podfly/
     fly.toml.api_only
     fly.toml.with_volume
   test/
-  docs/specs/
+  doc/specs/
   README.md
   pubspec.yaml
 ```

@@ -93,6 +93,10 @@ database:
     create: true
 ```
 
+On deploy, podfly ensures the API Fly app exists, creates/attaches Postgres, then writes
+`*_server/config/.podfly_fly_pg.json` from the attach `DATABASE_URL` (app user/db + password)
+and patches Serverpod `production.yaml` / `passwords.yaml`. Do not commit the sidecar.
+
 ### `database.neon`
 
 ```yaml

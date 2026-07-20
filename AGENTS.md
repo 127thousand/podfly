@@ -17,8 +17,9 @@ podfly deploy       →  CLIs + fly.toml + quirks (podfly owns this)
 ## Default user workflow
 
 ```bash
-# Once: flutter, flyctl, wrangler (if web), neonctl (if Neon provision)
-# Once: fly auth login  (and wrangler login if Pages)
+# Once: dart pub global activate podfly
+# Once: flutter, host CLI (fly or railway), wrangler (if Pages), neonctl (if Neon provision)
+# Once: fly auth login / railway login  (and wrangler login if Pages)
 
 serverpod create my_app --mini -f   # or existing Serverpod 4 project
 cd my_app
@@ -29,7 +30,8 @@ For agents (non-interactive):
 
 ```bash
 podfly deploy --yes --no-login --smoke
-# CI needs FLY_API_TOKEN; CLOUDFLARE_API_TOKEN if web/Pages
+# CI: FLY_API_TOKEN or RAILWAY_TOKEN; CLOUDFLARE_API_TOKEN if Pages
+# See doc/ci.md
 ```
 
 Dry-run first when unsure:
@@ -56,9 +58,11 @@ podfly deploy --yes --dry-run --no-login
 2. **Do not use `flutter build web --output` outside the package** as the only artifact path — assets can vanish. Podfly builds in-package then copies.
 3. **Do not register Flutter’s stub service worker** for production web — podfly bootstrap fixes this when `patch_bootstrap: true`.
 4. **Do not require Postgres** just because auth packages are scaffolded — template auth is a soft warning; only hard-require DB when tables/`requireLogin`/real auth use.
-5. **Fly app names:** underscores → hyphens (`my_app` → `my-app`). Podfly creates the app if missing.
+5. **Fly app names:** underscores → hyphens (`my_app` → `my-app`). Podfly creates the app if missing (**before** Postgres attach).
 6. **Supported API hosts today:** **`host: fly`** and **`host: railway`**. Wizard may select Render/GCP/AWS/Azure/DO for config + CLI checks; **deploy throws until implemented**.
 7. **Doctor does not require Fly** unless `host: fly` (or default). Railway needs the `railway` CLI (`~/.railway/bin` is searched). UI Pages still needs `wrangler` when `mode: split` and web enabled.
+8. **Fly Postgres:** parse attach `DATABASE_URL` into sidecar + `passwords.yaml` — never hardcode superuser `postgres` as the app user.
+9. **Install for users:** `dart pub global activate podfly` (pub.dev). Git/path activate is for contributors.
 
 ## Decision tree
 
@@ -74,14 +78,14 @@ Deploy Serverpod?
 ## Config
 
 - File: `podfly.yaml` at monorepo root (created by init).
-- Reference: `docs/podfly.yaml.md`
-- Full docs index: `docs/README.md`, `llms.txt`
+- Reference: `doc/podfly.yaml.md`
+- Full docs index: `doc/README.md`, `llms.txt`
 
 ## This repository
 
 - Package: Dart CLI (`bin/podfly.dart`, `lib/src/…`)
 - Templates: `templates/`
-- Example mobile API-only: `examples/mobile_api_only`
+- Example mobile API-only: `example/mobile_api_only`
 - Tests: `dart test` · analyze: `dart analyze`
 
 When changing deploy behavior, update README roadmap status and docs, then `dart test`.

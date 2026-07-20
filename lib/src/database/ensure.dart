@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:path/path.dart' as p;
 
 import '../config.dart';
 import '../hosts/hosts.dart';
 import '../log.dart';
 import '../process_runner.dart';
+import 'postgres_url.dart';
 import 'production_yaml.dart';
 
 /// Provision / ensure DB resources then patch production.yaml.
@@ -93,33 +97,193 @@ class DatabaseEnsure {
   Future<void> _flyPostgres() async {
     final pg = config.database.flyPostgres;
     if (pg == null) return;
-    final fly = await _flyBin();
-    if (pg.create) {
-      log.detail('ensure postgres app ${pg.app}');
-      // create is interactive sometimes — use --vm-size shared-cpu-1x if available
-      await runner.run(fly, [
-        'postgres',
-        'create',
-        '--name',
-        pg.app,
-        '--region',
-        config.fly.region,
-        '--vm-size',
-        'shared-cpu-1x',
-        '--volume-size',
-        '1',
-        '--initial-cluster-size',
-        '1',
-      ]);
+    ensureHostsRegistered();
+    if (config.host != AppHost.fly) {
+      log.warn(
+          'fly_postgres is only available when host: fly — skipping provision');
+      return;
     }
-    log.detail('attach ${pg.app} → ${config.fly.app}');
-    await runner.run(fly, [
-      'postgres',
-      'attach',
-      pg.app,
-      '-a',
-      config.fly.app,
-    ]);
+
+    final fly = await _flyBin();
+    final apiApp = config.fly.app;
+
+    // API app is created in Deployer.ensureApiApp before this runs. Re-check so
+    // attach never targets a missing app (e.g. ensure called standalone).
+    if (!runner.dryRun && !await _flyAppExists(fly, apiApp)) {
+      log.detail('creating Fly API app $apiApp (required before postgres attach)');
+      final create = await runner.run(
+        fly,
+        ['apps', 'create', apiApp],
+        allowDryRun: false,
+      );
+      if (!create.ok) {
+        throw StateError(
+          'fly apps create $apiApp failed before postgres attach '
+          '(exit ${create.exitCode}). Run podfly deploy so ensureApiApp runs first.',
+        );
+      }
+      log.ok('created Fly API app $apiApp');
+    } else if (runner.dryRun) {
+      log.dry('$fly apps create $apiApp  (if not exists, before attach)');
+    }
+
+    if (pg.create) {
+      if (await _flyAppExists(fly, pg.app)) {
+        log.detail('postgres app ${pg.app} already exists');
+      } else {
+        log.detail('ensure postgres app ${pg.app}');
+        final create = await runner.run(fly, [
+          'postgres',
+          'create',
+          '--name',
+          pg.app,
+          '--region',
+          config.fly.region,
+          '--vm-size',
+          'shared-cpu-1x',
+          '--volume-size',
+          '1',
+          '--initial-cluster-size',
+          '1',
+        ]);
+        if (!create.ok && !runner.dryRun) {
+          // Race / already exists after check
+          final err = (create.stderr + create.stdout).toLowerCase();
+          if (!err.contains('already') && !await _flyAppExists(fly, pg.app)) {
+            throw StateError(
+              'fly postgres create ${pg.app} failed (exit ${create.exitCode})',
+            );
+          }
+          log.detail('postgres create non-zero but app exists — continuing');
+        }
+      }
+    }
+
+    log.detail('attach ${pg.app} → $apiApp');
+    final creds = await _flyPostgresAttachAndResolve(fly, pg.app, apiApp);
+    if (creds != null) {
+      await _writePgSidecar(ProductionYamlPatcher.flyPgSidecarName, creds);
+      log.ok(
+        'Fly Postgres credentials for Serverpod '
+        '(${creds.user}@${creds.host}/${creds.database})',
+      );
+    } else if (!runner.dryRun) {
+      log.warn(
+        'could not resolve DATABASE_URL after attach — '
+        'Serverpod production.yaml may use placeholders. '
+        'Re-run attach or set passwords.yaml production.database manually.',
+      );
+    }
+  }
+
+  /// Attach cluster to API app and parse credentials (attach stdout or sidecar/ssh).
+  Future<PostgresUrl?> _flyPostgresAttachAndResolve(
+    String fly,
+    String pgApp,
+    String apiApp,
+  ) async {
+    if (runner.dryRun) {
+      log.dry(
+          '$fly postgres attach $pgApp -a $apiApp -y  → parse DATABASE_URL → sidecar');
+      return null;
+    }
+
+    final attach = await runner.runCapture(
+      fly,
+      ['postgres', 'attach', pgApp, '-a', apiApp, '-y'],
+      allowDryRun: false,
+    );
+    final out = attach.stdout + attach.stderr;
+    var creds = parsePostgresUrlFromText(out);
+    if (creds != null) return creds;
+
+    if (attach.ok) {
+      // Attach succeeded but no URL in output — try recovery paths.
+      log.detail('attach ok but no DATABASE_URL in output — resolving…');
+    } else {
+      final lower = out.toLowerCase();
+      final already = lower.contains('already') ||
+          lower.contains('has been attached') ||
+          lower.contains('attachment already') ||
+          (lower.contains('consumer app') && lower.contains('attached'));
+      if (!already) {
+        throw StateError(
+          'fly postgres attach $pgApp -a $apiApp failed '
+          '(exit ${attach.exitCode}): ${attach.stderr.isNotEmpty ? attach.stderr : attach.stdout}',
+        );
+      }
+      log.detail('postgres already attached to $apiApp — resolving credentials');
+    }
+
+    // Prefer prior podfly sidecar (survives re-deploys; secrets are not readable).
+    creds = await _readFlyPgSidecar();
+    if (creds != null) {
+      log.detail('using credentials from ${ProductionYamlPatcher.flyPgSidecarName}');
+      return creds;
+    }
+
+    // Running machine may expose DATABASE_URL in the env (post first deploy).
+    creds = await _flyPrintenvDatabaseUrl(fly, apiApp);
+    if (creds != null) return creds;
+
+    return null;
+  }
+
+  Future<PostgresUrl?> _readFlyPgSidecar() async {
+    final f = File(
+      p.join(config.serverPath, 'config', ProductionYamlPatcher.flyPgSidecarName),
+    );
+    if (!await f.exists()) return null;
+    try {
+      final map = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+      final host = map['host']?.toString();
+      final user = map['user']?.toString();
+      final password = map['password']?.toString();
+      final name = map['name']?.toString() ?? map['database']?.toString();
+      if (host == null || user == null || password == null || name == null) {
+        return null;
+      }
+      return PostgresUrl(
+        user: user,
+        password: password,
+        host: host,
+        port: map['port']?.toString() ?? '5432',
+        database: name,
+        requireSsl: map['requireSsl']?.toString() == 'true',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<PostgresUrl?> _flyPrintenvDatabaseUrl(String fly, String apiApp) async {
+    final r = await runner.runCapture(
+      fly,
+      ['ssh', 'console', '-a', apiApp, '-C', 'printenv DATABASE_URL'],
+      allowDryRun: false,
+    );
+    if (!r.ok) return null;
+    return parsePostgresUrlFromText(r.stdout + r.stderr);
+  }
+
+  Future<bool> _flyAppExists(String fly, String app) async {
+    if (runner.dryRun) return false;
+    final status = await runner.runCapture(
+      fly,
+      ['status', '-a', app],
+      allowDryRun: false,
+    );
+    final combined = (status.stdout + status.stderr).toLowerCase();
+    return status.ok &&
+        !combined.contains('could not find') &&
+        !combined.contains('not found') &&
+        !combined.contains('error');
+  }
+
+  Future<void> _writePgSidecar(String filename, PostgresUrl creds) async {
+    final sidecar = File(p.join(config.serverPath, 'config', filename));
+    await sidecar.parent.create(recursive: true);
+    await sidecar.writeAsString(jsonEncode(creds.toSidecarMap()));
   }
 
   Future<void> _neon() async {
@@ -233,13 +397,16 @@ class DatabaseEnsure {
     final creds = _parseRailwayPgVars(vars.stdout);
     if (creds != null) {
       // Sidecar for ProductionYamlPatcher (same ensure step).
-      final sidecar = File(
-        '${config.serverPath}/config/.podfly_railway_pg.json',
-      );
-      await sidecar.writeAsString(
-        '{"host":"${creds.host}","port":"${creds.port}","name":"${creds.database}",'
-        '"user":"${creds.user}","password":"${_escapeJson(creds.password)}",'
-        '"requireSsl":"false"}',
+      await _writePgSidecar(
+        ProductionYamlPatcher.railwayPgSidecarName,
+        PostgresUrl(
+          user: creds.user,
+          password: creds.password,
+          host: creds.host,
+          port: creds.port,
+          database: creds.database,
+          requireSsl: false,
+        ),
       );
       log.ok('Railway Postgres credentials for production.yaml patch');
     } else {
@@ -301,9 +468,6 @@ class DatabaseEnsure {
       _ => null,
     };
   }
-
-  String _escapeJson(String s) =>
-      s.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
 
   Future<void> _ensureRailwayProjectLinked(String railway) async {
     final status = await runner.runCapture(

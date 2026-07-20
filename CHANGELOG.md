@@ -1,39 +1,87 @@
 # Changelog
 
-## Unreleased
+All notable changes to **podfly** are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project aims to follow [Semantic Versioning](https://semver.org/).
+
+---
+
+## [Unreleased]
+
+### Added
+
+- (nothing yet)
+
+---
+
+## [0.1.0] — 2026-07-20
+
+First public release on [pub.dev](https://pub.dev/packages/podfly).
 
 ### Features
 
-- **Host adapter registry** (`lib/src/hosts/`): Fly/Railway/planned clouds as `HostAdapter` plugins — no host switches in doctor/deploy/init
-- **Railway deploy** (`host: railway`): project/service create, domain, `railway.toml` + `railway up`, doctor resolves `~/.railway/bin`
-- **Railway full stack:** `railway_postgres` provider + static Flutter web service (nginx) + optional CDN
-- **Doctor can install CLIs:** Fly / Railway / wrangler / neonctl via brew or official install scripts (Y/n or `PODFLY_AUTO=1`)
-- **Railway Serverless on by default** for API + web via `railway.toml` + GraphQL API (no dedicated CLI subcommand; `railway.serverless: false` to keep warm)
-- **fix:** railway `up` path, doctor `--config`, free-tier peak-hour retry, project before Postgres
-- **Maximum automation pass:** `fly apps create` (+ unique name if taken), name sanitize, Pages project create, optional Dockerfile template if missing, patch production `publicHost` to Fly
-- `PODFLY_AUTO=1` skips Y/n on login prompts
-- Detect **mobile / API-only** Serverpod projects and set `web.enabled: false`
-- Sample: `examples/mobile_api_only` (real `serverpod create --mini`)
-- Discover `*_flutter` without `web/`
+#### Host adapter architecture
+- **Host adapter registry** (`lib/src/hosts/`): Fly, Railway, and planned clouds as `HostAdapter` plugins
+- **Wizard chooses API cloud** (`host:` in `podfly.yaml`); doctor only requires that host’s CLI
+- Planned hosts (Render, Cloud Run, AWS, Azure, DigitalOcean): config + doctor install recipes; deploy not implemented yet
 
-## 0.1.0
+#### Fly.io
+- Default API host with scale-to-zero-friendly `fly.toml` templates
+- `fly apps create` when missing (+ unique suffix if name taken); app name sanitize
+- Patch Serverpod `production.yaml` `publicHost` to `*.fly.dev`
+- Optional Dockerfile template if Serverpod server Dockerfile is missing
+- **`HostAdapter.ensureApiApp`**: create API app **before** database attach
+- **`fly_postgres`**: create cluster, attach, parse `DATABASE_URL` → `.podfly_fly_pg.json` + correct Serverpod user/db/`passwords.yaml`
 
-### Features
+#### Railway
+- First-class API host (`host: railway`): project/service, domain, `railway.toml`, `railway up`
+- Doctor resolves CLI under `~/.railway/bin`
+- Full stack: separate **API** + **static web** (nginx) + optional **Postgres** (not a siamese monolith)
+- `railway_postgres` provider with sidecar → `production.yaml` / `passwords.yaml`
+- **Serverless by default** for API + web (`sleepApplication` + GraphQL when CLI has no flag)
+- Optional CDN on web service
 
-- Deploy modes: **split** (Cloudflare Pages + Fly) and **fly** (all-on-Fly)
+#### Cloudflare Pages
+- Split mode: Flutter web → Pages via `wrangler`
+- Pages project create; `_headers` / `_redirects`; `SERVER_URL` dart-define
+
+#### Doctor & install
+- Doctor can install missing CLIs (Fly, Railway, wrangler, neonctl) via brew or install scripts
+- Facilitated login on TTY; `PODFLY_AUTO=1` skips Y/n
+- Host-scoped doctor (not always Fly)
+
+#### Database
+- Providers: `none`, `sqlite`, `fly_postgres`, `neon`, `railway_postgres`
+- DB need detection; soft warnings for unused Serverpod template auth
+
+#### Project surface & web packaging
+- Detect mobile / API-only monorepos → `web.enabled: false`
+- In-package Flutter web build, CanvasKit, bootstrap without stub SW
+- Example: `example/mobile_api_only`
+
+#### CLI
 - Commands: `deploy`, `doctor`, `init`, `smoke`
-- Deploy implies init when `podfly.yaml` is missing; doctor runs first
-- Facilitated login for fly / wrangler / neonctl on TTY
-- Database providers: `none`, `sqlite`, `fly_postgres`, `neon`
-- DB need detection with **soft** warnings for unused Serverpod template auth
-- Flutter web packaging:
-  - In-package build + rsync (avoids asset drop bug)
-  - Bootstrap without stub service worker
-  - Same-origin CanvasKit
-  - Cloudflare Pages `_headers` for WASM/assets caching
-  - `SERVER_URL` dart-define injection
-- Dry-run and smoke HTTP checks
+- Flags: `--dry-run`, `--smoke`, `--api`, `--web`, `--yes`, `--no-login`, `--host`, `--mode`
+- CI-friendly: env tokens + `--yes --no-login`
 
 ### Documentation
 
-- User guide, caching guide, database guide, config reference
+- README (install from pub.dev, roadmap, Serverpod Cloud recommendation)
+- User guide, caching, database, config reference, **CI / GitHub Actions**
+- AGENTS.md, llms.txt, design specs
+
+### Fixes
+
+- Fly app exists before `postgres attach`
+- Fly attach credentials (not hard-coded `user: postgres`)
+- Railway full-stack service wiring and `up` path
+- Example Serverpod deps pinned to `4.0.0-beta.0`
+
+---
+
+## Links
+
+- Package: [pub.dev/packages/podfly](https://pub.dev/packages/podfly)
+- Repo: [github.com/127thousand/podfly](https://github.com/127thousand/podfly)
+- Docs: [doc/README.md](doc/README.md)

@@ -6,10 +6,11 @@
 |---------------------|----------|-------------------|---------------|--------|
 | **`none`** | Stateless APIs | Yes | Yes | Omit `database:` in production |
 | **`sqlite`** | Tiny single-node apps | Yes (with volume) | No | Fly volume + `ha: false` |
-| **`fly_postgres`** | Classic Serverpod | Partial* | Yes | *PG app keeps billing when API stops |
-| **`neon`** | Serverless PG | Yes | Yes | SSL; store URL as Fly secret |
+| **`fly_postgres`** | Classic Serverpod on Fly | Partial* | Yes | *PG app keeps billing when API stops |
+| **`railway_postgres`** | Railway full stack | Partial* | Yes | *Postgres plugin does not sleep with API |
+| **`neon`** | Serverless PG | Yes | Yes | SSL; store URL as host secret |
 
-\* Fly Postgres is a separate always-on (or separately billed) resource.
+\* Managed Postgres on Fly/Railway usually keeps billing when the API scales to zero.
 
 ## What podfly does on deploy
 
@@ -30,16 +31,25 @@
 
 ### `fly_postgres`
 
-- Optional `fly postgres create` + `attach`  
-- Writes internal host-style `database:` block  
+- Ensures the **API Fly app exists** before attach (attach requires `-a <api>`)
+- Optional `fly postgres create` + `fly postgres attach -y`
+- Parses `DATABASE_URL` from attach output (attach creates app-specific user/db, not `postgres`)
+- Writes `server/config/.podfly_fly_pg.json` sidecar + patches `production.yaml` and `passwords.yaml production.database`
+- Re-deploys reuse the sidecar when attach reports “already attached” (Fly secrets are not readable)  
+
+### `railway_postgres`
+
+- Requires `host: railway`
+- Optional add Postgres plugin; wire `DATABASE_URL` reference onto the API service
+- Writes `.podfly_railway_pg.json` when plugin vars are readable; patches `production.yaml` / `passwords.yaml`
 
 ### `neon`
 
 - Optional `neonctl projects create`  
-- Expects `fly secrets set DATABASE_URL=…` (secret name configurable)  
+- Expects host secret set (e.g. `fly secrets set DATABASE_URL=…`)  
 - Writes `requireSsl: true` host block when host is known  
 
-**Never commit DB passwords.** Use Fly secrets / `passwords.yaml` patterns Serverpod expects.
+**Never commit DB passwords or sidecar JSON.** Prefer CI attach/patch (see [ci.md](ci.md)) or secrets managers.
 
 ## Automatic detection
 

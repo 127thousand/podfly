@@ -73,6 +73,30 @@ class Deployer {
     }
 
     await _ensureServerDockerfile();
+
+    // API app/project must exist before DB attach (Fly postgres attach -a …).
+    final ensureCtx = DeployContext(
+      config: cfg,
+      runner: runner,
+      log: log,
+      patchPublicHosts: (host) => patchProductionPublicHosts(
+        config: cfg,
+        runner: runner,
+        log: log,
+        host: host,
+      ),
+    );
+    final resolvedApp = await adapter.ensureApiApp(ensureCtx);
+    if (resolvedApp != null &&
+        resolvedApp != cfg.fly.app &&
+        await File(cfg.configPath).exists()) {
+      try {
+        cfg = await PodflyConfig.load(cfg.configPath);
+      } catch (_) {
+        // keep in-memory cfg if yaml reload fails
+      }
+    }
+
     await DatabaseEnsure(config: cfg, runner: runner, log: log).run();
 
     final doWeb = opts.doWeb && cfg.web.enabled;

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -11,6 +12,12 @@ class ProductionYamlPatcher {
 
   final PodflyConfig config;
   final Log log;
+
+  /// Written by [DatabaseEnsure] after `fly postgres attach` (attach user/db, not superuser).
+  static const flyPgSidecarName = '.podfly_fly_pg.json';
+
+  /// Written after Railway Postgres plugin vars are readable.
+  static const railwayPgSidecarName = '.podfly_railway_pg.json';
 
   File get file =>
       File(p.join(config.serverPath, 'config', 'production.yaml'));
@@ -43,15 +50,34 @@ class ProductionYamlPatcher {
           '# Ensure your Serverpod version supports sqlite before production use.\n',
         );
       case DatabaseProvider.flyPostgres:
-        final app = config.database.flyPostgres?.app ?? '${config.name}-db';
-        // Fly private DNS is typically <app>.internal — user may need attach output.
-        text = _upsertDatabaseBlock(text, {
-          'host': '$app.internal',
-          'port': '5432',
-          'name': config.name.replaceAll('-', '_'),
-          'user': 'postgres',
-          'requireSsl': 'false',
-        });
+        final sidecar = await _readSidecarMap(flyPgSidecarName);
+        if (sidecar != null) {
+          text = _upsertDatabaseBlock(text, {
+            'host': sidecar['host'] ?? 'localhost',
+            'port': sidecar['port'] ?? '5432',
+            'name': sidecar['name'] ?? config.name.replaceAll('-', '_'),
+            'user': sidecar['user'] ?? 'postgres',
+            'requireSsl': sidecar['requireSsl'] ?? 'false',
+          });
+          final password = sidecar['password'];
+          if (password != null && password.isNotEmpty) {
+            await _patchPasswordsYaml(password);
+          }
+        } else {
+          final app = config.database.flyPostgres?.app ?? '${config.name}-db';
+          // Placeholders only — real attach user is not `postgres`.
+          text = _upsertDatabaseBlock(text, {
+            'host': '$app.flycast',
+            'port': '5432',
+            'name': config.name.replaceAll('-', '_'),
+            'user': config.fly.app.replaceAll('-', '_'),
+            'requireSsl': 'false',
+          });
+          log.warn(
+            'fly_postgres: no $flyPgSidecarName yet — placeholder host/user written; '
+            're-run deploy after attach so passwords.yaml is correct',
+          );
+        }
       case DatabaseProvider.neon:
         final host = config.database.neon?.host ?? 'YOUR_NEON_HOST';
         final db = config.database.neon?.database ?? 'neondb';
@@ -67,24 +93,17 @@ class ProductionYamlPatcher {
             'Neon: set secret ${config.database.neon?.connectionStringSecret ?? 'DATABASE_URL'} '
             'and passwords.yaml production.database');
       case DatabaseProvider.railwayPostgres:
-        final sidecar = File(
-          p.join(config.serverPath, 'config', '.podfly_railway_pg.json'),
-        );
-        if (await sidecar.exists()) {
-          final raw = await sidecar.readAsString();
-          final host = _jsonField(raw, 'host') ?? 'postgres.railway.internal';
-          final port = _jsonField(raw, 'port') ?? '5432';
-          final name = _jsonField(raw, 'name') ?? 'railway';
-          final user = _jsonField(raw, 'user') ?? 'postgres';
-          final password = _jsonField(raw, 'password');
+        final sidecar = await _readSidecarMap(railwayPgSidecarName);
+        if (sidecar != null) {
           text = _upsertDatabaseBlock(text, {
-            'host': host,
-            'port': port,
-            'name': name,
-            'user': user,
-            'requireSsl': _jsonField(raw, 'requireSsl') ?? 'false',
+            'host': sidecar['host'] ?? 'postgres.railway.internal',
+            'port': sidecar['port'] ?? '5432',
+            'name': sidecar['name'] ?? 'railway',
+            'user': sidecar['user'] ?? 'postgres',
+            'requireSsl': sidecar['requireSsl'] ?? 'false',
           });
-          if (password != null) {
+          final password = sidecar['password'];
+          if (password != null && password.isNotEmpty) {
             await _patchPasswordsYaml(password);
           }
         } else {
@@ -96,7 +115,7 @@ class ProductionYamlPatcher {
             'requireSsl': 'false',
           });
           log.warn(
-              'railway_postgres: no sidecar creds yet — host placeholder written');
+              'railway_postgres: no $railwayPgSidecarName yet — host placeholder written');
         }
     }
 
@@ -104,9 +123,32 @@ class ProductionYamlPatcher {
     log.ok('patched config/production.yaml (${config.database.provider.name})');
   }
 
-  String? _jsonField(String raw, String key) {
-    final m = RegExp('"$key"\\s*:\\s*"([^"]*)"').firstMatch(raw);
-    return m?.group(1);
+  Future<Map<String, String>?> _readSidecarMap(String filename) async {
+    final f = File(p.join(config.serverPath, 'config', filename));
+    if (!await f.exists()) return null;
+    try {
+      final decoded = jsonDecode(await f.readAsString());
+      if (decoded is! Map) return null;
+      return decoded.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
+    } catch (_) {
+      // Legacy hand-written sidecars / partial JSON
+      final raw = await f.readAsString();
+      String? pick(String key) {
+        final m = RegExp('"$key"\\s*:\\s*"([^"]*)"').firstMatch(raw);
+        return m?.group(1);
+      }
+
+      final host = pick('host');
+      if (host == null) return null;
+      return {
+        'host': host,
+        'port': pick('port') ?? '5432',
+        'name': pick('name') ?? '',
+        'user': pick('user') ?? '',
+        'password': pick('password') ?? '',
+        'requireSsl': pick('requireSsl') ?? 'false',
+      };
+    }
   }
 
   Future<void> _patchPasswordsYaml(String password) async {
