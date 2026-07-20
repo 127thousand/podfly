@@ -15,7 +15,6 @@ topics:
   - cli
   - fly
   - railway
-  - digitalocean
 
 environment:
   sdk: ^3.5.0
