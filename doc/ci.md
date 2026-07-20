@@ -30,7 +30,13 @@ Set `PODFLY_AUTO=1` if doctor might offer CLI installs and you want auto-accept
 | Cloudflare Pages | `CLOUDFLARE_API_TOKEN` | Pages edit permission; often need account access |
 | Neon provision | `NEON_API_KEY` | Only if `database.neon.provision: true` |
 
-Commit **`podfly.yaml`**, `fly.toml` / `railway.toml` / `do-app.yaml`, and the Serverpod Dockerfile.
+**Recommended in CI repos:** commit `podfly.yaml` and host config (`fly.toml` /
+`railway.toml` / DO app spec) so app names and scale settings are reviewable and
+stable across runs. They are **not** required for the CLI — first deploy creates
+them if missing — but regenerating every run can pick different defaults.
+
+Always commit the Serverpod Dockerfile (from `serverpod create`).
+
 Do **not** commit:
 
 - `*_server/config/passwords.yaml` production secrets (or treat as secret-generated in CI)

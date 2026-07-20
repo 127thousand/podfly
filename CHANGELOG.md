@@ -15,6 +15,20 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.2] — 2026-07-20
+
+### Added
+
+- README hero image (`doc/images/podfly-hero.jpg`)
+
+### Changed
+
+- Docs: clarify value prop — `serverpod create` then `podfly deploy` is enough; `fly.toml` / host configs are generated when missing (examples commit them only for stable CI)
+- Docs: **Serverpod version compatibility** — 4.x primary; Serverpod **3.4.11** smoke-tested on Fly (mini + `none`, server template + `fly_postgres`)
+- Example `mobile_api_only` README: product story, optional `fly.toml`, greenfield setup path
+
+---
+
 ## [0.2.1] — 2026-07-20
 
 ### Added

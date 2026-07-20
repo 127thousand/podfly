@@ -143,15 +143,27 @@ podfly deploy --web          # force web half (even if enabled: false)
 
 Sample: [`example/mobile_api_only`](../example/mobile_api_only).
 
+## Serverpod versions
+
+| Version | Support |
+|---------|---------|
+| **4.x** | Primary path (examples, fallback Dockerfile) |
+| **3.4.x** | Smoke-tested: mini + API-only; server template + `fly_postgres` on Fly |
+| Older | Untested; keep your own Dockerfile |
+
+podfly does not pin a Serverpod package version. Prefer the Dockerfile from `serverpod create` for your major line — the generated fallback is **4-style**. See the main [README](../README.md#serverpod-version-compatibility).
+
 ## Maximum automation
 
 podfly aims for: **after `serverpod create` + tools logged in, one command ships.**
+
+You do **not** need to author `fly.toml` / `railway.toml` / DO app specs before the first deploy. Those files are **outputs** of deploy when missing. Examples that *commit* them do so so CI has fixed names and reviewable settings — not because the CLI requires them up front.
 
 | Step | Automated? |
 |------|------------|
 | `podfly.yaml` | Yes (init / `--yes`) |
 | Host app/project create | Yes (Fly apps; Railway project/service) |
-| `fly.toml` / `railway.toml` | Yes if missing |
+| `fly.toml` / `railway.toml` | Yes if missing (reuse + light patch if present) |
 | Serverpod `Dockerfile` | Prefer Serverpod’s; template only if missing |
 | API app before Postgres attach | Yes (`ensureApiApp`) |
 | Fly / Railway Postgres attach + Serverpod password patch | Yes when attach output / plugin vars available |

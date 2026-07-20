@@ -1,5 +1,9 @@
 # podfly
 
+<p align="center">
+  <img src="doc/images/podfly-hero.jpg" alt="podfly — fueling Serverpod launches" width="720" />
+</p>
+
 **Deploy Serverpod on real cloud infrastructure without memorizing each provider’s CLI, config, and quirks.**
 
 podfly is a thin orchestrator: it shells out to **existing tools** (`fly`, `railway`, `wrangler`, `neonctl`, …), generates the right config, and encodes battle-tested defaults (Flutter web packaging, scale-to-zero, DB wiring). It is **not** a new host — it makes the hosts you already use boring to ship to.
@@ -56,16 +60,31 @@ dart pub global activate --source git https://github.com/127thousand/podfly.git
 
 ## Quick start
 
+**Value prop:** create a Serverpod project, then one command ships it. You do **not** hand-write `fly.toml` / `railway.toml` / app specs first — podfly generates them when missing.
+
 ```bash
 serverpod create my_app --mini -f   # Serverpod: monorepo + Dockerfile
 cd my_app
-podfly deploy --yes --smoke         # podfly: provider CLIs + config quirks
+fly auth login                      # once per machine (or set FLY_API_TOKEN in CI)
+podfly deploy --yes --smoke         # creates podfly.yaml + fly.toml if needed, deploys, smokes
 ```
 
-**API-only + GitHub Actions → Fly (every push to `main`):**  
-see [`example/mobile_api_only`](example/mobile_api_only) (workflow, `podfly.yaml`, smoke).
+That’s the happy path. No prior `podfly.yaml`, no prior host config — only a normal Serverpod tree and a logged-in host CLI (or CI token).
 
-Typical automation (Fly today):
+### Do I need `fly.toml`?
+
+| Situation | What happens |
+|-----------|----------------|
+| **Fresh project** | `podfly deploy` writes a starter `fly.toml` (or `railway.toml`, etc.) then deploys |
+| **File already exists** | podfly leaves your settings alone (only patches `app =` when the Fly app name changes) |
+| **Committed in an example / prod repo** | Optional lock-in for **reviewable, deterministic CI** — not a prerequisite to *use* podfly |
+
+Same idea for `podfly.yaml`: created on first deploy (`--yes` = non-interactive defaults). Commit both when you care about stable names and settings in git; delete them and redeploy to regenerate starters.
+
+**API-only + GitHub Actions → Fly (every push to `main`):**  
+see [`example/mobile_api_only`](example/mobile_api_only) — that tree **ships** `fly.toml` so the public demo app name and scale-to-zero knobs are fixed in CI. Locally you could still start from `serverpod create` + `podfly deploy` alone.
+
+What deploy automates (Fly path today):
 
 1. Doctor tools + auth  
 2. Init `podfly.yaml` if missing (`--yes` = non-interactive)  
@@ -108,6 +127,32 @@ podfly smoke
 | 🟢 **`neon`** | Serverless PG |
 
 Insights and full managed Serverpod ops: **[Serverpod Cloud](https://serverpod.dev/cloud)** (not podfly).
+
+### Serverpod version compatibility
+
+podfly is a **host orchestrator** — it does not depend on the `serverpod` package. Compatibility is about project layout, Dockerfile, and config files.
+
+| Serverpod | Status | Notes |
+|-----------|--------|--------|
+| **4.x** (incl. current beta) | **Primary / tested** | Examples, fallback Dockerfile template, and docs target 4.x |
+| **3.4.x** | **Smoke-tested** | See below |
+| **Older than 3.4** | Untested | Likely fine if the project already has a working Serverpod Dockerfile |
+
+**Verified on Serverpod 3.4.11** (real Fly deploys, 2026-07-20):
+
+| Project | Database | Result |
+|---------|----------|--------|
+| `serverpod create … --mini` | `none` | API deploy + smoke `POST /greeting/hello` → 200 |
+| `serverpod create … --template server` | `fly_postgres` (create + attach + patch `production.yaml` / `passwords.yaml`) | API deploy + same smoke → 200 |
+
+What made 3.x work: podfly used the **project’s own Dockerfile** (`dart:3.8` + `dart compile exe`) and conventional `*_server` / config paths.  
+
+What is still **4-oriented** (avoid relying on these for 3.x):
+
+- Fallback Dockerfile if yours is missing (`templates/Dockerfile.serverpod` is Serverpod **4-style**: Dart 3.10 + `dart build cli`)
+- Examples and CI sample pin Serverpod 4 / Dart 3.10
+
+**Rule of thumb:** keep the Dockerfile from `serverpod create` for your major version; run `podfly deploy --api --yes --smoke`. Do not delete the Dockerfile and expect the generated 4-style template to build a 3.x app.
 
 ---
 
