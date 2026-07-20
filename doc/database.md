@@ -8,9 +8,10 @@
 | **`sqlite`** | Tiny single-node apps | Yes (with volume) | No | Fly volume + `ha: false` |
 | **`fly_postgres`** | Classic Serverpod on Fly | Partial* | Yes | *PG app keeps billing when API stops |
 | **`railway_postgres`** | Railway full stack | Partial* | Yes | *Postgres plugin does not sleep with API |
+| **`digitalocean_postgres`** | DO App Platform | Partial* | Yes | *Managed DBaaS bills independently |
 | **`neon`** | Serverless PG | Yes | Yes | SSL; store URL as host secret |
 
-\* Managed Postgres on Fly/Railway usually keeps billing when the API scales to zero.
+\* Managed Postgres usually keeps billing when the API scales to zero.
 
 ## What podfly does on deploy
 
@@ -43,13 +44,22 @@
 - Optional add Postgres plugin; wire `DATABASE_URL` reference onto the API service
 - Writes `.podfly_railway_pg.json` when plugin vars are readable; patches `production.yaml` / `passwords.yaml`
 
+### `digitalocean_postgres`
+
+- Requires `host: digitalocean`
+- Optional `doctl databases create` (Managed Postgres / DBaaS)
+- Uses **public** host + `requireSsl: true` (App Platform reaches DBaaS without a pre-wired VPC)
+- Writes `server/config/.podfly_do_pg.json` + patches `production.yaml` / `passwords.yaml`
+- After API app exists: `doctl databases firewalls append <db> --rule app:<app-id>`
+- Do **not** open `0.0.0.0/0` (DO rejects `/0` masks)
+
 ### `neon`
 
 - Optional `neonctl projects create`  
 - Expects host secret set (e.g. `fly secrets set DATABASE_URL=…`)  
 - Writes `requireSsl: true` host block when host is known  
 
-**Never commit DB passwords or sidecar JSON.** Prefer CI attach/patch (see [ci.md](ci.md)) or secrets managers.
+**Never commit DB passwords or sidecar JSON** (`.podfly_fly_pg.json`, `.podfly_railway_pg.json`, `.podfly_do_pg.json`). Prefer CI attach/patch (see [ci.md](ci.md)) or secrets managers.
 
 ## Automatic detection
 

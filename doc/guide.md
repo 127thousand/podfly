@@ -40,11 +40,12 @@ podfly deploy
   │
   ├─ doctor (config-aware: host CLI, wrangler, neonctl, …)
   │
-  ├─ ensure API app shell (Fly apps create) before DB attach
-  ├─ database ensure (fly_postgres / railway_postgres / neon / sqlite / none)
+  ├─ ensure API app shell (Fly apps create / DO registry) before DB attach
+  ├─ database ensure (fly_postgres / railway_postgres / digitalocean_postgres / neon / …)
   │     → sidecar + production.yaml / passwords.yaml when creds known
+  ├─ native web hosts (Railway / DO): deploy API first (live SERVER_URL)
   ├─ flutter web build + packaging (if web enabled)
-  ├─ deploy host API and/or web (Pages or Railway static)
+  ├─ deploy host API and/or web (Pages, Railway nginx, or DO web app)
   └─ optional --smoke HTTP checks
 ```
 
@@ -72,10 +73,11 @@ podfly deploy
 
 ### Host CLI (only the one you use)
 
-| `host:` | CLI | Auth |
-|---------|-----|------|
+| `host:` | CLI | Auth / extras |
+|---------|-----|----------------|
 | `fly` (default) | `fly` / `flyctl` | `fly auth login` or `FLY_API_TOKEN` |
 | `railway` | `railway` | `railway login` or `RAILWAY_TOKEN` |
+| `digitalocean` (`do`) | `doctl` + **Docker** | `doctl auth init` or `DIGITALOCEAN_ACCESS_TOKEN`; DOCR registry required |
 | others (roadmap) | `render` / `gcloud` / … | doctor checks; deploy not implemented |
 
 ### When `mode: split` and web on Pages
@@ -179,12 +181,24 @@ Benefits: CDN for multi‑MB WASM/assets; API can scale to zero (DB choice matte
 
 ### `monolith` (UI with the API host)
 
-UI is not on Pages. On Fly: optional copy of Flutter web into the server static dir + single deploy.  
-On Railway: still separate API vs web **services** when web is enabled (not one process) — just no Cloudflare Pages.
+UI is not on Cloudflare Pages.
+
+| Host | Monolith web behavior |
+|------|------------------------|
+| **Fly** | Optional copy of Flutter web into the server static dir + single deploy |
+| **Railway** | Separate API vs web **services** (nginx) when web enabled |
+| **DigitalOcean** | Separate App Platform **apps** (API + web nginx image) when web enabled |
 
 API-only apps usually use `mode: monolith` + `web.enabled: false`.
 
 Legacy: `mode: fly` means the same as `monolith`.
+
+### DigitalOcean notes
+
+- Docker builds images as **`linux/amd64`** (DO does not run arm64 App images from Apple Silicon without `--platform`).
+- Starter DOCR allows **one repository** — podfly uses tags `api` and `web` on the same repo.
+- First deploy may need a second pass after Managed Postgres firewall trusts the App Platform app.
+- Blank Flutter canvas + assets loading: check WASM `Content-Type` is exactly `application/wasm` (not a comma-joined duplicate).
 
 ## Doctor
 
@@ -226,6 +240,9 @@ Cold start: allow ~60–90s (podfly uses long HTTP timeouts).
 | Auth tables but no login | Soft warning only — [database.md](database.md) |
 | Double slash 404 on API | `api_url` trailing slash (podfly normalizes) |
 | CI login prompts | Use tokens + `--no-login` — [ci.md](ci.md) |
+| DO blank Flutter web | WASM Content-Type; hard-refresh after nginx fix — [caching.md](caching.md) |
+| DO `docker push` denied (1 repo) | Starter DOCR limit — share one repo, tags `api`/`web` |
+| DO DB health fail on first deploy | Add firewall `app:<app-id>`; use public DB host + SSL |
 
 ## Related docs
 

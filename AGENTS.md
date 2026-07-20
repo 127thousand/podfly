@@ -59,10 +59,11 @@ podfly deploy --yes --dry-run --no-login
 3. **Do not register Flutter’s stub service worker** for production web — podfly bootstrap fixes this when `patch_bootstrap: true`.
 4. **Do not require Postgres** just because auth packages are scaffolded — template auth is a soft warning; only hard-require DB when tables/`requireLogin`/real auth use.
 5. **Fly app names:** underscores → hyphens (`my_app` → `my-app`). Podfly creates the app if missing (**before** Postgres attach).
-6. **Supported API hosts today:** **`host: fly`** and **`host: railway`**. Wizard may select Render/GCP/AWS/Azure/DO for config + CLI checks; **deploy throws until implemented**.
-7. **Doctor does not require Fly** unless `host: fly` (or default). Railway needs the `railway` CLI (`~/.railway/bin` is searched). UI Pages still needs `wrangler` when `mode: split` and web enabled.
+6. **Supported API hosts today:** **`host: fly`**, **`host: railway`**, **`host: digitalocean`** (`do`). Render/GCP/AWS/Azure: doctor only until implemented.
+7. **Doctor does not require Fly** unless `host: fly` (or default). Railway → `railway` CLI; DigitalOcean → `doctl` + Docker + DOCR. Pages still needs `wrangler` when `mode: split` and web enabled on Cloudflare.
 8. **Fly Postgres:** parse attach `DATABASE_URL` into sidecar + `passwords.yaml` — never hardcode superuser `postgres` as the app user.
-9. **Install for users:** `dart pub global activate podfly` (pub.dev). Git/path activate is for contributors.
+9. **DigitalOcean Postgres:** public host + SSL; firewall `app:<app-id>` after app create. WASM nginx must not double-set `Content-Type`.
+10. **Install for users:** `dart pub global activate podfly` (pub.dev). Git/path activate is for contributors.
 
 ## Decision tree
 
@@ -70,9 +71,10 @@ podfly deploy --yes --dry-run --no-login
 Deploy Serverpod?
   ├─ Need plan only → podfly deploy --dry-run --yes --no-login
   ├─ Mobile / no Flutter web product → web.enabled: false or --api
-  ├─ Flutter web + API → mode: split (Pages + API) or mode: monolith
+  ├─ Flutter web + API → mode: split (Pages + API) or mode: monolith (host-native web)
   ├─ Stateless API → database.provider: none
-  └─ Needs PG + scale-to-zero API → neon (or fly_postgres if staying on Fly network)
+  ├─ Needs PG + scale-to-zero API → neon (or fly_postgres / railway_postgres / digitalocean_postgres)
+  └─ DigitalOcean → doctl + Docker + DOCR registry
 ```
 
 ## Config

@@ -42,8 +42,9 @@ dart pub global activate --source git https://github.com/127thousand/podfly.git
 | Tool | When |
 |------|------|
 | [Flutter](https://flutter.dev) / Dart | Always |
-| Host CLI (`fly`, `railway`, …) | **Only for the `host:` you chose** (wizard asks) |
+| Host CLI (`fly`, `railway`, `doctl`, …) | **Only for the `host:` you chose** (wizard asks) |
 | [Railway CLI](https://docs.railway.app/guides/cli) | `host: railway` (often `~/.railway/bin`) |
+| [doctl](https://docs.digitalocean.com/reference/doctl/) + Docker | `host: digitalocean` (DOCR registry required) |
 | [wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/) | Flutter web on Cloudflare Pages (`mode: split`) |
 | [neonctl](https://neon.tech/docs/reference/neon-cli) | `database.neon.provision: true` |
 
@@ -214,6 +215,26 @@ database:
   provider: railway_postgres
   railway_postgres:
     create: true
+```
+
+DigitalOcean full stack sketch:
+
+```yaml
+host: digitalocean
+mode: monolith
+name: my-app
+server: my_app_server
+flutter: my_app_flutter
+digitalocean:
+  app: my-app
+  region: nyc
+database:
+  provider: digitalocean_postgres
+  digitalocean_postgres:
+    create: true
+    region: nyc1
+web:
+  enabled: true
 ```
 
 Full field list: [doc/podfly.yaml.md](doc/podfly.yaml.md).

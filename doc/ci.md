@@ -26,14 +26,15 @@ Set `PODFLY_AUTO=1` if doctor might offer CLI installs and you want auto-accept
 |--------|----------------|-------|
 | Fly API | `FLY_API_TOKEN` | [Fly tokens](https://fly.io/docs/security/tokens/) |
 | Railway | `RAILWAY_TOKEN` | Account or workspace token |
+| DigitalOcean | `DIGITALOCEAN_ACCESS_TOKEN` | [API tokens](https://docs.digitalocean.com/reference/api/create-personal-access-token/); also need Docker + DOCR in CI |
 | Cloudflare Pages | `CLOUDFLARE_API_TOKEN` | Pages edit permission; often need account access |
 | Neon provision | `NEON_API_KEY` | Only if `database.neon.provision: true` |
 
-Commit **`podfly.yaml`**, `fly.toml` / `railway.toml`, and the Serverpod Dockerfile.
+Commit **`podfly.yaml`**, `fly.toml` / `railway.toml` / `do-app.yaml`, and the Serverpod Dockerfile.
 Do **not** commit:
 
 - `*_server/config/passwords.yaml` production secrets (or treat as secret-generated in CI)
-- `*_server/config/.podfly_fly_pg.json` / `.podfly_railway_pg.json` sidecars
+- Sidecars: `.podfly_fly_pg.json`, `.podfly_railway_pg.json`, `.podfly_do_pg.json`
 
 ### Fly Postgres in CI
 
@@ -60,8 +61,32 @@ echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"   # GitHub Actions
 Pin a version when you want reproducibility:
 
 ```bash
-dart pub global activate podfly 0.1.0
+dart pub global activate podfly 0.2.0
 ```
+
+---
+
+## Example: DigitalOcean API (GitHub Actions)
+
+```yaml
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: DOCR login
+        run: doctl registry login
+
+      - name: Deploy
+        env:
+          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+        run: podfly deploy --host digitalocean --api --yes --no-login --smoke
+```
+
+CI runners need Docker (remote build/push to DOCR). Prefer pinning `linux/amd64` builds (podfly sets `--platform` by default).
 
 ---
 

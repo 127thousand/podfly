@@ -58,6 +58,29 @@ _flutter.loader.load({
 });
 ```
 
+### 4. Blank Flutter canvas on nginx (Railway / DigitalOcean)
+
+If the page “loads” assets but the canvas stays blank, check:
+
+```bash
+curl -sI https://your-web-host/canvaskit/canvaskit.wasm | grep -i content-type
+```
+
+Must be exactly **`application/wasm`**. A duplicated header such as
+`application/wasm,application/wasm` (from nginx `add_header Content-Type`
+stacked on `mime.types`) makes browsers reject the module.
+
+**podfly nginx template** uses:
+
+```nginx
+location ~* \.wasm$ {
+    types { }
+    default_type application/wasm;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    try_files $uri =404;
+}
+```
+
 The build already ships `build/web/canvaskit/*.wasm`. Pages serves them with
 long cache headers (below). **Do not** pass `--web-resources-cdn` in the
 podfly build (we intentionally omit it).

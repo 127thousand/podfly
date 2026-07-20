@@ -22,7 +22,7 @@ Serverpod’s managed host is **[Serverpod Cloud](https://serverpod.dev/cloud)**
 
 ## When to use
 
-- User has or will create a Serverpod 4 project and wants it on Fly or Railway (and optional Pages/Neon)
+- User has or will create a Serverpod 4 project and wants it on Fly, Railway, or DigitalOcean (and optional Pages/Neon)
 - User asks to deploy Serverpod / Flutter web API split / mobile API-only
 
 ## Prerequisites (once)
@@ -31,7 +31,8 @@ Serverpod’s managed host is **[Serverpod Cloud](https://serverpod.dev/cloud)**
 - **Only the CLI for the chosen API host** (wizard sets `host:` in podfly.yaml):
   - `fly` / `flyctl` when `host: fly`
   - `railway` when `host: railway` (often `~/.railway/bin`; podfly searches well-known paths)
-  - `render` / `gcloud` / `aws` / `az` / `doctl` when those hosts are selected (doctor checks; deploy not implemented yet)
+  - `doctl` + Docker when `host: digitalocean` (DOCR required)
+  - `render` / `gcloud` / `aws` / `az` when those hosts are selected (doctor checks; deploy not implemented yet)
 - `wrangler` + login only if Flutter web → Cloudflare Pages
 - `neonctl` if `database.neon.provision: true`
 
@@ -60,6 +61,13 @@ podfly deploy --host railway --api --yes --smoke
 # or host: railway in podfly.yaml
 ```
 
+### DigitalOcean App Platform
+
+```bash
+# Prerequisites: doctl auth init, doctl registry (starter+), Docker running
+podfly deploy --host digitalocean --yes --smoke
+```
+
 ### Existing monorepo
 
 ```bash
@@ -79,9 +87,10 @@ podfly deploy --api --yes --smoke
 ### CI / non-TTY
 
 ```bash
-export FLY_API_TOKEN=…            # host: fly
-export RAILWAY_TOKEN=…            # host: railway
-export CLOUDFLARE_API_TOKEN=…     # if Pages
+export FLY_API_TOKEN=…                 # host: fly
+export RAILWAY_TOKEN=…                 # host: railway
+export DIGITALOCEAN_ACCESS_TOKEN=…     # host: digitalocean
+export CLOUDFLARE_API_TOKEN=…          # if Pages
 podfly deploy --yes --no-login --smoke
 ```
 
@@ -94,7 +103,7 @@ podfly deploy --yes --no-login --smoke
 5. Flutter web + API → `mode: split` (Pages + API) or `mode: monolith` (UI with API host).
 6. Stateless → `database.provider: none`.
 7. Need Postgres + sleeping API → Neon; on-Fly private PG → `fly_postgres`.
-8. Deploy implemented for **fly** and **railway**; other hosts: doctor only until roadmap lands.
+8. Deploy implemented for **fly**, **railway**, and **digitalocean**; other hosts: doctor only until roadmap lands.
 
 ## Do not
 

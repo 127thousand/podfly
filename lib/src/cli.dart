@@ -115,15 +115,15 @@ Deploy options:
   --yes / -y    Non-interactive init defaults
   --no-login    Do not open browser logins (CI: use tokens)
   --init        Force wizard; confirms before overwriting podfly.yaml
-  --host        API cloud: fly | railway | render | cloud_run | aws | azure | digitalocean
-                (wizard asks this; fly + railway deploy today)
+  --host        API cloud: fly | railway | digitalocean | render | …
+                (wizard asks; fly + railway + digitalocean deploy today)
   --mode        split | monolith   (fly = legacy alias for monolith)
   --root        Project root (default: cwd)
   --config      Path to podfly.yaml
 
 Doctor only requires the CLI for the chosen host (not always Fly).
-Supported deploy today: Fly + Railway (API), Cloudflare Pages (UI),
-Neon / Fly PG / Railway PG / SQLite / none.
+Supported deploy today: Fly + Railway + DigitalOcean (API), Cloudflare Pages /
+Railway·DO static web, Neon / Fly PG / Railway PG / DO PG / SQLite / none.
 Dockerfile: prefer Serverpod's *_server/Dockerfile (podfly does not invent hosts).
 
 Install: dart pub global activate podfly
@@ -133,6 +133,7 @@ Examples:
   podfly deploy --yes --smoke
 
   podfly deploy --host railway --api --yes --smoke
+  podfly deploy --host digitalocean --yes --smoke
   podfly deploy --yes --dry-run --no-login   # plan
   podfly deploy --api --yes --smoke          # mobile / API-only
   podfly doctor
