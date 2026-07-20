@@ -3,7 +3,7 @@ description: >
   Deploy Serverpod apps on Fly.io, Railway, and more via existing cloud CLIs.
   Thin orchestrator (not a host): podfly.yaml, Dockerfile/fly/railway quirks,
   Flutter web packaging, Postgres wiring, smoke checks.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/127thousand/podfly
 homepage: https://github.com/127thousand/podfly
 issue_tracker: https://github.com/127thousand/podfly/issues

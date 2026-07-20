@@ -15,6 +15,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.1] — 2026-07-20
+
+### Changed
+
+- README / skill: reword Serverpod Cloud positioning (clear “managed vs own infra” split; drop “out of respect” phrasing)
+
+---
+
 ## [0.1.0] — 2026-07-20
 
 First public release on [pub.dev](https://pub.dev/packages/podfly).
