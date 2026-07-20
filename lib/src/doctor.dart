@@ -40,7 +40,11 @@ class Doctor {
     var ok = true;
 
     if (scope == DoctorScope.baseline) {
-      ok = await _needBinary('flutter', installHint: 'https://flutter.dev') &&
+      ok = await _needBinary(
+            'flutter',
+            installHint:
+                'https://docs.flutter.dev/get-started/install (no safe one-liner)',
+          ) &&
           ok;
       if (config != null) {
         ok = await _needHost(config.host) && ok;
@@ -82,11 +86,19 @@ class Doctor {
   Future<bool> _needHost(AppHost host) async {
     final adapter = HostRegistry.require(host);
     final bins = adapter.cliBinaries;
-    final resolved = await runner.resolve(bins.first, bins.skip(1).toList());
+    var resolved = await runner.resolve(bins.first, bins.skip(1).toList());
     if (resolved == null) {
-      log.err('${adapter.label} CLI not found (need one of: ${bins.join(', ')})');
-      log.detail('Install: ${adapter.installHint}');
-      return false;
+      log.warn(
+          '${adapter.label} CLI not found (need one of: ${bins.join(', ')})');
+      log.detail('Docs: ${adapter.installHint}');
+      if (await _tryInstallRecipes(adapter.installRecipes, adapter.label)) {
+        resolved = await runner.resolve(bins.first, bins.skip(1).toList());
+      }
+      if (resolved == null) {
+        log.err('${adapter.label} CLI still missing after install attempt');
+        return false;
+      }
+      log.ok('${adapter.label} CLI installed → $resolved');
     }
 
     return adapter.checkAuth(DoctorContext(
@@ -98,20 +110,70 @@ class Doctor {
     ));
   }
 
-  Future<bool> _needBinary(String name, {String? installHint}) async {
-    if (await runner.which(name)) {
+  /// Offer install recipes (brew / curl|sh). Returns true if any recipe succeeded.
+  Future<bool> _tryInstallRecipes(
+    List<CliInstallRecipe> recipes,
+    String what,
+  ) async {
+    if (recipes.isEmpty) return false;
+    if (!_canLogin && !_autoLogin) {
+      for (final r in recipes) {
+        log.detail('Install option: ${r.label}');
+      }
+      return false;
+    }
+
+    for (final recipe in recipes) {
+      // Skip brew recipes if brew isn't available.
+      if (recipe.executable == 'brew' && !await runner.which('brew')) {
+        continue;
+      }
+      if (recipe.executable == 'npm' && !await runner.which('npm')) {
+        continue;
+      }
+      final go = _autoLogin ||
+          await confirm('Install $what via `${recipe.label}` now?');
+      if (!go) continue;
+
+      log.detail('running: ${recipe.label}');
+      final r = await runner.run(
+        recipe.executable,
+        recipe.args,
+        allowDryRun: false,
+      );
+      if (r.ok) {
+        log.ok('installed $what');
+        return true;
+      }
+      log.warn('install failed (${r.exitCode}): ${recipe.label}');
+    }
+    return false;
+  }
+
+  Future<bool> _needBinary(
+    String name, {
+    String? installHint,
+    List<CliInstallRecipe> installRecipes = const [],
+  }) async {
+    if (await runner.which(name) ||
+        await runner.resolvePath(name) != null) {
       if (runner.dryRun) {
         log.ok('$name  (on PATH; version check skipped in dry-run)');
         return true;
       }
+      final bin = await runner.resolvePath(name) ?? name;
       final r =
-          await runner.runCapture(name, ['--version'], allowDryRun: false);
+          await runner.runCapture(bin, ['--version'], allowDryRun: false);
       final ver = (r.stdout + r.stderr).trim().split('\n').first;
       log.ok('$name  $ver');
       return true;
     }
-    log.err('$name not found on PATH');
+    log.warn('$name not found on PATH');
     if (installHint != null) log.detail('Install: $installHint');
+    if (await _tryInstallRecipes(installRecipes, name)) {
+      return _needBinary(name, installHint: installHint);
+    }
+    log.err('$name still missing');
     return false;
   }
 
@@ -121,16 +183,25 @@ class Doctor {
       return true;
     }
     if (!await runner.which('wrangler')) {
-      log.err('wrangler not found (needed for Cloudflare Pages UI)');
-      log.detail(
-          'Install: npm i -g wrangler   or   brew install cloudflare-wrangler2');
-      if (_canLogin && await runner.which('npm')) {
-        if (await confirm('Install wrangler via npm -g?')) {
-          final r = await runner.run('npm', ['i', '-g', 'wrangler']);
-          if (r.ok) return _needWrangler();
-        }
+      log.warn('wrangler not found (needed for Cloudflare Pages UI)');
+      final installed = await _tryInstallRecipes(const [
+        CliInstallRecipe(
+          label: 'npm i -g wrangler',
+          executable: 'npm',
+          args: ['i', '-g', 'wrangler'],
+        ),
+        CliInstallRecipe(
+          label: 'brew install cloudflare-wrangler2',
+          executable: 'brew',
+          args: ['install', 'cloudflare-wrangler2'],
+        ),
+      ], 'wrangler');
+      if (!installed || !await runner.which('wrangler')) {
+        log.err('wrangler still missing');
+        log.detail(
+            'Install: npm i -g wrangler   or   brew install cloudflare-wrangler2');
+        return false;
       }
-      return false;
     }
     if (runner.dryRun) {
       log.ok('wrangler  (auth check skipped in dry-run)');
@@ -165,17 +236,27 @@ class Doctor {
       log.ok('neonctl  (NEON_API_KEY set)');
       return true;
     }
-    final neon = await runner.resolve('neonctl', ['neon']);
+    var neon = await runner.resolve('neonctl', ['neon']);
     if (neon == null) {
-      log.err('neonctl not found (needed for Neon provision)');
-      log.detail('Install: brew install neonctl   or   npm i -g neonctl');
-      if (_canLogin && await runner.which('brew')) {
-        if (await confirm('Install neonctl via brew?')) {
-          final r = await runner.run('brew', ['install', 'neonctl']);
-          if (r.ok) return _needNeon();
-        }
+      log.warn('neonctl not found (needed for Neon provision)');
+      final installed = await _tryInstallRecipes(const [
+        CliInstallRecipe(
+          label: 'brew install neonctl',
+          executable: 'brew',
+          args: ['install', 'neonctl'],
+        ),
+        CliInstallRecipe(
+          label: 'npm i -g neonctl',
+          executable: 'npm',
+          args: ['i', '-g', 'neonctl'],
+        ),
+      ], 'neonctl');
+      neon = installed ? await runner.resolve('neonctl', ['neon']) : null;
+      if (neon == null) {
+        log.err('neonctl still missing');
+        log.detail('Install: brew install neonctl   or   npm i -g neonctl');
+        return false;
       }
-      return false;
     }
     if (runner.dryRun) {
       log.ok('$neon  (auth check skipped in dry-run)');

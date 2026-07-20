@@ -17,6 +17,10 @@ abstract class HostAdapter {
 
   String get installHint;
 
+  /// Optional install recipes doctor may run when the CLI is missing
+  /// (TTY confirm, or `PODFLY_AUTO=1` / CI).
+  List<CliInstallRecipe> get installRecipes => const [];
+
   /// When true, [deployApi] is implemented.
   bool get canDeploy;
 
@@ -65,6 +69,23 @@ abstract class HostAdapter {
 
   /// Optional host-specific config warnings during doctor.
   void configWarnings(PodflyConfig config, Log log) {} // ignore: avoid_types_on_closure_parameters
+}
+
+/// One way to install a host CLI (e.g. brew, official install script).
+class CliInstallRecipe {
+  const CliInstallRecipe({
+    required this.label,
+    required this.executable,
+    required this.args,
+    this.needsShell = false,
+  });
+
+  /// Shown in the Y/n prompt, e.g. `brew install flyctl`.
+  final String label;
+  final String executable;
+  final List<String> args;
+  /// When true, run via `sh -c` (for curl|sh installers).
+  final bool needsShell;
 }
 
 class DoctorContext {

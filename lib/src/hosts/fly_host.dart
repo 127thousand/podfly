@@ -26,6 +26,21 @@ class FlyHost extends HostAdapter {
       'https://fly.io/docs/hands-on/install-flyctl/';
 
   @override
+  List<CliInstallRecipe> get installRecipes => const [
+        CliInstallRecipe(
+          label: 'brew install flyctl',
+          executable: 'brew',
+          args: ['install', 'flyctl'],
+        ),
+        CliInstallRecipe(
+          label: 'curl -L https://fly.io/install.sh | sh',
+          executable: 'sh',
+          args: ['-c', 'curl -fsSL https://fly.io/install.sh | sh'],
+          needsShell: true,
+        ),
+      ];
+
+  @override
   bool get canDeploy => true;
 
   @override

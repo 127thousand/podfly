@@ -23,6 +23,21 @@ class RailwayHost extends HostAdapter {
   String get installHint => 'https://docs.railway.app/guides/cli';
 
   @override
+  List<CliInstallRecipe> get installRecipes => const [
+        CliInstallRecipe(
+          label: 'brew install railway',
+          executable: 'brew',
+          args: ['install', 'railway'],
+        ),
+        CliInstallRecipe(
+          label: 'curl -fsSL https://railway.com/install.sh | sh',
+          executable: 'sh',
+          args: ['-c', 'curl -fsSL https://railway.com/install.sh | sh'],
+          needsShell: true,
+        ),
+      ];
+
+  @override
   bool get canDeploy => true;
 
   @override
