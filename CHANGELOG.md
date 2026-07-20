@@ -8,7 +8,7 @@
 - **Railway deploy** (`host: railway`): project/service create, domain, `railway.toml` + `railway up`, doctor resolves `~/.railway/bin`
 - **Railway full stack:** `railway_postgres` provider + static Flutter web service (nginx) + optional CDN
 - **Doctor can install CLIs:** Fly / Railway / wrangler / neonctl via brew or official install scripts (Y/n or `PODFLY_AUTO=1`)
-- **Railway Serverless on by default** for API + web (`sleepApplication = true` in generated railway.toml; `railway.serverless: false` to keep warm)
+- **Railway Serverless on by default** for API + web via `railway.toml` + GraphQL API (no dedicated CLI subcommand; `railway.serverless: false` to keep warm)
 - **fix:** railway `up` path, doctor `--config`, free-tier peak-hour retry, project before Postgres
 - **Maximum automation pass:** `fly apps create` (+ unique name if taken), name sanitize, Pages project create, optional Dockerfile template if missing, patch production `publicHost` to Fly
 - `PODFLY_AUTO=1` skips Y/n on login prompts

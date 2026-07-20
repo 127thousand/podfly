@@ -147,6 +147,7 @@ class RailwayHost extends HostAdapter {
     await _ensureRailwayIgnore(ctx);
     await _ensureRailwayProject(ctx, railway, project, rcfg);
     await _ensureRailwayService(ctx, railway, service);
+    await _ensureServerlessViaApi(ctx, railway, service, rcfg);
     final host = await _ensureRailwayDomain(ctx, railway, service, rcfg.port);
     if (host != null) {
       await ctx.patchPublicHosts(host);
@@ -214,6 +215,7 @@ class RailwayHost extends HostAdapter {
 
     await _ensureRailwayProject(ctx, railway, project, rcfg);
     await _ensureRailwayService(ctx, railway, service);
+    await _ensureServerlessViaApi(ctx, railway, service, rcfg);
     await _ensureRailwayIgnore(ctx);
 
     // No PATH arg (CLI "prefix not found"); cwd = staged bundle only.
@@ -368,6 +370,156 @@ sleepApplication = $sleep
     final m = RegExp(r'"id"\s*:\s*"([0-9a-fA-F-]{36})"')
         .firstMatch(status.stdout);
     return m?.group(1) ?? ctx.config.railway?.projectId;
+  }
+
+  /// Enable Railway Serverless via Public GraphQL API.
+  ///
+  /// There is **no** `railway serverless` CLI subcommand. The dashboard uses
+  /// `serviceInstanceUpdate(sleepApplication: true)`. We do the same with the
+  /// logged-in CLI token (or `RAILWAY_TOKEN`).
+  Future<void> _ensureServerlessViaApi(
+    DeployContext ctx,
+    String railway,
+    String serviceName,
+    RailwayConfig rcfg,
+  ) async {
+    if (!rcfg.serverless) {
+      ctx.log.detail('railway.serverless: false — skip Serverless API update');
+      return;
+    }
+    if (ctx.runner.dryRun) {
+      ctx.log.dry(
+          'GraphQL serviceInstanceUpdate sleepApplication=true for $serviceName');
+      return;
+    }
+
+    final ids = await _resolveServiceIds(ctx, railway, serviceName, rcfg);
+    if (ids == null) {
+      ctx.log.detail(
+          'could not resolve service/env ids for Serverless — relying on railway.toml');
+      return;
+    }
+
+    final token = await _railwayApiToken();
+    if (token == null || token.isEmpty) {
+      ctx.log.detail(
+          'no Railway API token — Serverless only via railway.toml sleepApplication');
+      return;
+    }
+
+    final tmp = File(
+      p.join(Directory.systemTemp.path, 'podfly-railway-serverless.json'),
+    );
+    await tmp.writeAsString(_jsonEncodeServerlessMutation(
+      serviceId: ids.serviceId,
+      environmentId: ids.environmentId,
+      sleep: true,
+    ));
+    final r = await ctx.runner.runCapture(
+      'curl',
+      [
+        '-sS',
+        '-X',
+        'POST',
+        'https://backboard.railway.com/graphql/v2',
+        '-H',
+        'Content-Type: application/json',
+        '-H',
+        'Authorization: Bearer $token',
+        '--data-binary',
+        '@${tmp.path}',
+      ],
+      workingDirectory: ctx.config.root,
+      allowDryRun: false,
+    );
+    if (!r.ok) {
+      ctx.log.warn(
+          'Serverless GraphQL failed — railway.toml sleepApplication still applies on up');
+      return;
+    }
+    final out = r.stdout + r.stderr;
+    if (out.contains('"errors"')) {
+      ctx.log.warn('Serverless GraphQL: ${out.trim()}');
+      return;
+    }
+    ctx.log.ok('Railway Serverless enabled for $serviceName (GraphQL API)');
+  }
+
+  String _jsonEncodeServerlessMutation({
+    required String serviceId,
+    required String environmentId,
+    required bool sleep,
+  }) {
+    return '{"query":"mutation(\$serviceId:String!,\$environmentId:String!,\$input:ServiceInstanceUpdateInput!){serviceInstanceUpdate(serviceId:\$serviceId,environmentId:\$environmentId,input:\$input)}","variables":{"serviceId":"$serviceId","environmentId":"$environmentId","input":{"sleepApplication":$sleep}}}';
+  }
+
+  Future<({String serviceId, String environmentId})?> _resolveServiceIds(
+    DeployContext ctx,
+    String railway,
+    String serviceName,
+    RailwayConfig rcfg,
+  ) async {
+    final status = await ctx.runner.runCapture(
+      railway,
+      ['status', '--json'],
+      workingDirectory: ctx.config.root,
+      allowDryRun: false,
+    );
+    if (!status.ok) return null;
+    final text = status.stdout;
+    // environment id
+    final envId = RegExp(r'"environmentId"\s*:\s*"([0-9a-fA-F-]{36})"')
+            .firstMatch(text)
+            ?.group(1) ??
+        RegExp(
+          r'"environments"[^]]*?"id"\s*:\s*"([0-9a-fA-F-]{36})"',
+        ).firstMatch(text)?.group(1);
+
+    // Prefer matching service by name from service list --json
+    final list = await ctx.runner.runCapture(
+      railway,
+      ['service', 'list', '--json'],
+      workingDirectory: ctx.config.root,
+      allowDryRun: false,
+    );
+    String? serviceId;
+    final nameRe = RegExp(
+      '"id"\\s*:\\s*"([0-9a-fA-F-]{36})"\\s*,\\s*"name"\\s*:\\s*"${RegExp.escape(serviceName)}"',
+    );
+    final nameRe2 = RegExp(
+      '"name"\\s*:\\s*"${RegExp.escape(serviceName)}"\\s*,\\s*"id"\\s*:\\s*"([0-9a-fA-F-]{36})"',
+    );
+    serviceId = nameRe.firstMatch(list.stdout)?.group(1) ??
+        nameRe2.firstMatch(list.stdout)?.group(1);
+
+    // Human status also prints "service ID: uuid"
+    serviceId ??= RegExp(
+      'service ID:\\s*([0-9a-fA-F-]{36})',
+      caseSensitive: false,
+    ).firstMatch(status.stdout + list.stdout)?.group(1);
+
+    if (serviceId == null || envId == null) return null;
+    return (serviceId: serviceId, environmentId: envId);
+  }
+
+  Future<String?> _railwayApiToken() async {
+    final env = Platform.environment['RAILWAY_TOKEN'] ??
+        Platform.environment['RAILWAY_API_TOKEN'];
+    if (env != null && env.isNotEmpty) return env;
+
+    final home = Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        '';
+    if (home.isEmpty) return null;
+    final cfg = File(p.join(home, '.railway', 'config.json'));
+    if (!await cfg.exists()) return null;
+    try {
+      final text = await cfg.readAsString();
+      final m = RegExp(r'"accessToken"\s*:\s*"([^"]+)"').firstMatch(text);
+      return m?.group(1);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _ensureRailwayToml(
