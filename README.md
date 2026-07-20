@@ -16,11 +16,11 @@ podfly deploy          →  provider CLIs + configs + quirks (podfly)
 
 ---
 
-## Official recommendation
+## Serverpod Cloud vs podfly
 
-Out of respect for the Serverpod team: the **officially recommended** hosting path is **[Serverpod Cloud](https://serverpod.dev/cloud)** — managed infrastructure built for Serverpod (API, web, Insights, and the rest of the product surface).
+The Serverpod project’s managed offering is **[Serverpod Cloud](https://serverpod.dev/cloud)** — API, web, Insights, and the rest of the product surface on infrastructure built for Serverpod.
 
-**podfly** is for teams that want to stay on **their own** infra (Fly, Railway, big clouds, etc.) and still avoid hand-rolling every CLI and config quirk. It complements Serverpod Cloud; it does not replace it.
+**podfly** is the path when you want to keep **your own** infra (Fly, Railway, and similar) and still avoid hand-rolling every CLI and config quirk. Use one or the other; they solve different problems.
 
 ---
 
@@ -123,7 +123,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 
 | Provider | CLI | podfly | 📱 API-only | 🔀 Split UI+API | 🧱 All-in-one | Notes |
 |----------|-----|--------|:-----------:|:---------------:|:-------------:|-------|
-| 💜 [**Serverpod Cloud**](https://serverpod.dev/cloud) | Serverpod Cloud | — | ✅ | ✅ | ✅ | **Officially recommended** managed option |
+| 💜 [**Serverpod Cloud**](https://serverpod.dev/cloud) | Serverpod Cloud | — | ✅ | ✅ | ✅ | Serverpod’s managed host (not via podfly) |
 | 🟣 [**Fly.io**](https://fly.io) | `fly` / `flyctl` | ✅ | ✅ | ✅ | ✅ | Default podfly path; multi-port Machines OK |
 | 🚂 [**Railway**](https://railway.app) | `railway` | ✅ | ✅ | ✅ | 🟡 | Separate API + static web services |
 | 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | Static Flutter web only; **not** the API |

@@ -18,7 +18,7 @@ description: >
 
 It is **not** a PaaS and does **not** replace Serverpod.
 
-Out of respect: **[Serverpod Cloud](https://serverpod.dev/cloud)** is the officially recommended managed host.
+Serverpod’s managed host is **[Serverpod Cloud](https://serverpod.dev/cloud)**. podfly is for deploying on your own infra (Fly, Railway, …).
 
 ## When to use
 
