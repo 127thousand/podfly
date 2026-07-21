@@ -182,7 +182,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | Static Flutter web only; **not** the API |
 | 🟦 [**Render**](https://render.com) | `render` | ✅ | ✅ | 🟡 | 🟡 | Git + Docker; monorepo `rootDir`; `render_postgres` |
 | ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | ✅ | ✅ | 🟡 | ✅* | Cheap serverless; *monolith = nginx + Serverpod one container (see `gcp/realtime_monolith`) |
-| 📦 [**AWS**](https://aws.amazon.com) App Runner / ECS | `aws` | 🗺️ | ✅ | ✅ | 🟡 | App Runner ≈ API-only |
+| 📦 [**AWS App Runner**](https://aws.amazon.com/apprunner/) | `aws` | ✅ | ✅ | 🟡 | 🟡 | ECR image; not free scale-to-zero — delete demos |
 | 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ | ✅ | ✅ | 🟡 | Similar to other container PaaS |
 | 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | ✅ | ✅ | ✅ | 🟡 | DOCR images + App Spec; web = separate app |
 

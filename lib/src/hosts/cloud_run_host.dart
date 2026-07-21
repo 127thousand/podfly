@@ -353,6 +353,7 @@ class CloudRunHost extends HostAdapter {
         extraEnv: base.extraEnv,
         publicHost: publicHost,
       ),
+      aws: cfg.aws,
       cloudflare: cfg.cloudflare,
       database: cfg.database,
       web: WebConfig(

@@ -274,6 +274,63 @@ class NeonConfig {
 ///
 /// Inexpensive stateless path — not GCE/Terraform. Optional Cloud SQL
 /// instances attach via [cloudSqlInstances] (unix socket in production.yaml).
+/// AWS App Runner settings (`host: aws`).
+class AwsConfig {
+  AwsConfig({
+    required this.service,
+    this.region = 'us-east-1',
+    this.cpu = '1024',
+    this.memory = '2048',
+    this.port = 8080,
+    this.ecrRepository,
+    this.ecrAccessRole = 'AppRunnerECRAccessRole',
+    this.imageTag = 'latest',
+    this.platform = 'linux/amd64',
+    this.startCommand = '/app/entrypoint.sh',
+    this.serviceArn,
+    this.extraEnv = const {},
+    this.publicHost,
+  });
+
+  final String service;
+  final String region;
+  /// App Runner CPU units: `256` | `512` | `1024` | `2048` | `4096`.
+  final String cpu;
+  /// App Runner memory MB: must pair with [cpu] (e.g. `1024` → `2048`).
+  final String memory;
+  final int port;
+  /// ECR repository name (default: [service]).
+  final String? ecrRepository;
+  /// IAM role App Runner assumes to pull from private ECR.
+  final String ecrAccessRole;
+  /// Image tag; `latest` is replaced with a timestamp at deploy for clean rolls.
+  final String imageTag;
+  final String platform;
+  /// App Runner `StartCommand` (overrides image ENTRYPOINT). Empty = omit.
+  /// Default matches the Serverpod example `entrypoint.sh`.
+  final String startCommand;
+  /// Filled after first create (`arn:aws:apprunner:…`).
+  final String? serviceArn;
+  final Map<String, String> extraEnv;
+  final String? publicHost;
+
+  Map<String, Object?> toMap() => {
+        'service': service,
+        'region': region,
+        'cpu': cpu,
+        'memory': memory,
+        'port': port,
+        if (ecrRepository != null) 'ecr_repository': ecrRepository,
+        'ecr_access_role': ecrAccessRole,
+        'image_tag': imageTag,
+        'platform': platform,
+        if (startCommand.isNotEmpty) 'start_command': startCommand,
+        if (serviceArn != null) 'service_arn': serviceArn,
+        if (extraEnv.isNotEmpty) 'env': extraEnv,
+        if (publicHost != null) 'public_host': publicHost,
+      };
+}
+
 class CloudRunConfig {
   CloudRunConfig({
     required this.service,
@@ -691,6 +748,7 @@ class PodflyConfig {
     this.digitalOcean,
     this.render,
     this.cloudRun,
+    this.aws,
     this.cloudflare,
     required this.database,
     required this.web,
@@ -709,6 +767,7 @@ class PodflyConfig {
   final DigitalOceanConfig? digitalOcean;
   final RenderConfig? render;
   final CloudRunConfig? cloudRun;
+  final AwsConfig? aws;
   final CloudflareConfig? cloudflare;
   final DatabaseConfig database;
   final WebConfig web;
@@ -740,6 +799,7 @@ class PodflyConfig {
         if (digitalOcean != null) 'digitalocean': digitalOcean!.toMap(),
         if (render != null) 'render': render!.toMap(),
         if (cloudRun != null) 'cloud_run': cloudRun!.toMap(),
+        if (aws != null) 'aws': aws!.toMap(),
         if (cloudflare != null) 'cloudflare': cloudflare!.toMap(),
         'database': database.toMap(),
         'web': web.toMap(),
@@ -861,12 +921,37 @@ class PodflyConfig {
         buf.writeln('  public_host: ${c.publicHost}');
       }
     }
+    if (host == AppHost.aws || aws != null) {
+      final a = aws ?? AwsConfig(service: name.replaceAll('_', '-'));
+      buf.writeln('aws:');
+      buf.writeln('  service: ${a.service}');
+      buf.writeln('  region: ${a.region}');
+      buf.writeln('  cpu: ${a.cpu}');
+      buf.writeln('  memory: ${a.memory}');
+      buf.writeln('  port: ${a.port}');
+      if (a.ecrRepository != null) {
+        buf.writeln('  ecr_repository: ${a.ecrRepository}');
+      }
+      buf.writeln('  ecr_access_role: ${a.ecrAccessRole}');
+      buf.writeln('  image_tag: ${a.imageTag}');
+      buf.writeln('  platform: ${a.platform}');
+      if (a.startCommand.isNotEmpty) {
+        buf.writeln('  start_command: ${a.startCommand}');
+      }
+      if (a.serviceArn != null) {
+        buf.writeln('  service_arn: ${a.serviceArn}');
+      }
+      if (a.publicHost != null) {
+        buf.writeln('  public_host: ${a.publicHost}');
+      }
+    }
     // Cloudflare only when UI is on Pages (not native API hosts)
     if (cloudflare != null &&
         host != AppHost.railway &&
         host != AppHost.digitalOcean &&
         host != AppHost.render &&
-        host != AppHost.cloudRun) {
+        host != AppHost.cloudRun &&
+        host != AppHost.aws) {
       buf.writeln();
       buf.writeln('cloudflare:');
       buf.writeln('  project: ${cloudflare!.project}');
@@ -1114,12 +1199,43 @@ class PodflyConfig {
       );
     }
 
+    AwsConfig? aws;
+    if (doc['aws'] != null ||
+        doc['apprunner'] != null ||
+        host == AppHost.aws) {
+      final m = _map(doc['aws'] ?? doc['apprunner']);
+      final envMap = <String, String>{};
+      final envRaw = m['env'];
+      if (envRaw is YamlMap) {
+        for (final e in envRaw.entries) {
+          envMap[e.key.toString()] = e.value?.toString() ?? '';
+        }
+      }
+      aws = AwsConfig(
+        service: m['service']?.toString() ?? name.replaceAll('_', '-'),
+        region: m['region']?.toString() ?? 'us-east-1',
+        cpu: m['cpu']?.toString() ?? '1024',
+        memory: m['memory']?.toString() ?? '2048',
+        port: int.tryParse('${m['port'] ?? 8080}') ?? 8080,
+        ecrRepository: m['ecr_repository']?.toString(),
+        ecrAccessRole:
+            m['ecr_access_role']?.toString() ?? 'AppRunnerECRAccessRole',
+        imageTag: m['image_tag']?.toString() ?? 'latest',
+        platform: m['platform']?.toString() ?? 'linux/amd64',
+        startCommand: m['start_command']?.toString() ?? '/app/entrypoint.sh',
+        serviceArn: m['service_arn']?.toString(),
+        extraEnv: envMap,
+        publicHost: m['public_host']?.toString(),
+      );
+    }
+
     CloudflareConfig? cf;
     // Pages UI for Fly split; native API hosts skip Pages.
     final wantPages = host != AppHost.railway &&
         host != AppHost.digitalOcean &&
         host != AppHost.render &&
         host != AppHost.cloudRun &&
+        host != AppHost.aws &&
         (doc['cloudflare'] != null || mode == DeployMode.split);
     if (wantPages) {
       final m = _map(doc['cloudflare']);
@@ -1208,7 +1324,8 @@ class PodflyConfig {
     final sanitized = name.replaceAll('_', '-');
     final defaultApiUrl = host.adapter.defaultApiUrl(
       name: name,
-      sanitizedName: cloudRun?.service ??
+      sanitizedName: aws?.service ??
+          cloudRun?.service ??
           render?.service ??
           digitalOcean?.app ??
           flyMap['app']?.toString() ??
@@ -1263,6 +1380,7 @@ class PodflyConfig {
       digitalOcean: digitalOcean,
       render: render,
       cloudRun: cloudRun,
+      aws: aws,
       cloudflare: cf,
       database: DatabaseConfig(
         provider: provider,

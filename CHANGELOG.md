@@ -15,6 +15,20 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.0] — 2026-07-21
+
+### Added
+
+- **`host: aws`** (aliases `apprunner`, `app_runner`, `amazon`): AWS **App Runner** deploy
+  - Local Docker build (`linux/amd64`) → **ECR** push → `create-service` / `update-service`
+  - Auto-creates ECR repository + `AppRunnerECRAccessRole` (ECR pull) when missing
+  - Config: region, cpu/memory, port, ecr_repository, `start_command`, service_arn, env
+  - Default `start_command: /app/entrypoint.sh` (App Runner often fails CREATE without it)
+  - TCP health check (works without a custom HTTP path)
+- Example: [podfly_examples/aws/api_only](https://github.com/127thousand/podfly_examples/tree/main/aws/api_only)
+
+---
+
 ## [0.4.1] — 2026-07-21
 
 ### Added

@@ -208,6 +208,7 @@ class Deployer {
       digitalOcean: c.digitalOcean,
       render: c.render,
       cloudRun: c.cloudRun,
+      aws: c.aws,
       cloudflare: c.cloudflare,
       database: c.database,
       web: WebConfig(

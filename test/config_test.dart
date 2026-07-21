@@ -74,6 +74,38 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('aws host round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_aws_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.aws,
+      mode: DeployMode.monolith,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      aws: AwsConfig(
+        service: 'podfly-aws-api',
+        region: 'us-east-1',
+        cpu: '1024',
+        memory: '2048',
+      ),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      web: WebConfig(
+        enabled: false,
+        apiUrl: 'https://example.us-east-1.awsapprunner.com/',
+      ),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.host, AppHost.aws);
+    expect(loaded.aws?.service, 'podfly-aws-api');
+    expect(loaded.aws?.region, 'us-east-1');
+    expect(loaded.aws?.cpu, '1024');
+    expect(loaded.toYaml(), contains('host: aws'));
+    await dir.delete(recursive: true);
+  });
+
   test('render host round-trip', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_render_');
     final cfg = PodflyConfig(

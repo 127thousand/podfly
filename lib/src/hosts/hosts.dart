@@ -1,5 +1,6 @@
 import '../config.dart';
 import 'adapter.dart';
+import 'aws_host.dart';
 import 'cloud_run_host.dart';
 import 'digitalocean_host.dart';
 import 'fly_host.dart';
@@ -22,16 +23,7 @@ void ensureHostsRegistered() {
     DigitalOceanHost(),
     RenderHost(),
     CloudRunHost(),
-    PlannedHost(
-      id: 'aws',
-      label: 'AWS (App Runner / ECS)',
-      cliBinaries: const ['aws'],
-      installHint: 'https://docs.aws.amazon.com/cli/',
-      appHost: AppHost.aws,
-      auth: PlannedAuth.command,
-      checkArgs: const ['sts', 'get-caller-identity'],
-      loginHint: 'aws configure / SSO',
-    ),
+    AwsHost(),
     PlannedHost(
       id: 'azure',
       label: 'Azure Container Apps',

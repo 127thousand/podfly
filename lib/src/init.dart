@@ -285,12 +285,14 @@ class Initer {
       cloudRun: host == AppHost.cloudRun
           ? CloudRunConfig(service: flyApp)
           : null,
+      aws: host == AppHost.aws ? AwsConfig(service: flyApp) : null,
       cloudflare: mode == DeployMode.split &&
               webEnabled &&
               host != AppHost.railway &&
               host != AppHost.digitalOcean &&
               host != AppHost.render &&
-              host != AppHost.cloudRun
+              host != AppHost.cloudRun &&
+              host != AppHost.aws
           ? CloudflareConfig(project: name)
           : null,
       database: database,
