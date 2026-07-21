@@ -116,8 +116,13 @@ class AwsHost extends HostAdapter {
   @override
   void configWarnings(PodflyConfig config, Log log) {
     log.detail(
-      'App Runner: Docker builds linux/amd64 → ECR → create/update service. '
-      'Not free-tier scale-to-zero like Cloud Run; delete services when done.',
+      'App Runner: Docker → ECR → create/update. Not free scale-to-zero — '
+      'delete services when done. See doc/aws.md.',
+    );
+    log.warn(
+      'App Runner does NOT support WebSockets (managed Envoy returns 403 on '
+      'Upgrade). HTTP RPC OK; Serverpod streams need Cloud Run/Fly or future '
+      'ECS+ALB (doc/specs/2026-07-21-aws-ecs-realtime-sketch.md).',
     );
   }
 

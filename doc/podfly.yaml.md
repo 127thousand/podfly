@@ -98,7 +98,10 @@ Requires `host: digitalocean`. Creates/looks up Managed Postgres, writes `.podfl
 
 Used when `host: aws` (aliases `apprunner`, `app_runner`, `amazon`).
 
-Deploys **App Runner** from a **private ECR** image: local `docker build` (`linux/amd64`) → push → `create-service` / `update-service`. Requires Docker + `aws` CLI.
+Deploys **App Runner**: local `docker build` (`linux/amd64`) → ECR → `create-service` /
+`update-service`. Requires Docker + `aws` CLI.
+
+**Deep notes (WebSockets, teardown, knobs):** [aws.md](aws.md).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -117,7 +120,17 @@ Deploys **App Runner** from a **private ECR** image: local `docker build` (`linu
 | `env` | map | — | Extra runtime env vars |
 | `public_host` | string | — | Filled after first deploy |
 
-Example: [podfly_examples/aws/api_only](https://github.com/127thousand/podfly_examples/tree/main/aws/api_only).
+### WebSockets (App Runner)
+
+**Not supported.** The managed edge (Envoy) returns **403** on `Upgrade: websocket`
+before traffic reaches the container. There is no customer Envoy/WS config. HTTP RPC
+and static UI work; Serverpod streams do not. For AWS + streams see the
+[ECS + ALB sketch](specs/2026-07-21-aws-ecs-realtime-sketch.md).
+
+Examples:
+
+- [api_only](https://github.com/127thousand/podfly_examples/tree/main/aws/api_only) — RPC  
+- [realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/aws/realtime_monolith) — UI + RPC; streams blocked at edge
 
 ## `cloud_run`
 

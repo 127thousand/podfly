@@ -50,13 +50,13 @@ podfly smoke
 
 | Layer | Providers |
 |-------|-----------|
-| API **deploy** | Fly.io (`host: fly`), Railway (`host: railway`), DigitalOcean (`host: digitalocean`) |
+| API **deploy** | Fly, Railway, DigitalOcean, Render, Cloud Run, AWS App Runner |
 | API **host choice** | Wizard: fly, railway, render, cloud_run, aws, azure, digitalocean |
-| UI | Cloudflare Pages (`wrangler`) when `mode: split` + `web.enabled`; Railway static nginx when `host: railway` |
-| DB | none, sqlite (+ volume, Fly), fly_postgres, railway_postgres, digitalocean_postgres, neon |
-| UI (native) | Railway static nginx; DigitalOcean separate web app (nginx image) |
+| UI | Cloudflare Pages (`wrangler`) when `mode: split` + `web.enabled`; Railway/DO native web |
+| DB | none, sqlite, fly_postgres, railway_postgres, digitalocean_postgres, render_postgres, neon |
+| UI (native) | Railway static nginx; DigitalOcean separate web app; Cloud Run/App Runner monolith nginx |
 
-Planned deploys: Render, Cloud Run, AWS, Azure.
+**App Runner (`host: aws`):** HTTP RPC + optional Flutter monolith packaging. **No WebSockets** (edge Envoy 403). Streams: Cloud Run or future ECS+ALB (`doc/aws.md`, `doc/specs/2026-07-21-aws-ecs-realtime-sketch.md`).
 
 ## Hard rules for agents
 
@@ -66,7 +66,7 @@ Planned deploys: Render, Cloud Run, AWS, Azure.
 4. No `web/` + android/ios → API-only (`web.enabled: false`).
 5. Podfly auto-creates Fly apps and sanitizes names (`_` → `-`). Railway: project + service + domain + `railway up`.
 6. **Do not require Fly CLI** when `host:` is railway/render/etc. — only that host’s CLI (`~/.railway/bin` is searched).
-7. Deploy implemented for **fly** and **railway**; other hosts pass doctor only until implemented.
+7. Deploy implemented for fly, railway, digitalocean, render, cloud_run, aws (App Runner). Azure: doctor only.
 8. Fly Postgres: ensure API app **before** attach; use attach `DATABASE_URL` (sidecar), not superuser placeholders.
 
 ## Package

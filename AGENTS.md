@@ -61,6 +61,7 @@ podfly deploy --yes --dry-run --no-login
 5. **Fly app names:** underscores → hyphens (`my_app` → `my-app`). Podfly creates the app if missing (**before** Postgres attach).
 6. **Supported API hosts today:** **`host: fly`**, **`host: railway`**, **`host: digitalocean`** (`do`), **`host: render`**, **`host: cloud_run`** (`gcp`), **`host: aws`** (App Runner). Azure: doctor only until implemented. Examples: https://github.com/127thousand/podfly_examples
 7. **Doctor does not require Fly** unless `host: fly` (or default). Railway → `railway` CLI; DigitalOcean → `doctl` + Docker + DOCR; AWS → `aws` + Docker + ECR. Pages still needs `wrangler` when `mode: split` and web enabled on Cloudflare.
+7b. **App Runner has no WebSockets** (managed Envoy 403 on Upgrade). Use Cloud Run for stream demos; AWS streams → ECS+ALB sketch in `doc/specs/2026-07-21-aws-ecs-realtime-sketch.md`. Details: `doc/aws.md`.
 8. **Fly Postgres:** parse attach `DATABASE_URL` into sidecar + `passwords.yaml` — never hardcode superuser `postgres` as the app user.
 9. **DigitalOcean Postgres:** public host + SSL; firewall `app:<app-id>` after app create. WASM nginx must not double-set `Content-Type`.
 10. **Install for users:** `dart pub global activate podfly` (pub.dev). Git/path activate is for contributors.

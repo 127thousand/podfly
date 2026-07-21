@@ -14,9 +14,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 - **AWS App Runner** `ecr_public: true` — push to ECR Public + `ImageRepositoryType: ECR_PUBLIC`
 - Prefer monorepo **root Dockerfile** when present (nginx monolith images)
 - Example: [podfly_examples/aws/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/aws/realtime_monolith)
+- **[doc/aws.md](doc/aws.md)** — App Runner WebSocket limitation (managed Envoy 403; not customer-configurable)
+- **Sketch:** [ECS Fargate + ALB realtime](doc/specs/2026-07-21-aws-ecs-realtime-sketch.md) for AWS + Serverpod streams
 
 ### Planned (parked)
 
+- **`host: aws_ecs`** — Fargate + ALB (WebSocket-capable); see sketch above
 - **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps
 
 ---
