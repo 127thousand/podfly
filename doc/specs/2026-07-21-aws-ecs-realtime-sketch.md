@@ -1,6 +1,6 @@
 # Sketch: AWS ECS Fargate + ALB realtime (Serverpod streams)
 
-**Status:** sketch only — not implemented in podfly.  
+**Status:** **implemented** as `host: aws_ecs` (CLI orchestration, no CDK).  
 **Goal:** first-class AWS path for **Flutter web + Serverpod WebSocket streams**, where App Runner cannot go.
 
 ## Problem
