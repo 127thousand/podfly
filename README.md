@@ -185,6 +185,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 📦 [**AWS App Runner**](https://aws.amazon.com/apprunner/) | `aws` | ✅ | ✅ | 🟡 | 🟡 | [Notes](doc/aws.md): **no WebSockets** (managed Envoy 403); not free scale-to-zero |
 | 📦 [**AWS ECS + ALB**](https://aws.amazon.com/ecs/) | `aws_ecs` | ✅ | ✅ | ✅ | ✅ | Fargate + ALB; **WebSockets work** (unlike App Runner) |
 | 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | ✅ | ✅ | 🟡 | ✅* | [Notes](doc/azure.md): Docker→ACR→env/app; scale-to-zero; *monolith = nginx image |
+| ⬛ [**Hetzner Cloud**](https://www.hetzner.com/cloud) | `hcloud` | ✅ | ✅ | 🟡 | ✅* | [Notes](doc/hetzner.md): VPS + Docker/SSH + Caddy HTTPS; bind or create; *no scale-to-zero |
 | 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | ✅ | ✅ | ✅ | 🟡 | DOCR images + App Spec; web = separate app |
 
 **Fit legend:** ✅ natural · 🟡 possible with constraints · ❌ poor fit · 🗺️ podfly not implemented yet · — N/A

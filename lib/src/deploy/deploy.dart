@@ -28,14 +28,33 @@ class Deployer {
     required this.config,
     required this.runner,
     required this.log,
+    this.nonInteractive = false,
   });
 
   final PodflyConfig config;
   final ProcessRunner runner;
   final Log log;
+  /// From `podfly deploy --yes` — hosts skip interactive prompts.
+  final bool nonInteractive;
 
   HostDeployResult? lastApiResult;
   HostDeployResult? lastWebResult;
+
+  DeployContext _ctx(PodflyConfig cfg) => DeployContext(
+        config: cfg,
+        runner: runner,
+        log: log,
+        nonInteractive: nonInteractive,
+        patchPublicHosts: (host, {scheme = 'https', publicPort}) =>
+            patchProductionPublicHosts(
+          config: cfg,
+          runner: runner,
+          log: log,
+          host: host,
+          scheme: scheme,
+          publicPort: publicPort,
+        ),
+      );
 
   Future<void> run(DeployOptions opts) async {
     ensureHostsRegistered();
@@ -52,17 +71,7 @@ class Deployer {
     // Working config may pick up API public host before Flutter web build.
     var cfg = config;
 
-    final ctx = DeployContext(
-      config: cfg,
-      runner: runner,
-      log: log,
-      patchPublicHosts: (host) => patchProductionPublicHosts(
-        config: cfg,
-        runner: runner,
-        log: log,
-        host: host,
-      ),
-    );
+    final ctx = _ctx(cfg);
 
     // For split Railway web, resolve API hostname first (SERVER_URL dart-define).
     if (opts.doWeb && cfg.web.enabled && adapter.deploysWebNatively) {
@@ -75,17 +84,7 @@ class Deployer {
     await _ensureServerDockerfile();
 
     // API app/project must exist before DB attach (Fly postgres attach -a …).
-    final ensureCtx = DeployContext(
-      config: cfg,
-      runner: runner,
-      log: log,
-      patchPublicHosts: (host) => patchProductionPublicHosts(
-        config: cfg,
-        runner: runner,
-        log: log,
-        host: host,
-      ),
-    );
+    final ensureCtx = _ctx(cfg);
     final resolvedApp = await adapter.ensureApiApp(ensureCtx);
     if (resolvedApp != null &&
         resolvedApp != cfg.fly.app &&
@@ -112,17 +111,7 @@ class Deployer {
       log.detail('web.enabled: false — skipping Flutter web build/deploy');
     }
 
-    final buildCtx = DeployContext(
-      config: cfg,
-      runner: runner,
-      log: log,
-      patchPublicHosts: (host) => patchProductionPublicHosts(
-        config: cfg,
-        runner: runner,
-        log: log,
-        host: host,
-      ),
-    );
+    final buildCtx = _ctx(cfg);
 
     // When the host deploys web natively (Railway / DO), ship API first so
     // Flutter can bake the live API URL into SERVER_URL.
@@ -146,19 +135,7 @@ class Deployer {
     // Separate web service (Railway / DO) or Pages / all-in-one copy — not siamese.
     if (doWeb) {
       if (nativeWeb) {
-        lastWebResult = await adapter.deployWeb(
-          DeployContext(
-            config: cfg,
-            runner: runner,
-            log: log,
-            patchPublicHosts: (host) => patchProductionPublicHosts(
-              config: cfg,
-              runner: runner,
-              log: log,
-              host: host,
-            ),
-          ),
-        );
+        lastWebResult = await adapter.deployWeb(_ctx(cfg));
       } else if (cfg.mode == DeployMode.split) {
         await _deployPages();
       } else if (adapter.supportsAllInOneWeb) {
@@ -211,6 +188,7 @@ class Deployer {
       aws: c.aws,
       awsEcs: c.awsEcs,
       azure: c.azure,
+      hetzner: c.hetzner,
       cloudflare: c.cloudflare,
       database: c.database,
       web: WebConfig(
@@ -233,6 +211,14 @@ class Deployer {
         smokeCfg = await PodflyConfig.load(fallback.configPath);
       } catch (_) {/* use in-memory */}
     }
+    // Prefer full display URL (Hetzner uses http://IP:port).
+    final display = lastApiResult?.displayUrl;
+    if (display != null && display.isNotEmpty) {
+      final url = display.startsWith('http')
+          ? (display.endsWith('/') ? display : '$display/')
+          : 'https://$display/';
+      return _withApiUrl(smokeCfg, url);
+    }
     final host = lastApiResult?.publicHost;
     if (host != null &&
         (fallback.host == AppHost.railway ||
@@ -242,7 +228,12 @@ class Deployer {
             fallback.host == AppHost.aws ||
             fallback.host == AppHost.awsEcs ||
             fallback.host == AppHost.azure ||
+            fallback.host == AppHost.hetzner ||
             smokeCfg.web.apiUrlNormalized.contains('REPLACE'))) {
+      final base = fallback.host.adapter.publicApiBase(smokeCfg);
+      if (base != null && base.isNotEmpty) {
+        return _withApiUrl(smokeCfg, base);
+      }
       smokeCfg = _withApiUrl(smokeCfg, 'https://$host/');
     }
     return smokeCfg;

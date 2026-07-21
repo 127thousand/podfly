@@ -9,6 +9,18 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`host: hetzner`** (aliases `hcloud`, `hetzner_cloud`): Hetzner Cloud VPS
+  - Interactive: pick **existing** server or **create** (location → type from live API)
+  - Non-interactive: bound `server_id`/`ipv4` or `create: true` + policy
+  - Local Docker build → `docker save \| ssh docker load` → container on :8080
+  - **Caddy HTTPS :443** (Let's Encrypt) via PTR hostname or `hetzner.domain`
+  - Ubuntu pin + remote Docker bootstrap
+- Examples: [hetzner/api_only](https://github.com/127thousand/podfly_examples/tree/main/hetzner/api_only), [hetzner/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/hetzner/realtime_monolith)
+- **[doc/hetzner.md](doc/hetzner.md)** — bind vs create, domains/HTTPS, teardown
+- `DeployContext.nonInteractive` from `podfly deploy --yes`
+
 ### Planned (parked)
 
 - **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps

@@ -142,6 +142,45 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('hetzner host round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_hetzner_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.hetzner,
+      mode: DeployMode.monolith,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      hetzner: HetznerConfig(
+        serverName: 'podfly-demo',
+        serverId: '42',
+        ipv4: '203.0.113.10',
+        location: 'ash',
+        serverType: 'cpx11',
+        create: false,
+        https: true,
+        domain: 'static.example.clients.your-server.de',
+      ),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      web: WebConfig(
+        enabled: false,
+        apiUrl: 'https://static.example.clients.your-server.de/',
+      ),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.host, AppHost.hetzner);
+    expect(loaded.hetzner?.serverId, '42');
+    expect(loaded.hetzner?.ipv4, '203.0.113.10');
+    expect(loaded.hetzner?.location, 'ash');
+    expect(loaded.hetzner?.serverType, 'cpx11');
+    expect(loaded.hetzner?.https, isTrue);
+    expect(loaded.hetzner?.domain, 'static.example.clients.your-server.de');
+    expect(loaded.toYaml(), contains('host: hetzner'));
+    await dir.delete(recursive: true);
+  });
+
   test('render host round-trip', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_render_');
     final cfg = PodflyConfig(

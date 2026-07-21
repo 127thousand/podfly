@@ -895,6 +895,7 @@ class AwsHost extends HostAdapter {
       ),
       awsEcs: cfg.awsEcs,
       azure: cfg.azure,
+      hetzner: cfg.hetzner,
       cloudflare: cfg.cloudflare,
       database: cfg.database,
       web: WebConfig(

@@ -116,15 +116,15 @@ Deploy options:
   --no-login    Do not open browser logins (CI: use tokens)
   --init        Force wizard; confirms before overwriting podfly.yaml
   --host        API cloud: fly | railway | digitalocean | render |
-                cloud_run | aws | aws_ecs | azure | …
+                cloud_run | aws | aws_ecs | azure | hetzner | …
   --mode        split | monolith   (fly = legacy alias for monolith)
   --root        Project root (default: cwd)
   --config      Path to podfly.yaml
 
 Doctor only requires the CLI for the chosen host (not always Fly).
 Supported API hosts: Fly, Railway, DigitalOcean, Render, Cloud Run, AWS App
-Runner, AWS ECS+ALB, Azure Container Apps. UI: Cloudflare Pages / host-native
-static. DB: Neon / Fly PG / Railway PG / DO PG / Render PG / SQLite / none.
+Runner, AWS ECS+ALB, Azure Container Apps, Hetzner Cloud. UI: Cloudflare Pages /
+host-native static. DB: Neon / Fly PG / Railway PG / DO PG / Render PG / SQLite / none.
 Dockerfile: prefer Serverpod's *_server/Dockerfile (podfly does not invent hosts).
 
 Install: dart pub global activate podfly
@@ -344,6 +344,9 @@ Future<int> _deploy(ArgResults g) async {
           ? (config.azure ??
               AzureConfig(app: config.name.replaceAll('_', '-')))
           : config.azure,
+      hetzner: host == AppHost.hetzner
+          ? (config.hetzner ?? HetznerConfig())
+          : config.hetzner,
       // Explicit monolith CLI: drop Pages block; otherwise keep / default cloudflare for split
       cloudflare: (monolith && modeOpt != null) ||
               host == AppHost.digitalOcean ||
@@ -352,7 +355,8 @@ Future<int> _deploy(ArgResults g) async {
               host == AppHost.cloudRun ||
               host == AppHost.aws ||
               host == AppHost.awsEcs ||
-              host == AppHost.azure
+              host == AppHost.azure ||
+              host == AppHost.hetzner
           ? null
           : (config.cloudflare ??
               (monolith
@@ -391,7 +395,12 @@ Future<int> _deploy(ArgResults g) async {
         '${config.web.enabled ? '' : ' (web.enabled: false)'}');
   }
 
-  await Deployer(config: config, runner: runner, log: log).run(
+  await Deployer(
+    config: config,
+    runner: runner,
+    log: log,
+    nonInteractive: yes,
+  ).run(
     DeployOptions(
       doApi: doApi,
       doWeb: doWeb,

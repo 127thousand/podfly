@@ -359,6 +359,7 @@ class CloudRunHost extends HostAdapter {
       aws: cfg.aws,
       awsEcs: cfg.awsEcs,
       azure: cfg.azure,
+      hetzner: cfg.hetzner,
       cloudflare: cfg.cloudflare,
       database: cfg.database,
       web: WebConfig(

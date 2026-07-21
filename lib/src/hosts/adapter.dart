@@ -119,6 +119,7 @@ class DeployContext {
     required this.runner,
     required this.log,
     required this.patchPublicHosts,
+    this.nonInteractive = false,
   });
 
   final PodflyConfig config;
@@ -126,7 +127,16 @@ class DeployContext {
   final Log log;
 
   /// Patch Serverpod production publicHost/publicScheme/publicPort.
-  final Future<void> Function(String bareHost) patchPublicHosts;
+  ///
+  /// Optional [scheme] / [publicPort] for plain HTTP VPS (default https/443).
+  final Future<void> Function(
+    String bareHost, {
+    String scheme,
+    int? publicPort,
+  }) patchPublicHosts;
+
+  /// True when `podfly deploy --yes` (or non-TTY): skip interactive pickers.
+  final bool nonInteractive;
 }
 
 class HostDeployResult {

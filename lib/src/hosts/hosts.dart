@@ -5,6 +5,7 @@ import 'azure_host.dart';
 import 'cloud_run_host.dart';
 import 'digitalocean_host.dart';
 import 'fly_host.dart';
+import 'hetzner_host.dart';
 import 'railway_host.dart';
 import 'render_host.dart';
 
@@ -26,5 +27,6 @@ void ensureHostsRegistered() {
     AwsHost(),
     AwsEcsHost(),
     AzureHost(),
+    HetznerHost(),
   ]);
 }

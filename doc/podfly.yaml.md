@@ -8,7 +8,7 @@ Location: project root (walk-up from cwd also finds it).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `host` | `fly` \| `railway` \| `digitalocean` \| `render` \| `cloud_run` \| `aws` \| `aws_ecs` \| `azure` \| … | `fly` | **API cloud** — fly, railway, digitalocean, render, cloud_run, aws, aws_ecs, azure deploy today. |
+| `host` | `fly` \| `railway` \| `digitalocean` \| `render` \| `cloud_run` \| `aws` \| `aws_ecs` \| `azure` \| `hetzner` \| … | `fly` | **API cloud** — see README host table. |
 | `mode` | `split` \| `monolith` | `split` | Layout: CDN UI + API vs UI with API host. Alias: `fly` → monolith (legacy) |
 | `name` | string | directory name | Default for app + Pages project names |
 | `server` | string | discovered `*_server` | Path relative to root |
@@ -194,6 +194,44 @@ Examples:
 
 - [azure/api_only](https://github.com/127thousand/podfly_examples/tree/main/azure/api_only) — RPC  
 - [azure/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/azure/realtime_monolith) — Flutter + streams
+
+## `hetzner`
+
+Used when `host: hetzner` (aliases `hcloud`, `hetzner_cloud`).
+
+**Hetzner Cloud VPS**: bind an existing server or create one (Ubuntu + Docker
+over SSH). Location/type chosen interactively or via live API policy — not a
+fixed SKU.
+
+**Deep notes:** [hetzner.md](hetzner.md).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `server_name` | string | — | Name for create / lookup |
+| `server_id` | string | — | Bound after pick/create |
+| `ipv4` | string | — | Public IPv4 (SSH + API URL) |
+| `location` | string | — | Prefer e.g. `ash`, `hel1` |
+| `server_type` | string | — | Prefer e.g. `cpx11` (must exist in location) |
+| `image` | string | `ubuntu-24.04` | OS image pin |
+| `ssh_key` | string | first key | hcloud SSH key name |
+| `ssh_user` | string | `root` | SSH user |
+| `container_name` | string | `podfly` | Docker container name |
+| `port` | int | `8080` | App container publish port (Caddy upstream) |
+| `platform` | string | `linux/amd64` | Docker build platform |
+| `create` | bool | `false` | With `--yes`, auto-create if unbound |
+| `min_memory_gb` | int | `2` | Auto type filter |
+| `https` | bool | `true` | Caddy + Let's Encrypt on **:443** |
+| `domain` | string | — | Custom hostname (A → IP); else use IPv4 **PTR** |
+| `public_host` | string | — | Hostname (or IP) after deploy |
+
+Redeploys with `server_id`/`ipv4` set skip the interactive picker.
+
+**HTTPS:** Hetzner has no product FQDN. With `https: true`, podfly installs Caddy and obtains a cert for `domain` or the reverse-DNS name (`static.…clients.your-server.de`).
+
+Examples:
+
+- [hetzner/api_only](https://github.com/127thousand/podfly_examples/tree/main/hetzner/api_only)  
+- [hetzner/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/hetzner/realtime_monolith)
 
 ## `cloud_run`
 

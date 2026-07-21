@@ -765,6 +765,7 @@ class AzureHost extends HostAdapter {
         extraEnv: base.extraEnv,
         publicHost: publicHost,
       ),
+      hetzner: cfg.hetzner,
       cloudflare: cfg.cloudflare,
       database: cfg.database,
       web: WebConfig(

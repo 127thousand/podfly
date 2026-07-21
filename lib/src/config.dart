@@ -44,6 +44,7 @@ enum AppHost {
   aws,
   awsEcs,
   azure,
+  hetzner,
   digitalOcean,
 }
 
@@ -409,6 +410,86 @@ class AwsConfig {
         if (startCommand.isNotEmpty) 'start_command': startCommand,
         'ecr_public': ecrPublic,
         if (serviceArn != null) 'service_arn': serviceArn,
+        if (extraEnv.isNotEmpty) 'env': extraEnv,
+        if (publicHost != null) 'public_host': publicHost,
+      };
+}
+
+/// Hetzner Cloud VPS settings (`host: hetzner`).
+///
+/// Bind an existing server (`server_id` / `ipv4` / `server_name`) or create
+/// one interactively (TTY) / via [create] + location/type policy.
+///
+/// Hetzner does not give a product FQDN (unlike Fly/ACA). With [https], podfly
+/// runs Caddy on :443 using [domain] or the IP's reverse-DNS (PTR) name.
+class HetznerConfig {
+  HetznerConfig({
+    this.serverName,
+    this.serverId,
+    this.ipv4,
+    this.location,
+    this.serverType,
+    this.image = 'ubuntu-24.04',
+    this.sshKey,
+    this.sshUser = 'root',
+    this.containerName = 'podfly',
+    this.port = 8080,
+    this.platform = 'linux/amd64',
+    this.create = false,
+    this.minMemoryGb = 2,
+    this.https = true,
+    this.domain,
+    this.extraEnv = const {},
+    this.publicHost,
+  });
+
+  /// Human server name (create / lookup).
+  final String? serverName;
+  /// Hetzner server id after bind/create.
+  final String? serverId;
+  final String? ipv4;
+  /// Preferred location (e.g. `ash`, `hel1`). Empty → interactive / policy.
+  final String? location;
+  /// Preferred type (e.g. `cpx11`). Empty → interactive / policy.
+  final String? serverType;
+  /// OS image name (pin Ubuntu for podfly).
+  final String image;
+  /// hcloud SSH key name or id.
+  final String? sshKey;
+  final String sshUser;
+  /// Docker container name on the VPS.
+  final String containerName;
+  /// Host port published for the app container (Caddy proxies to this).
+  final int port;
+  final String platform;
+  /// When true and unbound, create a server non-interactively (with `--yes`).
+  final bool create;
+  /// Minimum RAM (GB) when auto-picking a server type.
+  final int minMemoryGb;
+  /// Install Caddy + Let's Encrypt on 443 (default true).
+  final bool https;
+  /// Custom hostname (A/AAAA → server). Empty → use Hetzner PTR hostname.
+  final String? domain;
+  final Map<String, String> extraEnv;
+  /// Public host for API (hostname preferred; else IPv4).
+  final String? publicHost;
+
+  Map<String, Object?> toMap() => {
+        if (serverName != null) 'server_name': serverName,
+        if (serverId != null) 'server_id': serverId,
+        if (ipv4 != null) 'ipv4': ipv4,
+        if (location != null) 'location': location,
+        if (serverType != null) 'server_type': serverType,
+        'image': image,
+        if (sshKey != null) 'ssh_key': sshKey,
+        'ssh_user': sshUser,
+        'container_name': containerName,
+        'port': port,
+        'platform': platform,
+        'create': create,
+        'min_memory_gb': minMemoryGb,
+        'https': https,
+        if (domain != null) 'domain': domain,
         if (extraEnv.isNotEmpty) 'env': extraEnv,
         if (publicHost != null) 'public_host': publicHost,
       };
@@ -901,6 +982,7 @@ class PodflyConfig {
     this.aws,
     this.awsEcs,
     this.azure,
+    this.hetzner,
     this.cloudflare,
     required this.database,
     required this.web,
@@ -922,6 +1004,7 @@ class PodflyConfig {
   final AwsConfig? aws;
   final AwsEcsConfig? awsEcs;
   final AzureConfig? azure;
+  final HetznerConfig? hetzner;
   final CloudflareConfig? cloudflare;
   final DatabaseConfig database;
   final WebConfig web;
@@ -956,6 +1039,7 @@ class PodflyConfig {
         if (aws != null) 'aws': aws!.toMap(),
         if (awsEcs != null) 'aws_ecs': awsEcs!.toMap(),
         if (azure != null) 'azure': azure!.toMap(),
+        if (hetzner != null) 'hetzner': hetzner!.toMap(),
         if (cloudflare != null) 'cloudflare': cloudflare!.toMap(),
         'database': database.toMap(),
         'web': web.toMap(),
@@ -1164,6 +1248,28 @@ class PodflyConfig {
         buf.writeln('  public_host: ${a.publicHost}');
       }
     }
+    if (host == AppHost.hetzner || hetzner != null) {
+      final h = hetzner ?? HetznerConfig();
+      buf.writeln('hetzner:');
+      if (h.serverName != null) buf.writeln('  server_name: ${h.serverName}');
+      if (h.serverId != null) buf.writeln('  server_id: ${h.serverId}');
+      if (h.ipv4 != null) buf.writeln('  ipv4: ${h.ipv4}');
+      if (h.location != null) buf.writeln('  location: ${h.location}');
+      if (h.serverType != null) buf.writeln('  server_type: ${h.serverType}');
+      buf.writeln('  image: ${h.image}');
+      if (h.sshKey != null) buf.writeln('  ssh_key: ${h.sshKey}');
+      buf.writeln('  ssh_user: ${h.sshUser}');
+      buf.writeln('  container_name: ${h.containerName}');
+      buf.writeln('  port: ${h.port}');
+      buf.writeln('  platform: ${h.platform}');
+      buf.writeln('  create: ${h.create}');
+      buf.writeln('  min_memory_gb: ${h.minMemoryGb}');
+      buf.writeln('  https: ${h.https}');
+      if (h.domain != null) buf.writeln('  domain: ${h.domain}');
+      if (h.publicHost != null) {
+        buf.writeln('  public_host: ${h.publicHost}');
+      }
+    }
     // Cloudflare only when UI is on Pages (not native API hosts)
     if (cloudflare != null &&
         host != AppHost.railway &&
@@ -1172,7 +1278,8 @@ class PodflyConfig {
         host != AppHost.cloudRun &&
         host != AppHost.aws &&
         host != AppHost.awsEcs &&
-        host != AppHost.azure) {
+        host != AppHost.azure &&
+        host != AppHost.hetzner) {
       buf.writeln();
       buf.writeln('cloudflare:');
       buf.writeln('  project: ${cloudflare!.project}');
@@ -1541,6 +1648,37 @@ class PodflyConfig {
       );
     }
 
+    HetznerConfig? hetzner;
+    if (doc['hetzner'] != null || host == AppHost.hetzner) {
+      final m = _map(doc['hetzner']);
+      final envMap = <String, String>{};
+      final envRaw = m['env'];
+      if (envRaw is YamlMap) {
+        for (final e in envRaw.entries) {
+          envMap[e.key.toString()] = e.value?.toString() ?? '';
+        }
+      }
+      hetzner = HetznerConfig(
+        serverName: m['server_name']?.toString() ?? m['name']?.toString(),
+        serverId: m['server_id']?.toString() ?? m['id']?.toString(),
+        ipv4: m['ipv4']?.toString(),
+        location: m['location']?.toString(),
+        serverType: m['server_type']?.toString() ?? m['type']?.toString(),
+        image: m['image']?.toString() ?? 'ubuntu-24.04',
+        sshKey: m['ssh_key']?.toString(),
+        sshUser: m['ssh_user']?.toString() ?? 'root',
+        containerName: m['container_name']?.toString() ?? 'podfly',
+        port: int.tryParse('${m['port'] ?? 8080}') ?? 8080,
+        platform: m['platform']?.toString() ?? 'linux/amd64',
+        create: m['create'] == true,
+        minMemoryGb: int.tryParse('${m['min_memory_gb'] ?? 2}') ?? 2,
+        https: m['https'] != false,
+        domain: m['domain']?.toString(),
+        extraEnv: envMap,
+        publicHost: m['public_host']?.toString(),
+      );
+    }
+
     CloudflareConfig? cf;
     // Pages UI for Fly split; native API hosts skip Pages.
     final wantPages = host != AppHost.railway &&
@@ -1550,6 +1688,7 @@ class PodflyConfig {
         host != AppHost.aws &&
         host != AppHost.awsEcs &&
         host != AppHost.azure &&
+        host != AppHost.hetzner &&
         (doc['cloudflare'] != null || mode == DeployMode.split);
     if (wantPages) {
       final m = _map(doc['cloudflare']);
@@ -1697,6 +1836,7 @@ class PodflyConfig {
       aws: aws,
       awsEcs: awsEcs,
       azure: azure,
+      hetzner: hetzner,
       cloudflare: cf,
       database: DatabaseConfig(
         provider: provider,

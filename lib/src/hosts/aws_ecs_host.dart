@@ -1301,6 +1301,7 @@ class AwsEcsHost extends HostAdapter {
         publicHost: publicHost,
       ),
       azure: cfg.azure,
+      hetzner: cfg.hetzner,
       cloudflare: cfg.cloudflare,
       database: cfg.database,
       web: WebConfig(
