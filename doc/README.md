@@ -8,6 +8,7 @@
 | [Database](database.md) | Providers, detection, Fly/Railway/DO Postgres |
 | [podfly.yaml reference](podfly.yaml.md) | Config field list and examples |
 | [AWS App Runner](aws.md) | `host: aws` — deploy knobs; **no WebSockets** (Envoy 403) |
+| [Azure Container Apps](azure.md) | `host: azure` — Docker → ACR → env/app; WebSockets OK |
 | [Design specs](specs/) | Architecture decisions (incl. [ECS+ALB realtime sketch](specs/2026-07-21-aws-ecs-realtime-sketch.md)) |
 
 Start at the [root README](../README.md) for install and quick start.

@@ -9,6 +9,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Planned (parked)
+
+- **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps
+
+---
+
+## [0.6.0] — 2026-07-21
+
 ### Added
 
 - **`host: azure`** (aliases `aca`, `containerapps`, `container_apps`): **Azure Container Apps**
@@ -16,33 +24,21 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
   - Creates resource group / ACR / environment when missing; external ingress, target port 8080
   - Scale-to-zero via `min_replicas: 0`; WebSockets supported (unlike App Runner)
   - Config: app, resource_group, location, environment, registry, cpu/memory, replicas
-- Example: [podfly_examples/azure/api_only](https://github.com/127thousand/podfly_examples/tree/main/azure/api_only)
-- Example: [podfly_examples/azure/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/azure/realtime_monolith) — Flutter web + WebSocket streams
+- Examples: [azure/api_only](https://github.com/127thousand/podfly_examples/tree/main/azure/api_only), [azure/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/azure/realtime_monolith)
 - **[doc/azure.md](doc/azure.md)** — deploy flow, teardown (delete resource group)
+- **`host: aws_ecs`** (aliases `ecs`, `fargate`): ECS Fargate + **ALB** (WebSocket-capable)
+  - Docker → private ECR → task definition → Fargate service behind internet-facing ALB
+  - ALB idle timeout (default 3600s), optional stickiness; HTTP :80 for demos (no ACM)
+- Example: [aws/ecs_realtime](https://github.com/127thousand/podfly_examples/tree/main/aws/ecs_realtime)
+- **AWS App Runner** `ecr_public: true` — push to ECR Public + `ImageRepositoryType: ECR_PUBLIC`
+- Prefer monorepo **root Dockerfile** when present (nginx monolith images)
+- Example: [aws/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/aws/realtime_monolith)
+- **[doc/aws.md](doc/aws.md)** — App Runner WebSocket limitation (managed Envoy 403)
+- **Sketch:** [ECS Fargate + ALB realtime](doc/specs/2026-07-21-aws-ecs-realtime-sketch.md)
 
 ### Changed
 
 - **Cloud Run:** always pass `--execution-environment` (default **`gen2`** via `cloud_run.execution_environment`)
-
-### Added
-
-- **AWS App Runner** `ecr_public: true` — push to ECR Public + `ImageRepositoryType: ECR_PUBLIC`
-- Prefer monorepo **root Dockerfile** when present (nginx monolith images)
-- Example: [podfly_examples/aws/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/aws/realtime_monolith)
-- **[doc/aws.md](doc/aws.md)** — App Runner WebSocket limitation (managed Envoy 403; not customer-configurable)
-- **Sketch:** [ECS Fargate + ALB realtime](doc/specs/2026-07-21-aws-ecs-realtime-sketch.md) for AWS + Serverpod streams
-
-### Added
-
-- **`host: aws_ecs`** (aliases `ecs`, `fargate`): ECS Fargate + **ALB** (WebSocket-capable)
-  - Docker → private ECR → task definition → Fargate service behind internet-facing ALB
-  - ALB idle timeout (default 3600s), optional stickiness; HTTP :80 for demos (no ACM)
-  - Default VPC/subnets when unset; creates SGs, log group, task execution role
-- Example: [podfly_examples/aws/ecs_realtime](https://github.com/127thousand/podfly_examples/tree/main/aws/ecs_realtime)
-
-### Planned (parked)
-
-- **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps
 
 ---
 
