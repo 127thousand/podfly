@@ -124,13 +124,43 @@ Deploys **App Runner**: local `docker build` (`linux/amd64`) → ECR → `create
 
 **Not supported.** The managed edge (Envoy) returns **403** on `Upgrade: websocket`
 before traffic reaches the container. There is no customer Envoy/WS config. HTTP RPC
-and static UI work; Serverpod streams do not. For AWS + streams see the
-[ECS + ALB sketch](specs/2026-07-21-aws-ecs-realtime-sketch.md).
+and static UI work; Serverpod streams do not. For AWS + streams use **`host: aws_ecs`**
+([below](#aws_ecs)).
 
 Examples:
 
 - [api_only](https://github.com/127thousand/podfly_examples/tree/main/aws/api_only) — RPC  
-- [realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/aws/realtime_monolith) — UI + RPC; streams blocked at edge
+- [realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/aws/realtime_monolith) — UI + RPC; streams blocked at edge  
+- Streams: [ecs_realtime](https://github.com/127thousand/podfly_examples/tree/main/aws/ecs_realtime) (`host: aws_ecs`)
+
+## `aws_ecs`
+
+Used when `host: aws_ecs` (aliases `ecs`, `fargate`).
+
+**ECS Fargate + Application Load Balancer** — WebSocket-capable AWS path for Serverpod
+streams. CLI-only (no CDK). Docker → private ECR → task definition → Fargate service
+behind an internet-facing ALB (HTTP :80 for demos; idle timeout default **3600s**).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `service` | string | `name` | ECS service + ALB name base |
+| `region` | string | `us-east-1` | AWS region |
+| `cluster` | string | service name | ECS cluster |
+| `cpu` | string | `512` | Fargate CPU units |
+| `memory` | string | `1024` | Fargate memory (MB) |
+| `port` | int | `8080` | Container port (nginx monolith) |
+| `desired_count` | int | `1` | Running tasks |
+| `idle_timeout_seconds` | int | `3600` | ALB idle timeout (streams) |
+| `stickiness` | bool | `true` | LB cookie stickiness |
+| `assign_public_ip` | bool | `true` | Tasks get public IP (no NAT needed) |
+| `execution_role` | string | `podflyEcsTaskExecutionRole` | Task execution IAM role |
+| `log_group` | string | `/ecs/<service>` | CloudWatch log group |
+| `vpc_id` / `subnet_ids` | — | default VPC | Optional overrides |
+| `public_host` | string | — | ALB DNS after deploy |
+| `load_balancer_arn` / `target_group_arn` | string | — | Filled after deploy |
+
+Example: [aws/ecs_realtime](https://github.com/127thousand/podfly_examples/tree/main/aws/ecs_realtime).  
+Design notes: [specs/2026-07-21-aws-ecs-realtime-sketch.md](specs/2026-07-21-aws-ecs-realtime-sketch.md).
 
 ## `cloud_run`
 

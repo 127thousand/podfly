@@ -15,8 +15,9 @@
 
 Examples:
 
-- [api_only](https://github.com/127thousand/podfly_examples/tree/main/aws/api_only) — RPC
-- [realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/aws/realtime_monolith) — UI + RPC; streams fail at the edge
+- [api_only](https://github.com/127thousand/podfly_examples/tree/main/aws/api_only) — RPC  
+- [realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/aws/realtime_monolith) — UI + RPC; streams fail at the edge  
+- [ecs_realtime](https://github.com/127thousand/podfly_examples/tree/main/aws/ecs_realtime) — UI + RPC + **streams** (`host: aws_ecs`)
 
 ## WebSockets: research summary (not a config bug)
 
