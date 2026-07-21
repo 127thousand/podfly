@@ -172,8 +172,15 @@ class CloudRunHost extends HostAdapter {
       '${ccfg.minInstances}',
       '--max-instances',
       '${ccfg.maxInstances}',
+      '--timeout',
+      '${ccfg.timeoutSeconds}',
       '--quiet',
     ];
+    if (ccfg.sessionAffinity) {
+      args.add('--session-affinity');
+    } else {
+      args.add('--no-session-affinity');
+    }
     final envPairs = <String>[
       'runmode=production',
       'SERVERPOD_RUN_MODE=production',
@@ -340,6 +347,8 @@ class CloudRunHost extends HostAdapter {
         port: base.port,
         minInstances: base.minInstances,
         maxInstances: base.maxInstances,
+        timeoutSeconds: base.timeoutSeconds,
+        sessionAffinity: base.sessionAffinity,
         cloudSqlInstances: base.cloudSqlInstances,
         extraEnv: base.extraEnv,
         publicHost: publicHost,

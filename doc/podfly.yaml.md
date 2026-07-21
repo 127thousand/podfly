@@ -8,7 +8,7 @@ Location: project root (walk-up from cwd also finds it).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `host` | `fly` \| `railway` \| `digitalocean` \| `render` \| … | `fly` | **API cloud** — **fly**, **railway**, and **digitalocean** deploy today. Others: doctor only. |
+| `host` | `fly` \| `railway` \| `digitalocean` \| `render` \| `cloud_run` \| … | `fly` | **API cloud** — fly, railway, digitalocean, render, cloud_run deploy today. |
 | `mode` | `split` \| `monolith` | `split` | Layout: CDN UI + API vs UI with API host. Alias: `fly` → monolith (legacy) |
 | `name` | string | directory name | Default for app + Pages project names |
 | `server` | string | discovered `*_server` | Path relative to root |
@@ -93,6 +93,31 @@ database:
 ```
 
 Requires `host: digitalocean`. Creates/looks up Managed Postgres, writes `.podfly_do_pg.json`, patches Serverpod config (public host + SSL). After the App Platform app exists, trusts it via `doctl databases firewalls append … --rule app:<app-id>`.
+
+## `cloud_run`
+
+Used when `host: cloud_run` (aliases `gcp`, `google`, `cloudrun`).
+
+Deploys via `gcloud run deploy --source` (Dockerfile at monorepo root or copied from `*_server/`).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `service` | string | `name` | Cloud Run service name |
+| `project` | string | active gcloud project | GCP project id |
+| `region` | string | `us-central1` | Region |
+| `allow_unauthenticated` | bool | `true` | Public invoker |
+| `memory` | string | `1Gi` | Memory limit |
+| `cpu` | string | `1` | CPU limit |
+| `port` | int | `8080` | Container port |
+| `min_instances` | int | `0` | Scale-to-zero when 0 |
+| `max_instances` | int | `10` | Max concurrency scale |
+| `timeout_seconds` | int | `300` | Request timeout (max **3600**). Raise for long WebSocket streams |
+| `session_affinity` | bool | `false` | Sticky sessions — recommended for WebSockets when `max_instances` > 1 |
+| `cloud_sql_instances` | list | — | e.g. `project:region:instance` for Cloud SQL Auth Proxy |
+| `env` | map | — | Extra env vars |
+| `public_host` | string | — | Filled after first deploy |
+
+**Monolith (Flutter + API + WS):** one public port only. Ship nginx (or similar) that serves static Flutter and proxies `/` API + `/v1/websocket` to Serverpod on an internal port. See [podfly_examples/gcp/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/gcp/realtime_monolith).
 
 ## `cloudflare` (split only)
 

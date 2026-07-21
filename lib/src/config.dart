@@ -285,6 +285,8 @@ class CloudRunConfig {
     this.port = 8080,
     this.minInstances = 0,
     this.maxInstances = 10,
+    this.timeoutSeconds = 300,
+    this.sessionAffinity = false,
     this.cloudSqlInstances = const [],
     this.extraEnv = const {},
     this.publicHost,
@@ -300,6 +302,10 @@ class CloudRunConfig {
   final int port;
   final int minInstances;
   final int maxInstances;
+  /// Request timeout (Cloud Run max 3600). Raise for long WebSocket streams.
+  final int timeoutSeconds;
+  /// Sticky sessions — recommended for WebSockets when max_instances > 1.
+  final bool sessionAffinity;
   /// e.g. `my-project:us-central1:my-sql` for Cloud SQL Auth Proxy socket.
   final List<String> cloudSqlInstances;
   final Map<String, String> extraEnv;
@@ -315,6 +321,8 @@ class CloudRunConfig {
         'port': port,
         'min_instances': minInstances,
         'max_instances': maxInstances,
+        'timeout_seconds': timeoutSeconds,
+        'session_affinity': sessionAffinity,
         if (cloudSqlInstances.isNotEmpty)
           'cloud_sql_instances': cloudSqlInstances,
         if (extraEnv.isNotEmpty) 'env': extraEnv,
@@ -842,6 +850,8 @@ class PodflyConfig {
       buf.writeln('  port: ${c.port}');
       buf.writeln('  min_instances: ${c.minInstances}');
       buf.writeln('  max_instances: ${c.maxInstances}');
+      buf.writeln('  timeout_seconds: ${c.timeoutSeconds}');
+      buf.writeln('  session_affinity: ${c.sessionAffinity}');
       if (c.cloudSqlInstances.isNotEmpty) {
         buf.writeln(
           '  cloud_sql_instances: [${c.cloudSqlInstances.map((e) => '"$e"').join(', ')}]',
@@ -1096,6 +1106,8 @@ class PodflyConfig {
         port: int.tryParse('${m['port'] ?? 8080}') ?? 8080,
         minInstances: int.tryParse('${m['min_instances'] ?? 0}') ?? 0,
         maxInstances: int.tryParse('${m['max_instances'] ?? 10}') ?? 10,
+        timeoutSeconds: int.tryParse('${m['timeout_seconds'] ?? 300}') ?? 300,
+        sessionAffinity: m['session_affinity'] == true,
         cloudSqlInstances: sqlList,
         extraEnv: envMap,
         publicHost: m['public_host']?.toString(),

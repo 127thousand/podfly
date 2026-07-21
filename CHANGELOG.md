@@ -9,13 +9,18 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-
-- (nothing yet)
-
 ### Planned (parked)
 
 - **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps
+
+---
+
+## [0.4.1] — 2026-07-21
+
+### Added
+
+- **Cloud Run** `timeout_seconds` (default 300, max 3600) and `session_affinity` for long-lived WebSockets
+- Example: [podfly_examples/gcp/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/gcp/realtime_monolith) — Flutter web + Serverpod streams in one Cloud Run service (nginx monolith)
 
 ---
 
