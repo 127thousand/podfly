@@ -9,6 +9,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Cloud Run:** always pass `--execution-environment` (default **`gen2`** via `cloud_run.execution_environment`)
+
 ### Added
 
 - **AWS App Runner** `ecr_public: true` — push to ECR Public + `ImageRepositoryType: ECR_PUBLIC`

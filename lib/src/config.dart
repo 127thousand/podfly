@@ -427,6 +427,7 @@ class CloudRunConfig {
     this.maxInstances = 10,
     this.timeoutSeconds = 300,
     this.sessionAffinity = false,
+    this.executionEnvironment = 'gen2',
     this.cloudSqlInstances = const [],
     this.extraEnv = const {},
     this.publicHost,
@@ -446,6 +447,8 @@ class CloudRunConfig {
   final int timeoutSeconds;
   /// Sticky sessions — recommended for WebSockets when max_instances > 1.
   final bool sessionAffinity;
+  /// `gen1` or `gen2` (`gcloud run deploy --execution-environment`). Default gen2.
+  final String executionEnvironment;
   /// e.g. `my-project:us-central1:my-sql` for Cloud SQL Auth Proxy socket.
   final List<String> cloudSqlInstances;
   final Map<String, String> extraEnv;
@@ -463,6 +466,7 @@ class CloudRunConfig {
         'max_instances': maxInstances,
         'timeout_seconds': timeoutSeconds,
         'session_affinity': sessionAffinity,
+        'execution_environment': executionEnvironment,
         if (cloudSqlInstances.isNotEmpty)
           'cloud_sql_instances': cloudSqlInstances,
         if (extraEnv.isNotEmpty) 'env': extraEnv,
@@ -998,6 +1002,7 @@ class PodflyConfig {
       buf.writeln('  max_instances: ${c.maxInstances}');
       buf.writeln('  timeout_seconds: ${c.timeoutSeconds}');
       buf.writeln('  session_affinity: ${c.sessionAffinity}');
+      buf.writeln('  execution_environment: ${c.executionEnvironment}');
       if (c.cloudSqlInstances.isNotEmpty) {
         buf.writeln(
           '  cloud_sql_instances: [${c.cloudSqlInstances.map((e) => '"$e"').join(', ')}]',
@@ -1318,6 +1323,14 @@ class PodflyConfig {
         maxInstances: int.tryParse('${m['max_instances'] ?? 10}') ?? 10,
         timeoutSeconds: int.tryParse('${m['timeout_seconds'] ?? 300}') ?? 300,
         sessionAffinity: m['session_affinity'] == true,
+        executionEnvironment: () {
+          final raw =
+              (m['execution_environment'] ?? m['executionEnvironment'] ?? 'gen2')
+                  .toString()
+                  .trim()
+                  .toLowerCase();
+          return raw == 'gen1' ? 'gen1' : 'gen2';
+        }(),
         cloudSqlInstances: sqlList,
         extraEnv: envMap,
         publicHost: m['public_host']?.toString(),

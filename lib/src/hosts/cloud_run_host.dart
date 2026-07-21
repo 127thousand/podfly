@@ -174,6 +174,8 @@ class CloudRunHost extends HostAdapter {
       '${ccfg.maxInstances}',
       '--timeout',
       '${ccfg.timeoutSeconds}',
+      '--execution-environment',
+      ccfg.executionEnvironment,
       '--quiet',
     ];
     if (ccfg.sessionAffinity) {
@@ -349,6 +351,7 @@ class CloudRunHost extends HostAdapter {
         maxInstances: base.maxInstances,
         timeoutSeconds: base.timeoutSeconds,
         sessionAffinity: base.sessionAffinity,
+        executionEnvironment: base.executionEnvironment,
         cloudSqlInstances: base.cloudSqlInstances,
         extraEnv: base.extraEnv,
         publicHost: publicHost,

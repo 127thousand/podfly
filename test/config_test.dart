@@ -70,7 +70,9 @@ void main() {
     expect(loaded.cloudRun?.service, 'demo-api');
     expect(loaded.cloudRun?.project, 'my-gcp-project');
     expect(loaded.cloudRun?.region, 'us-central1');
+    expect(loaded.cloudRun?.executionEnvironment, 'gen2');
     expect(loaded.toYaml(), contains('host: cloud_run'));
+    expect(loaded.toYaml(), contains('execution_environment: gen2'));
     await dir.delete(recursive: true);
   });
 
