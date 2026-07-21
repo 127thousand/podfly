@@ -1,5 +1,6 @@
 import '../config.dart';
 import 'adapter.dart';
+import 'aws_ecs_host.dart';
 import 'aws_host.dart';
 import 'cloud_run_host.dart';
 import 'digitalocean_host.dart';
@@ -24,6 +25,7 @@ void ensureHostsRegistered() {
     RenderHost(),
     CloudRunHost(),
     AwsHost(),
+    AwsEcsHost(),
     PlannedHost(
       id: 'azure',
       label: 'Azure Container Apps',

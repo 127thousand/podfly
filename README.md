@@ -183,7 +183,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 🟦 [**Render**](https://render.com) | `render` | ✅ | ✅ | 🟡 | 🟡 | Git + Docker; monorepo `rootDir`; `render_postgres` |
 | ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | ✅ | ✅ | 🟡 | ✅* | Cheap serverless; *monolith = nginx + Serverpod one container (see `gcp/realtime_monolith`) |
 | 📦 [**AWS App Runner**](https://aws.amazon.com/apprunner/) | `aws` | ✅ | ✅ | 🟡 | 🟡 | [Notes](doc/aws.md): **no WebSockets** (managed Envoy 403); not free scale-to-zero |
-| 📦 **AWS ECS + ALB** (streams) | `aws` | 🗺️ | ✅ | ✅ | ✅ | [Sketch](doc/specs/2026-07-21-aws-ecs-realtime-sketch.md) — real WS path |
+| 📦 [**AWS ECS + ALB**](https://aws.amazon.com/ecs/) | `aws_ecs` | ✅ | ✅ | ✅ | ✅ | Fargate + ALB; **WebSockets work** (unlike App Runner) |
 | 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ | ✅ | ✅ | 🟡 | Similar to other container PaaS |
 | 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | ✅ | ✅ | ✅ | 🟡 | DOCR images + App Spec; web = separate app |
 

@@ -335,13 +335,18 @@ Future<int> _deploy(ArgResults g) async {
           ? (config.aws ??
               AwsConfig(service: config.name.replaceAll('_', '-')))
           : config.aws,
+      awsEcs: host == AppHost.awsEcs
+          ? (config.awsEcs ??
+              AwsEcsConfig(service: config.name.replaceAll('_', '-')))
+          : config.awsEcs,
       // Explicit monolith CLI: drop Pages block; otherwise keep / default cloudflare for split
       cloudflare: (monolith && modeOpt != null) ||
               host == AppHost.digitalOcean ||
               host == AppHost.railway ||
               host == AppHost.render ||
               host == AppHost.cloudRun ||
-              host == AppHost.aws
+              host == AppHost.aws ||
+              host == AppHost.awsEcs
           ? null
           : (config.cloudflare ??
               (monolith

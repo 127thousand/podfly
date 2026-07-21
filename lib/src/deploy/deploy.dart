@@ -209,6 +209,7 @@ class Deployer {
       render: c.render,
       cloudRun: c.cloudRun,
       aws: c.aws,
+      awsEcs: c.awsEcs,
       cloudflare: c.cloudflare,
       database: c.database,
       web: WebConfig(

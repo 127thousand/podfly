@@ -66,11 +66,11 @@ fix an edge that rejects the upgrade with **403**.
 |------|------------------|--------------|
 | Cloud Run (`host: cloud_run`) | ✅ | ✅ (with timeout + affinity) |
 | App Runner (`host: aws`) | ✅ (HTTP only) | ❌ edge 403 |
-| ECS + ALB (planned sketch) | ✅ | ✅ (ALB supports WebSockets) |
+| ECS + ALB (`host: aws_ecs`) | ✅ | ✅ (ALB supports WebSockets) |
 
-**Recommendation:** use App Runner for cheap-ish **stateless API** demos; use
-**Cloud Run** or **Fly** for stream demos; for AWS + streams, plan **ECS Fargate + ALB**
-([sketch](specs/2026-07-21-aws-ecs-realtime-sketch.md)).
+**Recommendation:** use App Runner for **stateless API** demos; use **`host: aws_ecs`**
+(or Cloud Run / Fly) for Serverpod streams. See [ECS sketch](specs/2026-07-21-aws-ecs-realtime-sketch.md)
+and example [aws/ecs_realtime](https://github.com/127thousand/podfly_examples/tree/main/aws/ecs_realtime).
 
 ## Deploy knobs that *do* matter
 

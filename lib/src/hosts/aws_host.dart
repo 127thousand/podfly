@@ -893,6 +893,7 @@ class AwsHost extends HostAdapter {
         extraEnv: base.extraEnv,
         publicHost: publicHost,
       ),
+      awsEcs: cfg.awsEcs,
       cloudflare: cfg.cloudflare,
       database: cfg.database,
       web: WebConfig(

@@ -42,6 +42,7 @@ enum AppHost {
   render,
   cloudRun,
   aws,
+  awsEcs,
   azure,
   digitalOcean,
 }
@@ -274,6 +275,83 @@ class NeonConfig {
 ///
 /// Inexpensive stateless path — not GCE/Terraform. Optional Cloud SQL
 /// instances attach via [cloudSqlInstances] (unix socket in production.yaml).
+/// AWS ECS Fargate + ALB (`host: aws_ecs`) — WebSocket-capable.
+class AwsEcsConfig {
+  AwsEcsConfig({
+    required this.service,
+    this.region = 'us-east-1',
+    this.cluster,
+    this.cpu = '512',
+    this.memory = '1024',
+    this.port = 8080,
+    this.desiredCount = 1,
+    this.ecrRepository,
+    this.executionRole = 'podflyEcsTaskExecutionRole',
+    this.taskFamily,
+    this.logGroup = '/ecs/podfly',
+    this.idleTimeoutSeconds = 3600,
+    this.stickiness = true,
+    this.assignPublicIp = true,
+    this.platform = 'linux/amd64',
+    this.imageTag = 'latest',
+    this.vpcId,
+    this.subnetIds = const [],
+    this.loadBalancerArn,
+    this.targetGroupArn,
+    this.extraEnv = const {},
+    this.publicHost,
+  });
+
+  final String service;
+  final String region;
+  final String? cluster;
+  final String cpu;
+  final String memory;
+  final int port;
+  final int desiredCount;
+  final String? ecrRepository;
+  final String executionRole;
+  final String? taskFamily;
+  final String logGroup;
+  /// ALB idle timeout (raise for long WebSocket streams; max 4000).
+  final int idleTimeoutSeconds;
+  final bool stickiness;
+  final bool assignPublicIp;
+  final String platform;
+  final String imageTag;
+  final String? vpcId;
+  final List<String> subnetIds;
+  final String? loadBalancerArn;
+  final String? targetGroupArn;
+  final Map<String, String> extraEnv;
+  final String? publicHost;
+
+  Map<String, Object?> toMap() => {
+        'service': service,
+        'region': region,
+        if (cluster != null) 'cluster': cluster,
+        'cpu': cpu,
+        'memory': memory,
+        'port': port,
+        'desired_count': desiredCount,
+        if (ecrRepository != null) 'ecr_repository': ecrRepository,
+        'execution_role': executionRole,
+        if (taskFamily != null) 'task_family': taskFamily,
+        'log_group': logGroup,
+        'idle_timeout_seconds': idleTimeoutSeconds,
+        'stickiness': stickiness,
+        'assign_public_ip': assignPublicIp,
+        'platform': platform,
+        'image_tag': imageTag,
+        if (vpcId != null) 'vpc_id': vpcId,
+        if (subnetIds.isNotEmpty) 'subnet_ids': subnetIds,
+        if (loadBalancerArn != null) 'load_balancer_arn': loadBalancerArn,
+        if (targetGroupArn != null) 'target_group_arn': targetGroupArn,
+        if (extraEnv.isNotEmpty) 'env': extraEnv,
+        if (publicHost != null) 'public_host': publicHost,
+      };
+}
+
 /// AWS App Runner settings (`host: aws`).
 class AwsConfig {
   AwsConfig({
@@ -754,6 +832,7 @@ class PodflyConfig {
     this.render,
     this.cloudRun,
     this.aws,
+    this.awsEcs,
     this.cloudflare,
     required this.database,
     required this.web,
@@ -773,6 +852,7 @@ class PodflyConfig {
   final RenderConfig? render;
   final CloudRunConfig? cloudRun;
   final AwsConfig? aws;
+  final AwsEcsConfig? awsEcs;
   final CloudflareConfig? cloudflare;
   final DatabaseConfig database;
   final WebConfig web;
@@ -805,6 +885,7 @@ class PodflyConfig {
         if (render != null) 'render': render!.toMap(),
         if (cloudRun != null) 'cloud_run': cloudRun!.toMap(),
         if (aws != null) 'aws': aws!.toMap(),
+        if (awsEcs != null) 'aws_ecs': awsEcs!.toMap(),
         if (cloudflare != null) 'cloudflare': cloudflare!.toMap(),
         'database': database.toMap(),
         'web': web.toMap(),
@@ -951,13 +1032,51 @@ class PodflyConfig {
         buf.writeln('  public_host: ${a.publicHost}');
       }
     }
+    if (host == AppHost.awsEcs || awsEcs != null) {
+      final e = awsEcs ?? AwsEcsConfig(service: name.replaceAll('_', '-'));
+      buf.writeln('aws_ecs:');
+      buf.writeln('  service: ${e.service}');
+      buf.writeln('  region: ${e.region}');
+      if (e.cluster != null) buf.writeln('  cluster: ${e.cluster}');
+      buf.writeln('  cpu: ${e.cpu}');
+      buf.writeln('  memory: ${e.memory}');
+      buf.writeln('  port: ${e.port}');
+      buf.writeln('  desired_count: ${e.desiredCount}');
+      if (e.ecrRepository != null) {
+        buf.writeln('  ecr_repository: ${e.ecrRepository}');
+      }
+      buf.writeln('  execution_role: ${e.executionRole}');
+      if (e.taskFamily != null) buf.writeln('  task_family: ${e.taskFamily}');
+      buf.writeln('  log_group: ${e.logGroup}');
+      buf.writeln('  idle_timeout_seconds: ${e.idleTimeoutSeconds}');
+      buf.writeln('  stickiness: ${e.stickiness}');
+      buf.writeln('  assign_public_ip: ${e.assignPublicIp}');
+      buf.writeln('  platform: ${e.platform}');
+      buf.writeln('  image_tag: ${e.imageTag}');
+      if (e.vpcId != null) buf.writeln('  vpc_id: ${e.vpcId}');
+      if (e.subnetIds.isNotEmpty) {
+        buf.writeln(
+          '  subnet_ids: [${e.subnetIds.map((s) => '"$s"').join(', ')}]',
+        );
+      }
+      if (e.loadBalancerArn != null) {
+        buf.writeln('  load_balancer_arn: ${e.loadBalancerArn}');
+      }
+      if (e.targetGroupArn != null) {
+        buf.writeln('  target_group_arn: ${e.targetGroupArn}');
+      }
+      if (e.publicHost != null) {
+        buf.writeln('  public_host: ${e.publicHost}');
+      }
+    }
     // Cloudflare only when UI is on Pages (not native API hosts)
     if (cloudflare != null &&
         host != AppHost.railway &&
         host != AppHost.digitalOcean &&
         host != AppHost.render &&
         host != AppHost.cloudRun &&
-        host != AppHost.aws) {
+        host != AppHost.aws &&
+        host != AppHost.awsEcs) {
       buf.writeln();
       buf.writeln('cloudflare:');
       buf.writeln('  project: ${cloudflare!.project}');
@@ -1236,6 +1355,56 @@ class PodflyConfig {
       );
     }
 
+    AwsEcsConfig? awsEcs;
+    if (doc['aws_ecs'] != null ||
+        doc['ecs'] != null ||
+        host == AppHost.awsEcs) {
+      final m = _map(doc['aws_ecs'] ?? doc['ecs']);
+      final envMap = <String, String>{};
+      final envRaw = m['env'];
+      if (envRaw is YamlMap) {
+        for (final e in envRaw.entries) {
+          envMap[e.key.toString()] = e.value?.toString() ?? '';
+        }
+      }
+      final subnetList = <String>[];
+      final sn = m['subnet_ids'];
+      if (sn is YamlList) {
+        for (final e in sn) {
+          subnetList.add(e.toString());
+        }
+      } else if (sn is String && sn.isNotEmpty) {
+        subnetList.addAll(sn.split(',').map((s) => s.trim()));
+      }
+      final svcName = m['service']?.toString() ?? name.replaceAll('_', '-');
+      awsEcs = AwsEcsConfig(
+        service: svcName,
+        region: m['region']?.toString() ?? 'us-east-1',
+        cluster: m['cluster']?.toString(),
+        cpu: m['cpu']?.toString() ?? '512',
+        memory: m['memory']?.toString() ?? '1024',
+        port: int.tryParse('${m['port'] ?? 8080}') ?? 8080,
+        desiredCount: int.tryParse('${m['desired_count'] ?? 1}') ?? 1,
+        ecrRepository: m['ecr_repository']?.toString(),
+        executionRole:
+            m['execution_role']?.toString() ?? 'podflyEcsTaskExecutionRole',
+        taskFamily: m['task_family']?.toString(),
+        logGroup: m['log_group']?.toString() ?? '/ecs/$svcName',
+        idleTimeoutSeconds:
+            int.tryParse('${m['idle_timeout_seconds'] ?? 3600}') ?? 3600,
+        stickiness: m['stickiness'] != false,
+        assignPublicIp: m['assign_public_ip'] != false,
+        platform: m['platform']?.toString() ?? 'linux/amd64',
+        imageTag: m['image_tag']?.toString() ?? 'latest',
+        vpcId: m['vpc_id']?.toString(),
+        subnetIds: subnetList,
+        loadBalancerArn: m['load_balancer_arn']?.toString(),
+        targetGroupArn: m['target_group_arn']?.toString(),
+        extraEnv: envMap,
+        publicHost: m['public_host']?.toString(),
+      );
+    }
+
     CloudflareConfig? cf;
     // Pages UI for Fly split; native API hosts skip Pages.
     final wantPages = host != AppHost.railway &&
@@ -1243,6 +1412,7 @@ class PodflyConfig {
         host != AppHost.render &&
         host != AppHost.cloudRun &&
         host != AppHost.aws &&
+        host != AppHost.awsEcs &&
         (doc['cloudflare'] != null || mode == DeployMode.split);
     if (wantPages) {
       final m = _map(doc['cloudflare']);
@@ -1388,6 +1558,7 @@ class PodflyConfig {
       render: render,
       cloudRun: cloudRun,
       aws: aws,
+      awsEcs: awsEcs,
       cloudflare: cf,
       database: DatabaseConfig(
         provider: provider,

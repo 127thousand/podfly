@@ -17,9 +17,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 - **[doc/aws.md](doc/aws.md)** — App Runner WebSocket limitation (managed Envoy 403; not customer-configurable)
 - **Sketch:** [ECS Fargate + ALB realtime](doc/specs/2026-07-21-aws-ecs-realtime-sketch.md) for AWS + Serverpod streams
 
+### Added
+
+- **`host: aws_ecs`** (aliases `ecs`, `fargate`): ECS Fargate + **ALB** (WebSocket-capable)
+  - Docker → private ECR → task definition → Fargate service behind internet-facing ALB
+  - ALB idle timeout (default 3600s), optional stickiness; HTTP :80 for demos (no ACM)
+  - Default VPC/subnets when unset; creates SGs, log group, task execution role
+- Example: [podfly_examples/aws/ecs_realtime](https://github.com/127thousand/podfly_examples/tree/main/aws/ecs_realtime)
+
 ### Planned (parked)
 
-- **`host: aws_ecs`** — Fargate + ALB (WebSocket-capable); see sketch above
 - **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps
 
 ---
