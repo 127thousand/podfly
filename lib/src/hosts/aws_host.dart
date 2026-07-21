@@ -148,22 +148,23 @@ class AwsHost extends HostAdapter {
     final tag = acfg.imageTag == 'latest'
         ? DateTime.now().toUtc().millisecondsSinceEpoch.toString()
         : acfg.imageTag;
-    final imageUri = '$account.dkr.ecr.$region.amazonaws.com/$repo:$tag';
 
-    await _ensureEcrRepo(ctx, aws, region: region, repo: repo);
-    await _ecrLogin(ctx, aws, docker, account: account, region: region);
+    late final String imageUri;
+    if (acfg.ecrPublic) {
+      final alias = await _ensurePublicEcr(ctx, aws, repo: repo);
+      imageUri = 'public.ecr.aws/$alias/$repo:$tag';
+      await _ecrPublicLogin(ctx, aws, docker);
+    } else {
+      imageUri = '$account.dkr.ecr.$region.amazonaws.com/$repo:$tag';
+      await _ensureEcrRepo(ctx, aws, region: region, repo: repo);
+      await _ecrLogin(ctx, aws, docker, account: account, region: region);
+    }
+
     await _dockerBuildAndPush(
       ctx,
       docker: docker,
       imageUri: imageUri,
       platform: acfg.platform,
-    );
-
-    final accessRoleArn = await _ensureEcrAccessRole(
-      ctx,
-      aws,
-      account: account,
-      roleName: acfg.ecrAccessRole,
     );
 
     final env = <String, String>{
@@ -172,12 +173,23 @@ class AwsHost extends HostAdapter {
       ...acfg.extraEnv,
     };
 
+    String? accessRoleArn;
+    if (!acfg.ecrPublic) {
+      accessRoleArn = await _ensureEcrAccessRole(
+        ctx,
+        aws,
+        account: account,
+        roleName: acfg.ecrAccessRole,
+      );
+    }
+
     final sourceConfig = _sourceConfigurationJson(
       imageUri: imageUri,
       port: acfg.port,
       accessRoleArn: accessRoleArn,
       env: env,
       startCommand: acfg.startCommand,
+      ecrPublic: acfg.ecrPublic,
     );
 
     String? serviceArn = acfg.serviceArn;
@@ -240,9 +252,10 @@ class AwsHost extends HostAdapter {
   Map<String, Object?> _sourceConfigurationJson({
     required String imageUri,
     required int port,
-    required String accessRoleArn,
+    required String? accessRoleArn,
     required Map<String, String> env,
     required String? startCommand,
+    required bool ecrPublic,
   }) {
     // App Runner often fails CREATE with empty logs when relying only on
     // Dockerfile ENTRYPOINT (shell form). Explicit StartCommand is reliable.
@@ -252,17 +265,20 @@ class AwsHost extends HostAdapter {
         'StartCommand': startCommand,
       if (env.isNotEmpty) 'RuntimeEnvironmentVariables': env,
     };
-    return {
+    final map = <String, Object?>{
       'ImageRepository': {
         'ImageIdentifier': imageUri,
         'ImageConfiguration': imageConfig,
-        'ImageRepositoryType': 'ECR',
+        'ImageRepositoryType': ecrPublic ? 'ECR_PUBLIC' : 'ECR',
       },
       'AutoDeploymentsEnabled': false,
-      'AuthenticationConfiguration': {
-        'AccessRoleArn': accessRoleArn,
-      },
     };
+    if (!ecrPublic && accessRoleArn != null) {
+      map['AuthenticationConfiguration'] = {
+        'AccessRoleArn': accessRoleArn,
+      };
+    }
+    return map;
   }
 
   Future<String> _accountId(DeployContext ctx, String aws) async {
@@ -277,6 +293,127 @@ class AwsHost extends HostAdapter {
       throw StateError('aws sts get-caller-identity failed — run aws configure');
     }
     return id;
+  }
+
+  /// Returns the public registry alias (e.g. `g7h3f3f2`).
+  Future<String> _ensurePublicEcr(
+    DeployContext ctx,
+    String aws, {
+    required String repo,
+  }) async {
+    final log = ctx.log;
+    if (ctx.runner.dryRun) {
+      log.dry('aws ecr-public ensure repository $repo');
+      return 'alias';
+    }
+    // Ensure repo exists
+    final desc = await ctx.runner.runCapture(
+      aws,
+      [
+        'ecr-public',
+        'describe-repositories',
+        '--repository-names',
+        repo,
+        '--region',
+        'us-east-1',
+      ],
+      allowDryRun: false,
+    );
+    if (!desc.ok) {
+      log.detail('creating ECR Public repository $repo');
+      final create = await ctx.runner.run(
+        aws,
+        [
+          'ecr-public',
+          'create-repository',
+          '--repository-name',
+          repo,
+          '--region',
+          'us-east-1',
+        ],
+        allowDryRun: false,
+      );
+      if (!create.ok) {
+        throw StateError(
+          'aws ecr-public create-repository failed (exit ${create.exitCode})',
+        );
+      }
+    }
+    final reg = await ctx.runner.runCapture(
+      aws,
+      [
+        'ecr-public',
+        'describe-registries',
+        '--region',
+        'us-east-1',
+        '--output',
+        'json',
+      ],
+      allowDryRun: false,
+    );
+    if (!reg.ok) {
+      throw StateError('aws ecr-public describe-registries failed');
+    }
+    try {
+      final decoded = jsonDecode(reg.stdout) as Map<String, dynamic>;
+      final list = decoded['registries'] as List<dynamic>? ?? [];
+      if (list.isNotEmpty && list.first is Map) {
+        final uri = (list.first as Map)['registryUri']?.toString() ?? '';
+        // public.ecr.aws/ALIAS
+        final alias = uri.split('/').last;
+        if (alias.isNotEmpty) {
+          log.detail('ECR Public: public.ecr.aws/$alias/$repo');
+          return alias;
+        }
+      }
+    } catch (_) {}
+    throw StateError('could not resolve ECR Public registry alias');
+  }
+
+  Future<void> _ecrPublicLogin(
+    DeployContext ctx,
+    String aws,
+    String docker,
+  ) async {
+    final log = ctx.log;
+    if (ctx.runner.dryRun) {
+      log.dry('aws ecr-public get-authorization-token | docker login');
+      return;
+    }
+    final token = await ctx.runner.runCapture(
+      aws,
+      [
+        'ecr-public',
+        'get-authorization-token',
+        '--region',
+        'us-east-1',
+        '--output',
+        'text',
+        '--query',
+        'authorizationData.authorizationToken',
+      ],
+      allowDryRun: false,
+    );
+    if (!token.ok || token.stdout.trim().isEmpty) {
+      throw StateError('aws ecr-public get-authorization-token failed');
+    }
+    // Token is base64(AWS:password)
+    final decoded = utf8.decode(base64.decode(token.stdout.trim()));
+    final password = decoded.contains(':')
+        ? decoded.split(':').sublist(1).join(':')
+        : decoded;
+    final login = await Process.start(
+      docker,
+      ['login', '--username', 'AWS', '--password-stdin', 'public.ecr.aws'],
+    );
+    login.stdin.write(password);
+    await login.stdin.close();
+    final code = await login.exitCode;
+    if (code != 0) {
+      final err = await login.stderr.transform(utf8.decoder).join();
+      throw StateError('docker login to public.ecr.aws failed: $err');
+    }
+    log.detail('docker logged in to public.ecr.aws');
   }
 
   Future<void> _ensureEcrRepo(
@@ -372,14 +509,14 @@ class AwsHost extends HostAdapter {
     final config = ctx.config;
     final runner = ctx.runner;
     final log = ctx.log;
-    final dockerfile = p.join(config.server, 'Dockerfile');
-    final rootDockerfile = File(p.join(config.root, 'Dockerfile'));
-    // Prefer server Dockerfile (Serverpod layout); root if present.
-    final df = File(p.join(config.root, dockerfile)).existsSync()
-        ? dockerfile
-        : (await rootDockerfile.exists()
-            ? 'Dockerfile'
-            : dockerfile);
+    // Prefer monorepo root Dockerfile (monolith nginx image); else server.
+    final rootDocker = File(p.join(config.root, 'Dockerfile'));
+    final serverDocker = File(p.join(config.root, config.server, 'Dockerfile'));
+    final df = await rootDocker.exists()
+        ? 'Dockerfile'
+        : (await serverDocker.exists()
+            ? p.join(config.server, 'Dockerfile')
+            : 'Dockerfile');
 
     if (runner.dryRun) {
       log.dry('docker build --platform $platform -t $imageUri -f $df .');
@@ -746,6 +883,7 @@ class AwsHost extends HostAdapter {
         imageTag: base.imageTag,
         platform: base.platform,
         startCommand: base.startCommand,
+        ecrPublic: base.ecrPublic,
         serviceArn: serviceArn,
         extraEnv: base.extraEnv,
         publicHost: publicHost,

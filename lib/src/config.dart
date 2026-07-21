@@ -287,6 +287,7 @@ class AwsConfig {
     this.imageTag = 'latest',
     this.platform = 'linux/amd64',
     this.startCommand = '/app/entrypoint.sh',
+    this.ecrPublic = false,
     this.serviceArn,
     this.extraEnv = const {},
     this.publicHost,
@@ -309,6 +310,9 @@ class AwsConfig {
   /// App Runner `StartCommand` (overrides image ENTRYPOINT). Empty = omit.
   /// Default matches the Serverpod example `entrypoint.sh`.
   final String startCommand;
+  /// When true, push to **ECR Public** and use `ImageRepositoryType: ECR_PUBLIC`
+  /// (no access role). More reliable CREATE on some accounts than private ECR.
+  final bool ecrPublic;
   /// Filled after first create (`arn:aws:apprunner:…`).
   final String? serviceArn;
   final Map<String, String> extraEnv;
@@ -325,6 +329,7 @@ class AwsConfig {
         'image_tag': imageTag,
         'platform': platform,
         if (startCommand.isNotEmpty) 'start_command': startCommand,
+        'ecr_public': ecrPublic,
         if (serviceArn != null) 'service_arn': serviceArn,
         if (extraEnv.isNotEmpty) 'env': extraEnv,
         if (publicHost != null) 'public_host': publicHost,
@@ -938,6 +943,7 @@ class PodflyConfig {
       if (a.startCommand.isNotEmpty) {
         buf.writeln('  start_command: ${a.startCommand}');
       }
+      buf.writeln('  ecr_public: ${a.ecrPublic}');
       if (a.serviceArn != null) {
         buf.writeln('  service_arn: ${a.serviceArn}');
       }
@@ -1223,6 +1229,7 @@ class PodflyConfig {
         imageTag: m['image_tag']?.toString() ?? 'latest',
         platform: m['platform']?.toString() ?? 'linux/amd64',
         startCommand: m['start_command']?.toString() ?? '/app/entrypoint.sh',
+        ecrPublic: m['ecr_public'] == true,
         serviceArn: m['service_arn']?.toString(),
         extraEnv: envMap,
         publicHost: m['public_host']?.toString(),

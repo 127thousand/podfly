@@ -9,6 +9,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **AWS App Runner** `ecr_public: true` — push to ECR Public + `ImageRepositoryType: ECR_PUBLIC`
+- Prefer monorepo **root Dockerfile** when present (nginx monolith images)
+- Example: [podfly_examples/aws/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/aws/realtime_monolith)
+
 ### Planned (parked)
 
 - **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps

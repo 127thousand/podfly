@@ -112,6 +112,7 @@ Deploys **App Runner** from a **private ECR** image: local `docker build` (`linu
 | `image_tag` | string | `latest` | If `latest`, podfly uses a timestamp tag each deploy |
 | `platform` | string | `linux/amd64` | Docker build platform |
 | `start_command` | string | `/app/entrypoint.sh` | App Runner StartCommand (prefer over shell ENTRYPOINT) |
+| `ecr_public` | bool | `false` | Push to **ECR Public** + `ECR_PUBLIC` (more reliable CREATE on some accounts) |
 | `service_arn` | string | — | Filled after first create |
 | `env` | map | — | Extra runtime env vars |
 | `public_host` | string | — | Filled after first deploy |
