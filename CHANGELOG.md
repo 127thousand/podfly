@@ -13,6 +13,23 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 - (nothing yet)
 
+### Planned (parked)
+
+- **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps
+
+---
+
+## [0.4.0] — 2026-07-21
+
+### Added
+
+- **`host: cloud_run`** (aliases `gcp`, `google`, `cloudrun`): Google Cloud Run API deploy via `gcloud run deploy --source`
+  - Config: project, region, memory/cpu, min/max instances, Cloud SQL instance attach list
+  - Copies server Dockerfile to monorepo root when needed (Cloud Run source build)
+  - Auth: active `gcloud` account or `GOOGLE_APPLICATION_CREDENTIALS`
+  - Positioning: inexpensive **stateless** Serverpod (not GCE/Terraform)
+- Example: [podfly_examples/gcp/api_only](https://github.com/127thousand/podfly_examples/tree/main/gcp/api_only)
+
 ---
 
 ## [0.3.1] — 2026-07-20

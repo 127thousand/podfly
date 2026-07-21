@@ -181,7 +181,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 🚂 [**Railway**](https://railway.app) | `railway` | ✅ | ✅ | ✅ | 🟡 | Separate API + static web services |
 | 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | Static Flutter web only; **not** the API |
 | 🟦 [**Render**](https://render.com) | `render` | ✅ | ✅ | 🟡 | 🟡 | Git + Docker; monorepo `rootDir`; `render_postgres` |
-| ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | 🗺️ | 🟡 | 🟡 | ❌ | One public port; cold starts |
+| ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | ✅ | ✅ | 🟡 | 🟡 | Cheap serverless API (stateless); not GCE Terraform |
 | 📦 [**AWS**](https://aws.amazon.com) App Runner / ECS | `aws` | 🗺️ | ✅ | ✅ | 🟡 | App Runner ≈ API-only |
 | 🔷 [**Azure**](https://azure.microsoft.com) Container Apps | `az` | 🗺️ | ✅ | ✅ | 🟡 | Similar to other container PaaS |
 | 🌊 [**DigitalOcean**](https://www.digitalocean.com) App Platform | `doctl` | ✅ | ✅ | ✅ | 🟡 | DOCR images + App Spec; web = separate app |
@@ -200,13 +200,24 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | ⚡ [**Supabase**](https://supabase.com) | CLI / URL | 🗺️ | Managed PG |
 | 🟦 [**Render Postgres**](https://render.com) | `render postgres` | ✅ | `database.provider: render_postgres` |
 | 📦 [**AWS RDS**](https://aws.amazon.com/rds/) | `aws` | 🗺️ | Enterprise default |
-| ☁️ [**Google Cloud SQL**](https://cloud.google.com/sql) | `gcloud` | 🗺️ | GCP default |
+| ☁️ [**Google Cloud SQL**](https://cloud.google.com/sql) | `gcloud` | 🗺️ | BYO: set `cloud_run.cloud_sql_instances` + unix socket in production.yaml |
 | 🔷 [**Azure Database for PostgreSQL**](https://azure.microsoft.com/products/postgresql) | `az` | 🗺️ | Azure default |
 | 🌊 [**DigitalOcean Managed Postgres**](https://www.digitalocean.com/products/managed-databases) | `doctl` | ✅ | `digitalocean_postgres` + app firewall |
 
 **podfly legend:** ✅ supported today · 🗺️ planned  
 
 Want another provider? Open an issue — preference is **excellent DX** or **clouds most teams already pay for**.
+
+### Redis / shared state (later)
+
+Most small apps **do not need Redis** (Postgres is enough). When you run **multiple instances** and need shared cache or PubSub (live streams across machines), Serverpod can use Redis.
+
+| Provider | podfly | Notes |
+|----------|--------|--------|
+| 🔺 [**Upstash**](https://upstash.com) | 🗺️ later | Serverless Redis + TLS; Serverpod’s own Cloud docs use it as the third-party example; great fit with scale-to-zero hosts |
+| Host-managed Redis | — | Fly/Railway/etc. Redis plugins — manual config today |
+
+Parked as an **extra**, not core cheap path: optional `redis` / Upstash wiring (env + `production.yaml` patch) after Cloud Run and the main host set settle.
 
 ---
 

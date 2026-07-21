@@ -270,6 +270,58 @@ class NeonConfig {
       };
 }
 
+/// Google Cloud Run (serverless API).
+///
+/// Inexpensive stateless path — not GCE/Terraform. Optional Cloud SQL
+/// instances attach via [cloudSqlInstances] (unix socket in production.yaml).
+class CloudRunConfig {
+  CloudRunConfig({
+    required this.service,
+    this.project,
+    this.region = 'us-central1',
+    this.allowUnauthenticated = true,
+    this.memory = '1Gi',
+    this.cpu = '1',
+    this.port = 8080,
+    this.minInstances = 0,
+    this.maxInstances = 10,
+    this.cloudSqlInstances = const [],
+    this.extraEnv = const {},
+    this.publicHost,
+  });
+
+  final String service;
+  /// GCP project id; falls back to `gcloud config get-value project`.
+  final String? project;
+  final String region;
+  final bool allowUnauthenticated;
+  final String memory;
+  final String cpu;
+  final int port;
+  final int minInstances;
+  final int maxInstances;
+  /// e.g. `my-project:us-central1:my-sql` for Cloud SQL Auth Proxy socket.
+  final List<String> cloudSqlInstances;
+  final Map<String, String> extraEnv;
+  final String? publicHost;
+
+  Map<String, Object?> toMap() => {
+        'service': service,
+        if (project != null) 'project': project,
+        'region': region,
+        'allow_unauthenticated': allowUnauthenticated,
+        'memory': memory,
+        'cpu': cpu,
+        'port': port,
+        'min_instances': minInstances,
+        'max_instances': maxInstances,
+        if (cloudSqlInstances.isNotEmpty)
+          'cloud_sql_instances': cloudSqlInstances,
+        if (extraEnv.isNotEmpty) 'env': extraEnv,
+        if (publicHost != null) 'public_host': publicHost,
+      };
+}
+
 /// Render Postgres settings.
 class RenderPostgresConfig {
   RenderPostgresConfig({
@@ -630,6 +682,7 @@ class PodflyConfig {
     this.railway,
     this.digitalOcean,
     this.render,
+    this.cloudRun,
     this.cloudflare,
     required this.database,
     required this.web,
@@ -647,6 +700,7 @@ class PodflyConfig {
   final RailwayConfig? railway;
   final DigitalOceanConfig? digitalOcean;
   final RenderConfig? render;
+  final CloudRunConfig? cloudRun;
   final CloudflareConfig? cloudflare;
   final DatabaseConfig database;
   final WebConfig web;
@@ -677,6 +731,7 @@ class PodflyConfig {
         if (railway != null) 'railway': railway!.toMap(),
         if (digitalOcean != null) 'digitalocean': digitalOcean!.toMap(),
         if (render != null) 'render': render!.toMap(),
+        if (cloudRun != null) 'cloud_run': cloudRun!.toMap(),
         if (cloudflare != null) 'cloudflare': cloudflare!.toMap(),
         'database': database.toMap(),
         'web': web.toMap(),
@@ -774,11 +829,34 @@ class PodflyConfig {
       }
       buf.writeln('  site_dir: ${r.siteDir}');
     }
-    // Cloudflare only when UI is on Pages (not Railway / DO / Render native API)
+    if (host == AppHost.cloudRun || cloudRun != null) {
+      final c = cloudRun ??
+          CloudRunConfig(service: name.replaceAll('_', '-'));
+      buf.writeln('cloud_run:');
+      buf.writeln('  service: ${c.service}');
+      if (c.project != null) buf.writeln('  project: ${c.project}');
+      buf.writeln('  region: ${c.region}');
+      buf.writeln('  allow_unauthenticated: ${c.allowUnauthenticated}');
+      buf.writeln('  memory: ${c.memory}');
+      buf.writeln('  cpu: ${c.cpu}');
+      buf.writeln('  port: ${c.port}');
+      buf.writeln('  min_instances: ${c.minInstances}');
+      buf.writeln('  max_instances: ${c.maxInstances}');
+      if (c.cloudSqlInstances.isNotEmpty) {
+        buf.writeln(
+          '  cloud_sql_instances: [${c.cloudSqlInstances.map((e) => '"$e"').join(', ')}]',
+        );
+      }
+      if (c.publicHost != null) {
+        buf.writeln('  public_host: ${c.publicHost}');
+      }
+    }
+    // Cloudflare only when UI is on Pages (not native API hosts)
     if (cloudflare != null &&
         host != AppHost.railway &&
         host != AppHost.digitalOcean &&
-        host != AppHost.render) {
+        host != AppHost.render &&
+        host != AppHost.cloudRun) {
       buf.writeln();
       buf.writeln('cloudflare:');
       buf.writeln('  project: ${cloudflare!.project}');
@@ -987,11 +1065,49 @@ class PodflyConfig {
       );
     }
 
+    CloudRunConfig? cloudRun;
+    if (doc['cloud_run'] != null ||
+        doc['cloudrun'] != null ||
+        host == AppHost.cloudRun) {
+      final m = _map(doc['cloud_run'] ?? doc['cloudrun']);
+      final sqlRaw = m['cloud_sql_instances'];
+      final sqlList = <String>[];
+      if (sqlRaw is YamlList) {
+        for (final e in sqlRaw) {
+          sqlList.add(e.toString());
+        }
+      } else if (sqlRaw is String && sqlRaw.isNotEmpty) {
+        sqlList.addAll(sqlRaw.split(',').map((s) => s.trim()));
+      }
+      final envMap = <String, String>{};
+      final envRaw = m['env'];
+      if (envRaw is YamlMap) {
+        for (final e in envRaw.entries) {
+          envMap[e.key.toString()] = e.value?.toString() ?? '';
+        }
+      }
+      cloudRun = CloudRunConfig(
+        service: m['service']?.toString() ?? name.replaceAll('_', '-'),
+        project: m['project']?.toString(),
+        region: m['region']?.toString() ?? 'us-central1',
+        allowUnauthenticated: m['allow_unauthenticated'] != false,
+        memory: m['memory']?.toString() ?? '1Gi',
+        cpu: m['cpu']?.toString() ?? '1',
+        port: int.tryParse('${m['port'] ?? 8080}') ?? 8080,
+        minInstances: int.tryParse('${m['min_instances'] ?? 0}') ?? 0,
+        maxInstances: int.tryParse('${m['max_instances'] ?? 10}') ?? 10,
+        cloudSqlInstances: sqlList,
+        extraEnv: envMap,
+        publicHost: m['public_host']?.toString(),
+      );
+    }
+
     CloudflareConfig? cf;
-    // Pages UI for Fly split; Railway/DO/Render host API without Pages.
+    // Pages UI for Fly split; native API hosts skip Pages.
     final wantPages = host != AppHost.railway &&
         host != AppHost.digitalOcean &&
         host != AppHost.render &&
+        host != AppHost.cloudRun &&
         (doc['cloudflare'] != null || mode == DeployMode.split);
     if (wantPages) {
       final m = _map(doc['cloudflare']);
@@ -1080,7 +1196,8 @@ class PodflyConfig {
     final sanitized = name.replaceAll('_', '-');
     final defaultApiUrl = host.adapter.defaultApiUrl(
       name: name,
-      sanitizedName: render?.service ??
+      sanitizedName: cloudRun?.service ??
+          render?.service ??
           digitalOcean?.app ??
           flyMap['app']?.toString() ??
           sanitized,
@@ -1133,6 +1250,7 @@ class PodflyConfig {
       railway: railway,
       digitalOcean: digitalOcean,
       render: render,
+      cloudRun: cloudRun,
       cloudflare: cf,
       database: DatabaseConfig(
         provider: provider,

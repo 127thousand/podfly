@@ -207,6 +207,7 @@ class Deployer {
       railway: c.railway,
       digitalOcean: c.digitalOcean,
       render: c.render,
+      cloudRun: c.cloudRun,
       cloudflare: c.cloudflare,
       database: c.database,
       web: WebConfig(
@@ -234,6 +235,7 @@ class Deployer {
         (fallback.host == AppHost.railway ||
             fallback.host == AppHost.digitalOcean ||
             fallback.host == AppHost.render ||
+            fallback.host == AppHost.cloudRun ||
             smokeCfg.web.apiUrlNormalized.contains('REPLACE'))) {
       smokeCfg = _withApiUrl(smokeCfg, 'https://$host/');
     }

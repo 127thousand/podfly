@@ -1,5 +1,6 @@
 import '../config.dart';
 import 'adapter.dart';
+import 'cloud_run_host.dart';
 import 'digitalocean_host.dart';
 import 'fly_host.dart';
 import 'planned_host.dart';
@@ -20,17 +21,7 @@ void ensureHostsRegistered() {
     RailwayHost(),
     DigitalOceanHost(),
     RenderHost(),
-    PlannedHost(
-      id: 'cloud_run',
-      label: 'Google Cloud Run',
-      cliBinaries: const ['gcloud'],
-      installHint: 'https://cloud.google.com/sdk/docs/install',
-      appHost: AppHost.cloudRun,
-      aliases: const ['cloudrun', 'gcp', 'google'],
-      auth: PlannedAuth.command,
-      checkArgs: const ['auth', 'list'],
-      loginHint: 'gcloud auth login',
-    ),
+    CloudRunHost(),
     PlannedHost(
       id: 'aws',
       label: 'AWS (App Runner / ECS)',

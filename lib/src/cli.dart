@@ -327,11 +327,16 @@ Future<int> _deploy(ArgResults g) async {
           ? (config.render ??
               RenderConfig(service: config.name.replaceAll('_', '-')))
           : config.render,
+      cloudRun: host == AppHost.cloudRun
+          ? (config.cloudRun ??
+              CloudRunConfig(service: config.name.replaceAll('_', '-')))
+          : config.cloudRun,
       // Explicit monolith CLI: drop Pages block; otherwise keep / default cloudflare for split
       cloudflare: (monolith && modeOpt != null) ||
               host == AppHost.digitalOcean ||
               host == AppHost.railway ||
-              host == AppHost.render
+              host == AppHost.render ||
+              host == AppHost.cloudRun
           ? null
           : (config.cloudflare ??
               (monolith

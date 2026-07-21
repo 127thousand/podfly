@@ -27,6 +27,7 @@ Set `PODFLY_AUTO=1` if doctor might offer CLI installs and you want auto-accept
 | Fly API | `FLY_API_TOKEN` | [Fly tokens](https://fly.io/docs/security/tokens/) |
 | Railway | `RAILWAY_TOKEN` | Account or workspace token |
 | Render | `RENDER_API_KEY` | [API keys](https://render.com/docs/api) (CLI non-interactive); set active workspace if needed |
+| Cloud Run | `GOOGLE_APPLICATION_CREDENTIALS` | Path to SA JSON; or `gcloud auth` on the runner; enable `run.googleapis.com` + Cloud Build |
 | DigitalOcean | `DIGITALOCEAN_ACCESS_TOKEN` | [API tokens](https://docs.digitalocean.com/reference/api/create-personal-access-token/); also need Docker + DOCR in CI |
 | Cloudflare Pages | `CLOUDFLARE_API_TOKEN` | Pages edit permission; often need account access |
 | Neon provision | `NEON_API_KEY` | Only if `database.neon.provision: true` |

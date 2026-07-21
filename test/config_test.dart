@@ -45,6 +45,35 @@ void main() {
         DatabaseProvider.renderPostgres);
   });
 
+  test('cloud_run host round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_gcr_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.cloudRun,
+      mode: DeployMode.monolith,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      cloudRun: CloudRunConfig(
+        service: 'demo-api',
+        project: 'my-gcp-project',
+        region: 'us-central1',
+        minInstances: 0,
+      ),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      web: WebConfig(enabled: false, apiUrl: 'https://example.a.run.app/'),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.host, AppHost.cloudRun);
+    expect(loaded.cloudRun?.service, 'demo-api');
+    expect(loaded.cloudRun?.project, 'my-gcp-project');
+    expect(loaded.cloudRun?.region, 'us-central1');
+    expect(loaded.toYaml(), contains('host: cloud_run'));
+    await dir.delete(recursive: true);
+  });
+
   test('render host round-trip', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_render_');
     final cfg = PodflyConfig(
