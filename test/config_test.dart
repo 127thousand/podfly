@@ -108,6 +108,40 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('azure host round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_azure_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.azure,
+      mode: DeployMode.monolith,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      azure: AzureConfig(
+        app: 'podfly-azure-api',
+        location: 'eastus',
+        resourceGroup: 'podfly-azure-api-rg',
+        cpu: '0.5',
+        memory: '1.0Gi',
+      ),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      web: WebConfig(
+        enabled: false,
+        apiUrl: 'https://example.eastus.azurecontainerapps.io/',
+      ),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.host, AppHost.azure);
+    expect(loaded.azure?.app, 'podfly-azure-api');
+    expect(loaded.azure?.location, 'eastus');
+    expect(loaded.azure?.resourceGroup, 'podfly-azure-api-rg');
+    expect(loaded.azure?.cpu, '0.5');
+    expect(loaded.toYaml(), contains('host: azure'));
+    await dir.delete(recursive: true);
+  });
+
   test('render host round-trip', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_render_');
     final cfg = PodflyConfig(

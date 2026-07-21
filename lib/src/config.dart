@@ -414,6 +414,69 @@ class AwsConfig {
       };
 }
 
+/// Azure Container Apps settings (`host: azure`).
+class AzureConfig {
+  AzureConfig({
+    required this.app,
+    this.resourceGroup,
+    this.location = 'eastus',
+    this.environment,
+    this.registry,
+    this.repository,
+    this.cpu = '0.5',
+    this.memory = '1.0Gi',
+    this.port = 8080,
+    this.minReplicas = 0,
+    this.maxReplicas = 3,
+    this.imageTag = 'latest',
+    this.platform = 'linux/amd64',
+    this.extraEnv = const {},
+    this.publicHost,
+  });
+
+  /// Container app name (DNS-ish, &lt; 32 chars).
+  final String app;
+  /// Resource group (default: `{app}-rg`).
+  final String? resourceGroup;
+  final String location;
+  /// Container Apps managed environment (default: `{app}-env`).
+  final String? environment;
+  /// ACR name — alphanumeric only, globally unique (default: sanitized [app]).
+  final String? registry;
+  /// Image repository inside ACR (default: [app]).
+  final String? repository;
+  /// vCPU cores as string, e.g. `0.25`, `0.5`, `1.0`.
+  final String cpu;
+  /// Memory with unit, e.g. `0.5Gi`, `1.0Gi`.
+  final String memory;
+  final int port;
+  final int minReplicas;
+  final int maxReplicas;
+  /// Image tag; `latest` is replaced with a timestamp at deploy.
+  final String imageTag;
+  final String platform;
+  final Map<String, String> extraEnv;
+  final String? publicHost;
+
+  Map<String, Object?> toMap() => {
+        'app': app,
+        if (resourceGroup != null) 'resource_group': resourceGroup,
+        'location': location,
+        if (environment != null) 'environment': environment,
+        if (registry != null) 'registry': registry,
+        if (repository != null) 'repository': repository,
+        'cpu': cpu,
+        'memory': memory,
+        'port': port,
+        'min_replicas': minReplicas,
+        'max_replicas': maxReplicas,
+        'image_tag': imageTag,
+        'platform': platform,
+        if (extraEnv.isNotEmpty) 'env': extraEnv,
+        if (publicHost != null) 'public_host': publicHost,
+      };
+}
+
 class CloudRunConfig {
   CloudRunConfig({
     required this.service,
@@ -837,6 +900,7 @@ class PodflyConfig {
     this.cloudRun,
     this.aws,
     this.awsEcs,
+    this.azure,
     this.cloudflare,
     required this.database,
     required this.web,
@@ -857,6 +921,7 @@ class PodflyConfig {
   final CloudRunConfig? cloudRun;
   final AwsConfig? aws;
   final AwsEcsConfig? awsEcs;
+  final AzureConfig? azure;
   final CloudflareConfig? cloudflare;
   final DatabaseConfig database;
   final WebConfig web;
@@ -890,6 +955,7 @@ class PodflyConfig {
         if (cloudRun != null) 'cloud_run': cloudRun!.toMap(),
         if (aws != null) 'aws': aws!.toMap(),
         if (awsEcs != null) 'aws_ecs': awsEcs!.toMap(),
+        if (azure != null) 'azure': azure!.toMap(),
         if (cloudflare != null) 'cloudflare': cloudflare!.toMap(),
         'database': database.toMap(),
         'web': web.toMap(),
@@ -1074,6 +1140,30 @@ class PodflyConfig {
         buf.writeln('  public_host: ${e.publicHost}');
       }
     }
+    if (host == AppHost.azure || azure != null) {
+      final a = azure ?? AzureConfig(app: name.replaceAll('_', '-'));
+      buf.writeln('azure:');
+      buf.writeln('  app: ${a.app}');
+      if (a.resourceGroup != null) {
+        buf.writeln('  resource_group: ${a.resourceGroup}');
+      }
+      buf.writeln('  location: ${a.location}');
+      if (a.environment != null) {
+        buf.writeln('  environment: ${a.environment}');
+      }
+      if (a.registry != null) buf.writeln('  registry: ${a.registry}');
+      if (a.repository != null) buf.writeln('  repository: ${a.repository}');
+      buf.writeln('  cpu: ${a.cpu}');
+      buf.writeln('  memory: ${a.memory}');
+      buf.writeln('  port: ${a.port}');
+      buf.writeln('  min_replicas: ${a.minReplicas}');
+      buf.writeln('  max_replicas: ${a.maxReplicas}');
+      buf.writeln('  image_tag: ${a.imageTag}');
+      buf.writeln('  platform: ${a.platform}');
+      if (a.publicHost != null) {
+        buf.writeln('  public_host: ${a.publicHost}');
+      }
+    }
     // Cloudflare only when UI is on Pages (not native API hosts)
     if (cloudflare != null &&
         host != AppHost.railway &&
@@ -1081,7 +1171,8 @@ class PodflyConfig {
         host != AppHost.render &&
         host != AppHost.cloudRun &&
         host != AppHost.aws &&
-        host != AppHost.awsEcs) {
+        host != AppHost.awsEcs &&
+        host != AppHost.azure) {
       buf.writeln();
       buf.writeln('cloudflare:');
       buf.writeln('  project: ${cloudflare!.project}');
@@ -1418,6 +1509,38 @@ class PodflyConfig {
       );
     }
 
+    AzureConfig? azure;
+    if (doc['azure'] != null || host == AppHost.azure) {
+      final m = _map(doc['azure']);
+      final envMap = <String, String>{};
+      final envRaw = m['env'];
+      if (envRaw is YamlMap) {
+        for (final e in envRaw.entries) {
+          envMap[e.key.toString()] = e.value?.toString() ?? '';
+        }
+      }
+      final appName = m['app']?.toString() ??
+          m['service']?.toString() ??
+          name.replaceAll('_', '-');
+      azure = AzureConfig(
+        app: appName,
+        resourceGroup: m['resource_group']?.toString(),
+        location: m['location']?.toString() ?? 'eastus',
+        environment: m['environment']?.toString(),
+        registry: m['registry']?.toString(),
+        repository: m['repository']?.toString(),
+        cpu: m['cpu']?.toString() ?? '0.5',
+        memory: m['memory']?.toString() ?? '1.0Gi',
+        port: int.tryParse('${m['port'] ?? 8080}') ?? 8080,
+        minReplicas: int.tryParse('${m['min_replicas'] ?? 0}') ?? 0,
+        maxReplicas: int.tryParse('${m['max_replicas'] ?? 3}') ?? 3,
+        imageTag: m['image_tag']?.toString() ?? 'latest',
+        platform: m['platform']?.toString() ?? 'linux/amd64',
+        extraEnv: envMap,
+        publicHost: m['public_host']?.toString(),
+      );
+    }
+
     CloudflareConfig? cf;
     // Pages UI for Fly split; native API hosts skip Pages.
     final wantPages = host != AppHost.railway &&
@@ -1426,6 +1549,7 @@ class PodflyConfig {
         host != AppHost.cloudRun &&
         host != AppHost.aws &&
         host != AppHost.awsEcs &&
+        host != AppHost.azure &&
         (doc['cloudflare'] != null || mode == DeployMode.split);
     if (wantPages) {
       final m = _map(doc['cloudflare']);
@@ -1572,6 +1696,7 @@ class PodflyConfig {
       cloudRun: cloudRun,
       aws: aws,
       awsEcs: awsEcs,
+      azure: azure,
       cloudflare: cf,
       database: DatabaseConfig(
         provider: provider,

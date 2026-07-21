@@ -1300,6 +1300,7 @@ class AwsEcsHost extends HostAdapter {
         extraEnv: base.extraEnv,
         publicHost: publicHost,
       ),
+      azure: cfg.azure,
       cloudflare: cfg.cloudflare,
       database: cfg.database,
       web: WebConfig(

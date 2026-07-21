@@ -82,7 +82,7 @@ ArgParser _buildParser() {
     )
     ..addOption('host',
         allowed: HostRegistry.cliAllowedIds,
-        help: 'API cloud host (default: fly; fly + railway deploy today)')
+        help: 'API cloud host (default: fly; see README for supported hosts)')
     ..addOption('config', help: 'Path to podfly.yaml')
     ..addOption('root', help: 'Project root');
 
@@ -115,15 +115,16 @@ Deploy options:
   --yes / -y    Non-interactive init defaults
   --no-login    Do not open browser logins (CI: use tokens)
   --init        Force wizard; confirms before overwriting podfly.yaml
-  --host        API cloud: fly | railway | digitalocean | render | …
-                (wizard asks; fly + railway + digitalocean deploy today)
+  --host        API cloud: fly | railway | digitalocean | render |
+                cloud_run | aws | aws_ecs | azure | …
   --mode        split | monolith   (fly = legacy alias for monolith)
   --root        Project root (default: cwd)
   --config      Path to podfly.yaml
 
 Doctor only requires the CLI for the chosen host (not always Fly).
-Supported deploy today: Fly + Railway + DigitalOcean (API), Cloudflare Pages /
-Railway·DO static web, Neon / Fly PG / Railway PG / DO PG / SQLite / none.
+Supported API hosts: Fly, Railway, DigitalOcean, Render, Cloud Run, AWS App
+Runner, AWS ECS+ALB, Azure Container Apps. UI: Cloudflare Pages / host-native
+static. DB: Neon / Fly PG / Railway PG / DO PG / Render PG / SQLite / none.
 Dockerfile: prefer Serverpod's *_server/Dockerfile (podfly does not invent hosts).
 
 Install: dart pub global activate podfly
@@ -339,6 +340,10 @@ Future<int> _deploy(ArgResults g) async {
           ? (config.awsEcs ??
               AwsEcsConfig(service: config.name.replaceAll('_', '-')))
           : config.awsEcs,
+      azure: host == AppHost.azure
+          ? (config.azure ??
+              AzureConfig(app: config.name.replaceAll('_', '-')))
+          : config.azure,
       // Explicit monolith CLI: drop Pages block; otherwise keep / default cloudflare for split
       cloudflare: (monolith && modeOpt != null) ||
               host == AppHost.digitalOcean ||
@@ -346,7 +351,8 @@ Future<int> _deploy(ArgResults g) async {
               host == AppHost.render ||
               host == AppHost.cloudRun ||
               host == AppHost.aws ||
-              host == AppHost.awsEcs
+              host == AppHost.awsEcs ||
+              host == AppHost.azure
           ? null
           : (config.cloudflare ??
               (monolith

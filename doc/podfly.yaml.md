@@ -8,7 +8,7 @@ Location: project root (walk-up from cwd also finds it).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `host` | `fly` \| `railway` \| `digitalocean` \| `render` \| `cloud_run` \| `aws` \| … | `fly` | **API cloud** — fly, railway, digitalocean, render, cloud_run, aws deploy today. |
+| `host` | `fly` \| `railway` \| `digitalocean` \| `render` \| `cloud_run` \| `aws` \| `aws_ecs` \| `azure` \| … | `fly` | **API cloud** — fly, railway, digitalocean, render, cloud_run, aws, aws_ecs, azure deploy today. |
 | `mode` | `split` \| `monolith` | `split` | Layout: CDN UI + API vs UI with API host. Alias: `fly` → monolith (legacy) |
 | `name` | string | directory name | Default for app + Pages project names |
 | `server` | string | discovered `*_server` | Path relative to root |
@@ -161,6 +161,39 @@ behind an internet-facing ALB (HTTP :80 for demos; idle timeout default **3600s*
 
 Example: [aws/ecs_realtime](https://github.com/127thousand/podfly_examples/tree/main/aws/ecs_realtime).  
 Design notes: [specs/2026-07-21-aws-ecs-realtime-sketch.md](specs/2026-07-21-aws-ecs-realtime-sketch.md).
+
+## `azure`
+
+Used when `host: azure` (aliases `aca`, `containerapps`, `container_apps`).
+
+Deploys **Azure Container Apps**: local `docker build` (`linux/amd64`) → **ACR** →
+managed environment + container app (external HTTPS ingress). Requires Docker + `az` CLI
+(+ `containerapp` extension).
+
+**Deep notes (teardown, WebSockets):** [azure.md](azure.md).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `app` | string | `name` | Container app name (&lt; 32 chars) |
+| `resource_group` | string | `{app}-rg` | Azure resource group (created if missing) |
+| `location` | string | `eastus` | Azure region |
+| `environment` | string | `{app}-env` | Container Apps environment name |
+| `registry` | string | sanitized app | ACR name (alphanumeric only, global unique) |
+| `repository` | string | app name | Image repository inside ACR |
+| `cpu` | string | `0.5` | vCPU cores (`0.25`, `0.5`, `1.0`, …) |
+| `memory` | string | `1.0Gi` | Memory with unit |
+| `port` | int | `8080` | Target port (ingress) |
+| `min_replicas` | int | `0` | Scale-to-zero when 0 |
+| `max_replicas` | int | `3` | Max scale-out |
+| `image_tag` | string | `latest` | If `latest`, podfly uses a timestamp tag each deploy |
+| `platform` | string | `linux/amd64` | Docker build platform |
+| `env` | map | — | Extra runtime env vars |
+| `public_host` | string | — | Filled after first deploy (FQDN) |
+
+Examples:
+
+- [azure/api_only](https://github.com/127thousand/podfly_examples/tree/main/azure/api_only) — RPC  
+- [azure/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/azure/realtime_monolith) — Flutter + streams
 
 ## `cloud_run`
 

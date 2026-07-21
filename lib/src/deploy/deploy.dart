@@ -210,6 +210,7 @@ class Deployer {
       cloudRun: c.cloudRun,
       aws: c.aws,
       awsEcs: c.awsEcs,
+      azure: c.azure,
       cloudflare: c.cloudflare,
       database: c.database,
       web: WebConfig(
@@ -238,6 +239,9 @@ class Deployer {
             fallback.host == AppHost.digitalOcean ||
             fallback.host == AppHost.render ||
             fallback.host == AppHost.cloudRun ||
+            fallback.host == AppHost.aws ||
+            fallback.host == AppHost.awsEcs ||
+            fallback.host == AppHost.azure ||
             smokeCfg.web.apiUrlNormalized.contains('REPLACE'))) {
       smokeCfg = _withApiUrl(smokeCfg, 'https://$host/');
     }

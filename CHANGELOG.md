@@ -9,6 +9,17 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`host: azure`** (aliases `aca`, `containerapps`, `container_apps`): **Azure Container Apps**
+  - Local Docker build (`linux/amd64`) → **ACR** (Basic, admin) → managed environment + app
+  - Creates resource group / ACR / environment when missing; external ingress, target port 8080
+  - Scale-to-zero via `min_replicas: 0`; WebSockets supported (unlike App Runner)
+  - Config: app, resource_group, location, environment, registry, cpu/memory, replicas
+- Example: [podfly_examples/azure/api_only](https://github.com/127thousand/podfly_examples/tree/main/azure/api_only)
+- Example: [podfly_examples/azure/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/azure/realtime_monolith) — Flutter web + WebSocket streams
+- **[doc/azure.md](doc/azure.md)** — deploy flow, teardown (delete resource group)
+
 ### Changed
 
 - **Cloud Run:** always pass `--execution-environment` (default **`gen2`** via `cloud_run.execution_environment`)

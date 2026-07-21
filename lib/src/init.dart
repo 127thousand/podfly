@@ -287,6 +287,7 @@ class Initer {
           : null,
       aws: host == AppHost.aws ? AwsConfig(service: flyApp) : null,
       awsEcs: host == AppHost.awsEcs ? AwsEcsConfig(service: flyApp) : null,
+      azure: host == AppHost.azure ? AzureConfig(app: flyApp) : null,
       cloudflare: mode == DeployMode.split &&
               webEnabled &&
               host != AppHost.railway &&
@@ -294,7 +295,8 @@ class Initer {
               host != AppHost.render &&
               host != AppHost.cloudRun &&
               host != AppHost.aws &&
-              host != AppHost.awsEcs
+              host != AppHost.awsEcs &&
+              host != AppHost.azure
           ? CloudflareConfig(project: name)
           : null,
       database: database,
