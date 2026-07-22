@@ -53,8 +53,15 @@ class SmokeRunner {
           ? (renderWeb.endsWith('/') ? renderWeb : '$renderWeb/')
           : 'https://$renderWeb/';
     }
-    if (config.mode == DeployMode.split && config.cloudflare != null) {
-      return 'https://${config.cloudflare!.project}.pages.dev/';
+    if (config.mode == DeployMode.split && config.usesStaticWebHost) {
+      if (config.webHost == StaticWebHost.vercel && config.vercel != null) {
+        final h =
+            config.vercel!.publicHost ?? '${config.vercel!.project}.vercel.app';
+        return 'https://$h/';
+      }
+      if (config.cloudflare != null) {
+        return 'https://${config.cloudflare!.project}.pages.dev/';
+      }
     }
     if (config.mode == DeployMode.monolith) {
       return config.web.apiUrlNormalized;

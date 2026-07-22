@@ -265,9 +265,21 @@ class Initer {
         );
     }
 
+    final splitStatic = mode == DeployMode.split &&
+        webEnabled &&
+        host != AppHost.railway &&
+        host != AppHost.digitalOcean &&
+        host != AppHost.render &&
+        host != AppHost.cloudRun &&
+        host != AppHost.aws &&
+        host != AppHost.awsEcs &&
+        host != AppHost.azure &&
+        host != AppHost.hetzner;
+
     final config = PodflyConfig(
       root: root,
       host: host,
+      webHost: StaticWebHost.cloudflare,
       mode: mode,
       name: name,
       server: server,
@@ -291,18 +303,8 @@ class Initer {
       hetzner: host == AppHost.hetzner
           ? HetznerConfig(serverName: flyApp)
           : null,
-      cloudflare: mode == DeployMode.split &&
-              webEnabled &&
-              host != AppHost.railway &&
-              host != AppHost.digitalOcean &&
-              host != AppHost.render &&
-              host != AppHost.cloudRun &&
-              host != AppHost.aws &&
-              host != AppHost.awsEcs &&
-              host != AppHost.azure &&
-              host != AppHost.hetzner
-          ? CloudflareConfig(project: name)
-          : null,
+      cloudflare:
+          splitStatic ? CloudflareConfig(project: name) : null,
       database: database,
       web: WebConfig(
         enabled: webEnabled,

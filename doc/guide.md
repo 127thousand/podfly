@@ -80,7 +80,7 @@ podfly deploy
 | `digitalocean` (`do`) | `doctl` + **Docker** | `doctl auth init` or `DIGITALOCEAN_ACCESS_TOKEN`; DOCR registry required |
 | others (roadmap) | `render` / `gcloud` / … | doctor checks; deploy not implemented |
 
-### When `mode: split` and web on Pages
+### When `mode: split` and web on Pages / Vercel
 
 - **wrangler** on `PATH`, logged in (`wrangler login` or `CLOUDFLARE_API_TOKEN`)
 
@@ -182,11 +182,20 @@ podfly deploy --yes --smoke
 
 `mode` is **UI layout**, not which cloud (`host:`).
 
+### Static web CDN (`web_host`)
+
+| Provider | Config | CLI |
+|----------|--------|-----|
+| Cloudflare Pages | `web_host: cloudflare` + `cloudflare:` | `wrangler` |
+| Vercel | `web_host: vercel` + `vercel:` | `vercel` |
+
+Same slot: Flutter static only. API + WebSockets stay on `host:`.
+
 ### `split` (recommended for most web apps)
 
 | Layer | Host | Content |
 |-------|------|---------|
-| Browser UI | Cloudflare Pages (`*.pages.dev`) | Flutter web + CanvasKit |
+| Browser UI | Cloudflare Pages or Vercel (`web_host`) | Flutter web + CanvasKit |
 | API | Fly (`*.fly.dev`) or Railway | Serverpod (port 8080) |
 
 Benefits: CDN for multi‑MB WASM/assets; API can scale to zero (DB choice matters).

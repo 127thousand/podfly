@@ -179,7 +179,8 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 💜 [**Serverpod Cloud**](https://serverpod.dev/cloud) | Serverpod Cloud | — | ✅ | ✅ | ✅ | Serverpod’s managed host (not via podfly) |
 | 🟣 [**Fly.io**](https://fly.io) | `fly` / `flyctl` | ✅ | ✅ | ✅ | ✅ | Default podfly path; multi-port Machines OK |
 | 🚂 [**Railway**](https://railway.app) | `railway` | ✅ | ✅ | ✅ | 🟡 | Separate API + static web services |
-| 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | Static Flutter web only; **not** the API |
+| 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | Static Flutter web only (`web_host: cloudflare`); **not** the API |
+| ▲ [**Vercel**](https://vercel.com) | `vercel` | ✅ UI | — | ✅ UI | — | Static Flutter web (`web_host: vercel`); **not** the API |
 | 🟦 [**Render**](https://render.com) | `render` | ✅ | ✅ | 🟡 | 🟡 | Git + Docker; monorepo `rootDir`; `render_postgres` |
 | ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | ✅ | ✅ | 🟡 | ✅* | Cheap serverless; *monolith = nginx + Serverpod one container (see `gcp/realtime_monolith`) |
 | 📦 [**AWS App Runner**](https://aws.amazon.com/apprunner/) | `aws` | ✅ | ✅ | 🟡 | 🟡 | [Notes](doc/aws.md): **no WebSockets** (managed Envoy 403); not free scale-to-zero |

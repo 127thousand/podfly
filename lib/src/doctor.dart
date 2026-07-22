@@ -78,8 +78,13 @@ class Doctor {
       }
       if (config.web.enabled &&
           config.mode == DeployMode.split &&
-          !adapter.deploysWebNatively) {
-        ok = await _needWrangler() && ok;
+          config.usesStaticWebHost) {
+        switch (config.webHost) {
+          case StaticWebHost.cloudflare:
+            ok = await _needWrangler() && ok;
+          case StaticWebHost.vercel:
+            ok = await _needVercel() && ok;
+        }
       }
       if (config.database.provider == DatabaseProvider.neon &&
           config.database.neon?.provision == true) {
@@ -245,6 +250,61 @@ class Doctor {
       }
     } else {
       log.detail('Set CLOUDFLARE_API_TOKEN or run: wrangler login');
+    }
+    return false;
+  }
+
+  Future<bool> _needVercel() async {
+    if (Platform.environment['VERCEL_TOKEN']?.isNotEmpty == true) {
+      log.ok('vercel  (VERCEL_TOKEN set)');
+      return true;
+    }
+    if (!await runner.which('vercel')) {
+      log.warn('vercel not found (needed for Vercel static UI)');
+      final installed = await _tryInstallRecipes(const [
+        CliInstallRecipe(
+          label: 'npm i -g vercel',
+          executable: 'npm',
+          args: ['i', '-g', 'vercel'],
+        ),
+        CliInstallRecipe(
+          label: 'brew install vercel-cli',
+          executable: 'brew',
+          args: ['install', 'vercel-cli'],
+        ),
+      ], 'vercel');
+      if (!installed || !await runner.which('vercel')) {
+        log.err('vercel still missing');
+        log.detail('Install: npm i -g vercel');
+        return false;
+      }
+    }
+    if (runner.dryRun) {
+      log.ok('vercel  (auth check skipped in dry-run)');
+      return true;
+    }
+    final who = await runner.runCapture(
+      'vercel',
+      ['whoami'],
+      allowDryRun: false,
+    );
+    final combined = (who.stdout + who.stderr).toLowerCase();
+    if (who.ok &&
+        !combined.contains('not logged') &&
+        !combined.contains('no existing credentials') &&
+        who.stdout.trim().isNotEmpty) {
+      log.ok('vercel  ${who.stdout.trim().split('\n').first}');
+      return true;
+    }
+    log.warn('vercel not authenticated');
+    if (_canLogin) {
+      final go = _autoLogin || await confirm('Run `vercel login` now?');
+      if (go) {
+        final r = await runner.run('vercel', ['login'], allowDryRun: false);
+        if (r.ok) return _needVercel();
+      }
+    } else {
+      log.detail('Set VERCEL_TOKEN or run: vercel login');
     }
     return false;
   }

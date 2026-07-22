@@ -9,6 +9,7 @@ Location: project root (walk-up from cwd also finds it).
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `host` | `fly` \| `railway` \| `digitalocean` \| `render` \| `cloud_run` \| `aws` \| `aws_ecs` \| `azure` \| `hetzner` \| … | `fly` | **API cloud** — see README host table. |
+| `web_host` | `cloudflare` \| `vercel` | `cloudflare` | **Flutter static CDN** when `mode: split` and API host is not web-native (e.g. Fly). |
 | `mode` | `split` \| `monolith` | `split` | Layout: CDN UI + API vs UI with API host. Alias: `fly` → monolith (legacy) |
 | `name` | string | directory name | Default for app + Pages project names |
 | `server` | string | discovered `*_server` | Path relative to root |
@@ -259,12 +260,47 @@ Deploys via `gcloud run deploy --source` (Dockerfile at monorepo root or copied 
 
 **Monolith (Flutter + API + WS):** one public port only. Ship nginx (or similar) that serves static Flutter and proxies `/` API + `/v1/websocket` to Serverpod on an internal port. See [podfly_examples/gcp/realtime_monolith](https://github.com/127thousand/podfly_examples/tree/main/gcp/realtime_monolith).
 
-## `cloudflare` (split only)
+## Static web hosts (`web_host`)
+
+When `mode: split` and the API host does **not** serve Flutter natively (Fly is the
+main case), podfly deploys static web to a CDN:
+
+| `web_host` | CLI | Default URL |
+|------------|-----|-------------|
+| `cloudflare` (default) | `wrangler` | `https://<project>.pages.dev` |
+| `vercel` | `vercel` | `https://<project>.vercel.app` |
+
+Same role for both: **Flutter web only** — not Serverpod API/WebSockets.
+
+Planned later: Netlify, GitHub Pages (same adapter slot).
+
+## `cloudflare` (split + `web_host: cloudflare`)
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `project` | string | `name` | Pages project name |
 | `branch` | string | `main` | Production branch for deploy |
+
+## `vercel` (split + `web_host: vercel`)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `project` | string | `name` | Vercel project name (`--project`) |
+| `scope` | string | — | Optional team slug (`--scope`) |
+| `public_host` | string | — | e.g. `my-app.vercel.app` after deploy |
+
+```yaml
+host: fly
+web_host: vercel
+mode: split
+vercel:
+  project: my-flutter-ui
+```
+
+Auth: `vercel login` or `VERCEL_TOKEN`. Doctor installs CLI via `npm i -g vercel` when missing.
+
+podfly writes `vercel.json` into the web build (SPA rewrite + WASM headers) unless
+`*_flutter/web/vercel.json` already exists.
 
 ## `database`
 

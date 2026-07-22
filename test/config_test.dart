@@ -142,6 +142,34 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('vercel web_host round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_vercel_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.fly,
+      webHost: StaticWebHost.vercel,
+      mode: DeployMode.split,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      vercel: VercelConfig(project: 'demo-ui', publicHost: 'demo-ui.vercel.app'),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      web: WebConfig(
+        enabled: true,
+        apiUrl: 'https://demo.fly.dev/',
+      ),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.webHost, StaticWebHost.vercel);
+    expect(loaded.vercel?.project, 'demo-ui');
+    expect(loaded.vercel?.publicHost, 'demo-ui.vercel.app');
+    expect(loaded.toYaml(), contains('web_host: vercel'));
+    expect(loaded.usesStaticWebHost, isTrue);
+    await dir.delete(recursive: true);
+  });
+
   test('hetzner host round-trip', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_hetzner_');
     final cfg = PodflyConfig(

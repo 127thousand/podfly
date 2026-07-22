@@ -10,6 +10,7 @@ import '../process_runner.dart';
 import '../smoke.dart';
 import '../templates.dart';
 import '../web/build.dart';
+import '../web/static_web.dart';
 
 class DeployOptions {
   DeployOptions({
@@ -132,12 +133,26 @@ class Deployer {
       await WebBuilder(config: cfg, runner: runner, log: log).build();
     }
 
-    // Separate web service (Railway / DO) or Pages / all-in-one copy — not siamese.
+    // Separate web service (Railway / DO) or static CDN / all-in-one copy.
     if (doWeb) {
       if (nativeWeb) {
         lastWebResult = await adapter.deployWeb(_ctx(cfg));
-      } else if (cfg.mode == DeployMode.split) {
-        await _deployPages();
+      } else if (cfg.mode == DeployMode.split && cfg.usesStaticWebHost) {
+        final staticResult = await StaticWebDeployer(
+          config: cfg,
+          runner: runner,
+          log: log,
+        ).deploy();
+        lastWebResult = HostDeployResult(
+          publicHost: staticResult.publicHost,
+          displayUrl: staticResult.displayUrl,
+        );
+        // Reload if vercel.public_host was persisted
+        if (await File(cfg.configPath).exists()) {
+          try {
+            cfg = await PodflyConfig.load(cfg.configPath);
+          } catch (_) {/* keep */}
+        }
       } else if (adapter.supportsAllInOneWeb) {
         await _copyWebIntoServer();
       } else {
@@ -158,9 +173,14 @@ class Deployer {
     if (doWeb) {
       if (lastWebResult?.displayUrl != null) {
         log.detail('UI:  ${lastWebResult!.displayUrl}');
-      } else if (cfg.mode == DeployMode.split && cfg.cloudflare != null) {
-        log.detail(
-            'UI:  https://${cfg.cloudflare!.project}.pages.dev');
+      } else if (cfg.mode == DeployMode.split && cfg.usesStaticWebHost) {
+        if (cfg.webHost == StaticWebHost.vercel && cfg.vercel != null) {
+          final h = cfg.vercel!.publicHost ?? '${cfg.vercel!.project}.vercel.app';
+          log.detail('UI:  https://$h');
+        } else if (cfg.cloudflare != null) {
+          log.detail(
+              'UI:  https://${cfg.cloudflare!.project}.pages.dev');
+        }
       }
     }
     if (doApi) {
@@ -176,6 +196,7 @@ class Deployer {
     return PodflyConfig(
       root: c.root,
       host: c.host,
+      webHost: c.webHost,
       mode: c.mode,
       name: c.name,
       server: c.server,
@@ -190,6 +211,7 @@ class Deployer {
       azure: c.azure,
       hetzner: c.hetzner,
       cloudflare: c.cloudflare,
+      vercel: c.vercel,
       database: c.database,
       web: WebConfig(
         enabled: c.web.enabled,
@@ -254,56 +276,6 @@ class Deployer {
     await File(abs).parent.create(recursive: true);
     await File(abs).writeAsString(body);
     log.ok('wrote $rel (prefer `serverpod create` Dockerfile when available)');
-  }
-
-  Future<void> _deployPages() async {
-    final project = config.cloudflare!.project;
-    log.step('Deploy Cloudflare Pages ($project)');
-    final out = config.webOutPath;
-    if (!runner.dryRun && !await File(p.join(out, 'index.html')).exists()) {
-      throw StateError('missing web build at $out');
-    }
-
-    if (runner.dryRun) {
-      log.dry('wrangler pages project list / create $project (if needed)');
-    } else {
-      final list = await runner.runCapture(
-        'wrangler',
-        ['pages', 'project', 'list'],
-        allowDryRun: false,
-      );
-      if (!list.stdout.contains(project)) {
-        log.detail('creating Cloudflare Pages project $project');
-        final create = await runner.run('wrangler', [
-          'pages',
-          'project',
-          'create',
-          project,
-          '--production-branch',
-          config.cloudflare!.branch,
-        ]);
-        if (create.ok) {
-          log.ok('created Pages project $project');
-        } else {
-          log.warn(
-              'pages project create failed — deploy may still work if project exists');
-        }
-      }
-    }
-
-    final r = await runner.run('wrangler', [
-      'pages',
-      'deploy',
-      out,
-      '--project-name',
-      project,
-      '--branch',
-      config.cloudflare!.branch,
-    ]);
-    if (!r.ok && !runner.dryRun) {
-      throw StateError('wrangler pages deploy failed (exit ${r.exitCode})');
-    }
-    log.ok('Pages: https://$project.pages.dev');
   }
 
   Future<void> _copyWebIntoServer() async {
