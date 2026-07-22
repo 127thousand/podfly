@@ -800,33 +800,6 @@ class RenderHost extends HostAdapter {
     return '$serviceName.onrender.com';
   }
 
-  String? _findOnRenderHost(Object? node) {
-    if (node is Map) {
-      for (final e in node.entries) {
-        final k = e.key.toString().toLowerCase();
-        final v = e.value;
-        if (v is String && v.contains('.onrender.com')) {
-          final u = v.replaceFirst(RegExp(r'^https?://'), '');
-          return u.split('/').first;
-        }
-        if ((k.contains('host') || k.contains('url')) && v is String) {
-          final cleaned = v.replaceFirst(RegExp(r'^https?://'), '');
-          if (cleaned.contains('onrender.com')) {
-            return cleaned.split('/').first;
-          }
-        }
-        final nested = _findOnRenderHost(v);
-        if (nested != null) return nested;
-      }
-    } else if (node is List) {
-      for (final i in node) {
-        final nested = _findOnRenderHost(i);
-        if (nested != null) return nested;
-      }
-    }
-    return null;
-  }
-
   Future<void> _persistServiceId(DeployContext ctx, String id) async {
     final cfg = ctx.config;
     final r = cfg.render;
