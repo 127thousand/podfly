@@ -13,6 +13,7 @@
 | [Static web CDNs](guide.md#static-web-cdn-web_host) | `web_host: cloudflare \| vercel \| netlify \| github_pages` |
 | [Netlify](netlify.md) | `web_host: netlify` — static Flutter CDN; **not** API/WS |
 | [GitHub Pages](github_pages.md) | `web_host: github_pages` — static Flutter CDN via `gh` + `git` |
+| [Upstash Redis](upstash.md) | `redis.provider: upstash` — optional cache/PubSub |
 | [Design specs](specs/) | Architecture decisions (incl. [ECS+ALB realtime sketch](specs/2026-07-21-aws-ecs-realtime-sketch.md)) |
 
 Start at the [root README](../README.md) for install and quick start.

@@ -244,6 +244,7 @@ class StaticWebDeployer {
       netlify: cfg.netlify,
       githubPages: cfg.githubPages,
       database: cfg.database,
+      redis: cfg.redis,
       web: cfg.web,
       smoke: cfg.smoke,
     );
@@ -387,6 +388,7 @@ class StaticWebDeployer {
       ),
       githubPages: cfg.githubPages,
       database: cfg.database,
+      redis: cfg.redis,
       web: cfg.web,
       smoke: cfg.smoke,
     );
@@ -705,6 +707,7 @@ class StaticWebDeployer {
         private: base.private,
       ),
       database: cfg.database,
+      redis: cfg.redis,
       web: cfg.web,
       smoke: cfg.smoke,
     );

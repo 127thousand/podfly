@@ -348,6 +348,36 @@ web:
 
 Auth: `gh auth login` (repo scope). See **[github_pages.md](github_pages.md)**.
 
+## `redis` (optional)
+
+Default: **disabled**. Enable for multi-instance cache / PubSub.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `provider` | `none` \| `upstash` | `none` | Redis backend |
+| `upstash` | map | — | When `provider: upstash` |
+
+### `redis.upstash`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `name` | string | `<fly.app>-redis` | Database name |
+| `region` | string | `us-east-1` | Primary region |
+| `provision` | bool | `true` | Create if missing |
+| `database_id` | string | — | After first create |
+| `endpoint` | string | — | Host only (`*.upstash.io`) |
+| `port` | int | `6379` | TLS required |
+
+```yaml
+redis:
+  provider: upstash
+  upstash:
+    name: my-app-redis
+    region: us-east-1
+```
+
+Auth: `upstash login` or `UPSTASH_EMAIL` + `UPSTASH_API_KEY`. See [upstash.md](upstash.md).
+
 ## `database`
 
 | Key | Type | Default | Description |

@@ -205,6 +205,38 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('redis upstash round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_redis_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.fly,
+      mode: DeployMode.monolith,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      redis: RedisConfig(
+        provider: RedisProvider.upstash,
+        upstash: UpstashRedisConfig(
+          name: 'demo-redis',
+          region: 'us-east-1',
+          databaseId: 'db-123',
+          endpoint: 'demo.upstash.io',
+          port: 6379,
+        ),
+      ),
+      web: WebConfig(enabled: false, apiUrl: 'https://demo.fly.dev/'),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.redis.provider, RedisProvider.upstash);
+    expect(loaded.redis.upstash?.endpoint, 'demo.upstash.io');
+    expect(loaded.redis.upstash?.databaseId, 'db-123');
+    expect(loaded.toYaml(), contains('provider: upstash'));
+    await dir.delete(recursive: true);
+  });
+
   test('github_pages web_host round-trip', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_ghp_');
     final cfg = PodflyConfig(

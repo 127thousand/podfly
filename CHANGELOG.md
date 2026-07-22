@@ -9,9 +9,20 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`redis.provider: upstash`** — optional Serverpod Redis (cache/PubSub)
+  - `upstash redis create/list/get` when `provision: true`
+  - Sidecar `.podfly_upstash_redis.json`; patches `production.yaml` + `passwords.yaml`
+  - Fly: `SERVERPOD_REDIS_ENABLED|HOST|PORT|REQUIRE_SSL` + `SERVERPOD_PASSWORD_redis`
+  - Doctor: `@upstash/cli` + login / `UPSTASH_EMAIL` + `UPSTASH_API_KEY`
+  - **[doc/upstash.md](doc/upstash.md)** — provision, secrets, multi-machine PubSub proof, teardown
+  - Example: [upstash/pubsub_chat](https://github.com/127thousand/podfly_examples/tree/main/upstash/pubsub_chat)
+    (Fly HA + Netlify chat; CROSS-MACHINE UI; demo stack torn down after verify)
+
 ### Planned (parked)
 
-- **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps
+- **Supabase** (and other managed Postgres): additional `database.provider` options
 
 ---
 

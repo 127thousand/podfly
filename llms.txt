@@ -32,6 +32,7 @@ Flutter **static only** — not Serverpod API or WebSockets. API stays on `host:
 
 - [doc/netlify.md](doc/netlify.md) — `web_host: netlify`
 - [doc/github_pages.md](doc/github_pages.md) — `web_host: github_pages`
+- [doc/upstash.md](doc/upstash.md) — `redis.provider: upstash` (cache/PubSub; multi-machine proof + teardown)
 - Also: `web_host: cloudflare` (default, `wrangler`), `web_host: vercel`
 
 ## Examples
@@ -47,6 +48,7 @@ External monorepo: https://github.com/127thousand/podfly_examples
 | `netlify/realtime_split` | Fly | Netlify | ✅ WS → Fly |
 | `github_pages/split_fly` | Fly | GitHub Pages | — |
 | `github_pages/realtime_split` | Fly | GitHub Pages | ✅ WS → Fly |
+| `upstash/pubsub_chat` | Fly HA + Upstash Redis | Netlify | ✅ WS + cross-machine PubSub |
 | `hetzner/*`, `azure/*`, `aws/ecs_realtime`, … | see repo README |
 
 Package pointer: [`example/mobile_api_only`](example/mobile_api_only) (Fly API-only).
@@ -86,6 +88,7 @@ podfly smoke
 | Static UI (`web_host`, `mode: split`) | **cloudflare** (default), **vercel**, **netlify**, **github_pages** |
 | UI (native with API host) | Railway static nginx; DO separate web app; Cloud Run / App Runner / Azure / Hetzner monolith nginx |
 | DB | none, sqlite, fly_postgres, railway_postgres, digitalocean_postgres, render_postgres, neon |
+| Redis (optional) | **upstash** (`redis.provider: upstash`) — multi-instance cache/PubSub |
 
 ### Realtime / WebSockets
 

@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../config.dart';
 import '../database/ensure.dart';
+import '../redis/ensure.dart';
 import '../hosts/hosts.dart';
 import '../log.dart';
 import '../process_runner.dart';
@@ -100,6 +101,13 @@ class Deployer {
     await DatabaseEnsure(config: cfg, runner: runner, log: log).run();
 
     // DB ensure may write cluster_id / credentials into podfly.yaml + sidecars.
+    if (await File(cfg.configPath).exists()) {
+      try {
+        cfg = await PodflyConfig.load(cfg.configPath);
+      } catch (_) {/* keep in-memory */}
+    }
+
+    await RedisEnsure(config: cfg, runner: runner, log: log).run();
     if (await File(cfg.configPath).exists()) {
       try {
         cfg = await PodflyConfig.load(cfg.configPath);
@@ -226,6 +234,7 @@ class Deployer {
       netlify: c.netlify,
       githubPages: c.githubPages,
       database: c.database,
+      redis: c.redis,
       web: WebConfig(
         enabled: c.web.enabled,
         serverUrlDefine: c.web.serverUrlDefine,
@@ -276,6 +285,7 @@ class Deployer {
       netlify: c.netlify,
       githubPages: c.githubPages,
       database: c.database,
+      redis: c.redis,
       web: WebConfig(
         enabled: c.web.enabled,
         serverUrlDefine: c.web.serverUrlDefine,

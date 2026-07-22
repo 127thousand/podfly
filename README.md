@@ -216,16 +216,16 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 
 Want another provider? Open an issue — preference is **excellent DX** or **clouds most teams already pay for**.
 
-### Redis / shared state (later)
+### Redis / shared state
 
-Most small apps **do not need Redis** (Postgres is enough). When you run **multiple instances** and need shared cache or PubSub (live streams across machines), Serverpod can use Redis.
+Most small apps **do not need Redis**. When you run **multiple instances** and need shared cache or PubSub, Serverpod can use Redis.
 
 | Provider | podfly | Notes |
 |----------|--------|--------|
-| 🔺 [**Upstash**](https://upstash.com) | 🗺️ later | Serverless Redis + TLS; Serverpod’s own Cloud docs use it as the third-party example; great fit with scale-to-zero hosts |
-| Host-managed Redis | — | Fly/Railway/etc. Redis plugins — manual config today |
+| 🔺 [**Upstash**](https://upstash.com) | ✅ `redis.provider: upstash` | Serverless Redis + TLS; provision via CLI; patches `production.yaml` + passwords + Fly `SERVERPOD_REDIS_*` |
+| Host-managed Redis | — | Fly/Railway Redis plugins — manual config today |
 
-Parked as an **extra**, not core cheap path: optional `redis` / Upstash wiring (env + `production.yaml` patch) after Cloud Run and the main host set settle.
+See [doc/upstash.md](doc/upstash.md).
 
 ---
 

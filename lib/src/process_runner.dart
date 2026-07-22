@@ -175,6 +175,10 @@ class ProcessRunner {
         .replaceAllMapped(
           RegExp(r'(--auth|--token|-t)\s+\S+'),
           (m) => '${m[1]} ***',
+        )
+        .replaceAllMapped(
+          RegExp(r'(SERVERPOD_PASSWORD_\w+|password)=([^\s]+)'),
+          (m) => '${m[1]}=***',
         );
   }
 }

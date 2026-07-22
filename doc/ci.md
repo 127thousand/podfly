@@ -34,6 +34,7 @@ Set `PODFLY_AUTO=1` if doctor might offer CLI installs and you want auto-accept
 | Netlify static UI | `NETLIFY_AUTH_TOKEN` | When `web_host: netlify` |
 | GitHub Pages UI | `GH_TOKEN` / `GITHUB_TOKEN` | When `web_host: github_pages` (repo + pages write) |
 | Neon provision | `NEON_API_KEY` | Only if `database.neon.provision: true` |
+| Upstash Redis | `UPSTASH_EMAIL` + `UPSTASH_API_KEY` | When `redis.provider: upstash` |
 
 **Recommended in CI repos:** commit `podfly.yaml` and host config (`fly.toml` /
 `railway.toml` / DO app spec) so app names and scale settings are reviewable and

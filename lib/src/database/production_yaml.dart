@@ -25,9 +25,13 @@ class ProductionYamlPatcher {
   /// Written after Render Postgres connection is fetched.
   static const renderPgSidecarName = '.podfly_render_pg.json';
 
+  /// Written after Upstash Redis provision.
+  static const upstashRedisSidecarName = '.podfly_upstash_redis.json';
+
   File get file =>
       File(p.join(config.serverPath, 'config', 'production.yaml'));
 
+  /// Patch database (+ optional session logs) for [config.database].
   Future<void> apply() async {
     final f = file;
     if (!await f.exists()) {
@@ -183,6 +187,49 @@ class ProductionYamlPatcher {
     log.ok('patched config/production.yaml (${config.database.provider.name})');
   }
 
+  /// Patch `redis:` block + `passwords.yaml` redis secret.
+  Future<void> applyRedis() async {
+    final f = file;
+    if (!await f.exists()) {
+      log.warn('no production.yaml — skip redis patch');
+      return;
+    }
+    var text = await f.readAsString();
+
+    if (!config.redis.enabled) {
+      text = _upsertRedisBlock(text, {
+        'enabled': 'false',
+      });
+      await f.writeAsString(text);
+      log.detail('redis.enabled: false in production.yaml');
+      return;
+    }
+
+    final sidecar = await _readSidecarMap(upstashRedisSidecarName);
+    final u = config.redis.upstash;
+    final host = sidecar?['endpoint'] ?? u?.endpoint;
+    final port = sidecar?['port'] ?? '${u?.port ?? 6379}';
+    final password = sidecar?['password'];
+
+    if (host == null || host.isEmpty) {
+      log.warn('redis: no endpoint yet — skip production.yaml redis host');
+      return;
+    }
+
+    text = _upsertRedisBlock(text, {
+      'enabled': 'true',
+      'host': host,
+      'port': port,
+      'requireSsl': 'true',
+    });
+    await f.writeAsString(text);
+    log.ok('patched config/production.yaml redis → $host:$port');
+
+    if (password != null && password.isNotEmpty) {
+      await _patchPasswordsYamlKey('redis', password);
+    }
+  }
+
   Future<Map<String, String>?> _readSidecarMap(String filename) async {
     final f = File(p.join(config.serverPath, 'config', filename));
     if (!await f.exists()) return null;
@@ -212,30 +259,53 @@ class ProductionYamlPatcher {
   }
 
   Future<void> _patchPasswordsYaml(String password) async {
+    await _patchPasswordsYamlKey('database', password);
+  }
+
+  Future<void> _patchPasswordsYamlKey(String key, String password) async {
     final f = File(p.join(config.serverPath, 'config', 'passwords.yaml'));
     if (!await f.exists()) {
-      log.warn('no passwords.yaml — cannot set production database password');
+      log.warn('no passwords.yaml — cannot set production.$key password');
       return;
     }
     var text = await f.readAsString();
     final re = RegExp(
-      r'^(production:\s*\n(?:[ \t]+.+\n)*?)([ \t]+)database:\s*.+$',
+      '^(production:\\s*\\n(?:[ \\t]+.+\\n)*?)([ \\t]+)$key:\\s*.+\$',
       multiLine: true,
     );
     if (re.hasMatch(text)) {
       text = text.replaceFirstMapped(re, (m) {
-        return '${m.group(1)}${m.group(2)}database: \'$password\'';
+        return '${m.group(1)}${m.group(2)}$key: \'$password\'';
       });
     } else if (RegExp(r'^production:', multiLine: true).hasMatch(text)) {
-      text = text.replaceFirst(
-        RegExp(r'^(production:\s*)$', multiLine: true),
-        'production:\n  database: \'$password\'',
+      // Insert under production: after the key line
+      text = text.replaceFirstMapped(
+        RegExp(r'^(production:\s*\n)', multiLine: true),
+        (m) => '${m.group(1)}  $key: \'$password\'\n',
       );
     } else {
-      text = '$text\nproduction:\n  database: \'$password\'\n';
+      text = '$text\nproduction:\n  $key: \'$password\'\n';
     }
     await f.writeAsString(text);
-    log.ok('patched passwords.yaml production.database');
+    log.ok('patched passwords.yaml production.$key');
+  }
+
+  String _upsertRedisBlock(String text, Map<String, String> fields) {
+    final buf = StringBuffer('redis:\n');
+    for (final e in fields.entries) {
+      buf.writeln('  ${e.key}: ${e.value}');
+    }
+    final block = buf.toString();
+    final re = RegExp(
+      r'^redis:\s*\n(?:[ \t]+.+\n)*',
+      multiLine: true,
+    );
+    if (re.hasMatch(text)) {
+      return text.replaceFirst(re, block);
+    }
+    // Append before end
+    if (text.endsWith('\n')) return '$text\n$block';
+    return '$text\n\n$block';
   }
 
   String _removeDatabaseBlock(String text) {

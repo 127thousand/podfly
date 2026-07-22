@@ -367,6 +367,83 @@ class GitHubPagesConfig {
       };
 }
 
+/// Optional Serverpod Redis (cache + PubSub across instances).
+enum RedisProvider {
+  none,
+  upstash,
+}
+
+extension RedisProviderX on RedisProvider {
+  String get yamlName => switch (this) {
+        RedisProvider.none => 'none',
+        RedisProvider.upstash => 'upstash',
+      };
+
+  static RedisProvider parse(String? s) {
+    final v = s?.trim().toLowerCase();
+    if (v == null || v.isEmpty || v == 'none' || v == 'off' || v == 'disabled') {
+      return RedisProvider.none;
+    }
+    if (v == 'upstash') return RedisProvider.upstash;
+    throw FormatException(
+      'Unknown redis.provider: $s (use none or upstash)',
+    );
+  }
+}
+
+/// Upstash Redis database for Serverpod (`redis.provider: upstash`).
+class UpstashRedisConfig {
+  UpstashRedisConfig({
+    this.name,
+    this.region = 'us-east-1',
+    this.provision = true,
+    this.databaseId,
+    this.endpoint,
+    this.port = 6379,
+  });
+
+  /// Database display name (`upstash redis create --name`). Defaults to
+  /// `<app>-redis` at provision time.
+  final String? name;
+  /// Primary region for create.
+  final String region;
+  /// Create DB if [databaseId] / [endpoint] missing.
+  final bool provision;
+  /// Upstash database id after create.
+  final String? databaseId;
+  /// Host only, e.g. `xxx.upstash.io` (no scheme).
+  final String? endpoint;
+  /// Usually 6379 (TLS required by Upstash).
+  final int port;
+
+  Map<String, Object?> toMap() => {
+        if (name != null) 'name': name,
+        'region': region,
+        'provision': provision,
+        if (databaseId != null) 'database_id': databaseId,
+        if (endpoint != null) 'endpoint': endpoint,
+        'port': port,
+      };
+}
+
+class RedisConfig {
+  RedisConfig({
+    this.provider = RedisProvider.none,
+    this.upstash,
+  });
+
+  final RedisProvider provider;
+  final UpstashRedisConfig? upstash;
+
+  bool get enabled => provider != RedisProvider.none;
+
+  Map<String, Object?> toMap() {
+    final m = <String, Object?>{'provider': provider.yamlName};
+    if (upstash != null) m['upstash'] = upstash!.toMap();
+    return m;
+  }
+}
+
 class SqliteConfig {
   SqliteConfig({
     this.path = '/data/serverpod.db',
@@ -1151,9 +1228,10 @@ class PodflyConfig {
     this.netlify,
     this.githubPages,
     required this.database,
+    RedisConfig? redis,
     required this.web,
     this.smoke,
-  });
+  }) : redis = redis ?? RedisConfig();
 
   final String root;
   /// Cloud that runs the Serverpod API container.
@@ -1177,6 +1255,8 @@ class PodflyConfig {
   final VercelConfig? vercel;
   final NetlifyConfig? netlify;
   final GitHubPagesConfig? githubPages;
+  /// Optional Serverpod Redis (Upstash, …). Default: disabled.
+  final RedisConfig redis;
   final DatabaseConfig database;
   final WebConfig web;
   final SmokeConfig? smoke;
@@ -1241,6 +1321,7 @@ class PodflyConfig {
         if (netlify != null) 'netlify': netlify!.toMap(),
         if (githubPages != null) 'github_pages': githubPages!.toMap(),
         'database': database.toMap(),
+        if (redis.enabled || redis.upstash != null) 'redis': redis.toMap(),
         'web': web.toMap(),
         if (smoke != null) 'smoke': smoke!.toMap(),
       };
@@ -1576,6 +1657,23 @@ class PodflyConfig {
       buf.writeln('    region: ${r.region}');
       if (r.databaseId != null) {
         buf.writeln('    database_id: ${r.databaseId}');
+      }
+    }
+    if (redis.enabled || redis.upstash != null) {
+      buf.writeln();
+      buf.writeln('redis:');
+      buf.writeln('  provider: ${redis.provider.yamlName}');
+      if (redis.upstash != null || redis.provider == RedisProvider.upstash) {
+        final u = redis.upstash ?? UpstashRedisConfig();
+        buf.writeln('  upstash:');
+        if (u.name != null) buf.writeln('    name: ${u.name}');
+        buf.writeln('    region: ${u.region}');
+        buf.writeln('    provision: ${u.provision}');
+        if (u.databaseId != null) {
+          buf.writeln('    database_id: ${u.databaseId}');
+        }
+        if (u.endpoint != null) buf.writeln('    endpoint: ${u.endpoint}');
+        buf.writeln('    port: ${u.port}');
       }
     }
     buf.writeln();
@@ -2100,6 +2198,25 @@ class PodflyConfig {
       staticDir: webMap['static_dir']?.toString(),
     );
 
+    RedisConfig redis = RedisConfig();
+    if (doc['redis'] != null) {
+      final rm = _map(doc['redis']);
+      final rp = RedisProviderX.parse(rm['provider']?.toString());
+      UpstashRedisConfig? upstash;
+      if (rp == RedisProvider.upstash || rm['upstash'] != null) {
+        final u = _map(rm['upstash']);
+        upstash = UpstashRedisConfig(
+          name: u['name']?.toString(),
+          region: u['region']?.toString() ?? 'us-east-1',
+          provision: u['provision'] != false,
+          databaseId: u['database_id']?.toString() ?? u['id']?.toString(),
+          endpoint: u['endpoint']?.toString() ?? u['host']?.toString(),
+          port: int.tryParse('${u['port'] ?? 6379}') ?? 6379,
+        );
+      }
+      redis = RedisConfig(provider: rp, upstash: upstash);
+    }
+
     SmokeConfig? smoke;
     if (doc['smoke'] != null) {
       final sm = _map(doc['smoke']);
@@ -2155,6 +2272,7 @@ class PodflyConfig {
         digitalOceanPostgres: doPg,
         renderPostgres: renderPg,
       ),
+      redis: redis,
       web: web,
       smoke: smoke,
     );

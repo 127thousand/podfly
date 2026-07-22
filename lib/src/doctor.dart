@@ -94,6 +94,9 @@ class Doctor {
           config.database.neon?.provision == true) {
         ok = await _needNeon() && ok;
       }
+      if (config.redis.provider == RedisProvider.upstash) {
+        ok = await _needUpstash() && ok;
+      }
       if (!adapter.canDeploy) {
         log.warn(
             '${adapter.label} is on the roadmap — deploy will not run yet. '
@@ -430,6 +433,62 @@ class Doctor {
       log.detail('Set NETLIFY_AUTH_TOKEN or run: netlify login');
     }
     return false;
+  }
+
+  Future<bool> _needUpstash() async {
+    if (Platform.environment['UPSTASH_EMAIL']?.isNotEmpty == true &&
+        Platform.environment['UPSTASH_API_KEY']?.isNotEmpty == true) {
+      log.ok('upstash  (UPSTASH_EMAIL + UPSTASH_API_KEY set)');
+      return true;
+    }
+    if (!await runner.which('upstash')) {
+      log.warn('upstash not found (needed for redis.provider: upstash)');
+      final installed = await _tryInstallRecipes(const [
+        CliInstallRecipe(
+          label: 'npm i -g @upstash/cli',
+          executable: 'npm',
+          args: ['i', '-g', '@upstash/cli'],
+        ),
+      ], 'upstash');
+      if (!installed || !await runner.which('upstash')) {
+        log.err('upstash still missing');
+        log.detail('Install: npm i -g @upstash/cli');
+        return false;
+      }
+    }
+    if (runner.dryRun) {
+      log.ok('upstash  (auth check skipped in dry-run)');
+      return true;
+    }
+    final list = await runner.runCapture(
+      'upstash',
+      ['redis', 'list'],
+      allowDryRun: false,
+    );
+    if (list.ok) {
+      log.ok('upstash  authenticated');
+      return true;
+    }
+    final err = (list.stderr + list.stdout).toLowerCase();
+    if (err.contains('authentication') || err.contains('login')) {
+      log.warn('upstash not authenticated');
+      if (_canLogin) {
+        final go = _autoLogin || await confirm('Run `upstash login` now?');
+        if (go) {
+          final r =
+              await runner.run('upstash', ['login'], allowDryRun: false);
+          if (r.ok) return _needUpstash();
+        }
+      } else {
+        log.detail(
+          'Set UPSTASH_EMAIL + UPSTASH_API_KEY or run: upstash login',
+        );
+      }
+      return false;
+    }
+    // list may fail for other reasons but CLI works
+    log.ok('upstash  CLI present');
+    return true;
   }
 
   Future<bool> _needNeon() async {
