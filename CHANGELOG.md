@@ -12,9 +12,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **`web_host: vercel`** — Flutter web static on **Vercel** (same role as Cloudflare Pages)
-  - `vercel deploy <build/web> --prod --yes --project …` (+ optional `--scope`, `VERCEL_TOKEN`)
+  - Creates project if missing (`vercel project add`), then `vercel deploy … --prod`
   - Writes `vercel.json` (SPA rewrites + WASM / cache headers) unless project provides one
   - Doctor: `vercel` CLI + `vercel whoami` / `VERCEL_TOKEN`
+  - Example: [vercel/split_fly](https://github.com/127thousand/podfly_examples/tree/main/vercel/split_fly)
 - Top-level **`web_host`**: `cloudflare` (default) \| `vercel` for `mode: split`
 - Refactor: `StaticWebDeployer` for Pages/Vercel (parallel to API host adapters)
 

@@ -122,6 +122,35 @@ class StaticWebDeployer {
       );
     }
 
+    final token = Platform.environment['VERCEL_TOKEN'];
+    final scope = vc.scope;
+
+    // Ensure project exists (deploy --project fails if missing).
+    final listArgs = <String>['project', 'ls'];
+    if (token != null && token.isNotEmpty) {
+      listArgs.addAll(['--token', token]);
+    }
+    if (scope != null && scope.isNotEmpty) {
+      listArgs.addAll(['--scope', scope]);
+    }
+    final list = await runner.runCapture(vercel, listArgs, allowDryRun: false);
+    if (!list.stdout.contains(project) && !list.stderr.contains(project)) {
+      log.detail('creating Vercel project $project');
+      final addArgs = <String>['project', 'add', project];
+      if (token != null && token.isNotEmpty) {
+        addArgs.addAll(['--token', token]);
+      }
+      if (scope != null && scope.isNotEmpty) {
+        addArgs.addAll(['--scope', scope]);
+      }
+      final add = await runner.run(vercel, addArgs, allowDryRun: false);
+      if (!add.ok) {
+        log.warn(
+          'vercel project add failed — deploy may still work if project exists',
+        );
+      }
+    }
+
     final args = <String>[
       'deploy',
       out,
@@ -130,11 +159,9 @@ class StaticWebDeployer {
       '--project',
       project,
     ];
-    final token = Platform.environment['VERCEL_TOKEN'];
     if (token != null && token.isNotEmpty) {
       args.addAll(['--token', token]);
     }
-    final scope = vc.scope;
     if (scope != null && scope.isNotEmpty) {
       args.addAll(['--scope', scope]);
     }
@@ -146,21 +173,22 @@ class StaticWebDeployer {
       );
     }
 
-    final url = _extractVercelUrl(r.stdout) ??
-        _extractVercelUrl(r.stderr) ??
-        'https://$project.vercel.app';
-    final host = url
-        .replaceFirst(RegExp(r'^https?://'), '')
-        .split('/')
-        .first;
-    log.ok('Vercel: $url');
+    // Deployment URL may be a long unique host; prefer stable project alias.
+    final deploymentUrl = _extractVercelUrl(r.stdout) ??
+        _extractVercelUrl(r.stderr);
+    final stableHost = '$project.vercel.app';
+    final displayUrl = 'https://$stableHost';
+    log.ok('Vercel: $displayUrl'
+        '${deploymentUrl != null && !deploymentUrl.contains(stableHost) ? " ($deploymentUrl)" : ""}');
 
-    // Persist public_host when we resolved a real URL
-    if (!runner.dryRun && host.isNotEmpty) {
-      await _persistVercelHost(host);
+    if (!runner.dryRun) {
+      await _persistVercelHost(stableHost);
     }
 
-    return HostDeployResultLike(publicHost: host, displayUrl: url);
+    return HostDeployResultLike(
+      publicHost: stableHost,
+      displayUrl: displayUrl,
+    );
   }
 
   Future<void> _ensureVercelJson(String outDir) async {
