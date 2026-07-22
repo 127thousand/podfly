@@ -105,7 +105,7 @@ class ProcessRunner {
     bool allowDryRun = true,
     Map<String, String>? environment,
   }) async {
-    final cmdLine = '$executable ${arguments.join(' ')}';
+    final cmdLine = _redactCmdLine('$executable ${arguments.join(' ')}');
     if (dryRun && allowDryRun) {
       log.dry(cmdLine +
           (workingDirectory != null ? '  (cwd: $workingDirectory)' : ''));
@@ -149,6 +149,7 @@ class ProcessRunner {
     List<String> arguments, {
     String? workingDirectory,
     bool allowDryRun = true,
+    Map<String, String>? environment,
   }) {
     return run(
       executable,
@@ -156,6 +157,24 @@ class ProcessRunner {
       workingDirectory: workingDirectory,
       inheritStdio: false,
       allowDryRun: allowDryRun,
+      environment: environment,
     );
+  }
+
+  /// Strip common secret patterns from logged command lines.
+  static String _redactCmdLine(String s) {
+    return s
+        .replaceAllMapped(
+          RegExp(r'x-access-token:[^@\s]+@'),
+          (_) => 'x-access-token:***@',
+        )
+        .replaceAllMapped(
+          RegExp(r'(Authorization:\s*Bearer\s+)\S+', caseSensitive: false),
+          (m) => '${m[1]}***',
+        )
+        .replaceAllMapped(
+          RegExp(r'(--auth|--token|-t)\s+\S+'),
+          (m) => '${m[1]} ***',
+        );
   }
 }

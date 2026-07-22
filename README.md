@@ -6,7 +6,7 @@
 
 **Deploy Serverpod on real cloud infrastructure without memorizing each provider’s CLI, config, and quirks.**
 
-podfly is a thin orchestrator: it shells out to **existing tools** (`fly`, `railway`, `wrangler`, `neonctl`, …), generates the right config, and encodes battle-tested defaults (Flutter web packaging, scale-to-zero, DB wiring). It is **not** a new host — it makes the hosts you already use boring to ship to.
+podfly is a thin orchestrator: it shells out to **existing tools** (`fly`, `railway`, `wrangler`, `vercel`, `netlify`, `gh`, `neonctl`, …), generates the right config, and encodes battle-tested defaults (Flutter web packaging, scale-to-zero, DB wiring). It is **not** a new host — it makes the hosts you already use boring to ship to.
 
 ```text
 serverpod create …     →  Dockerfile + monorepo (Serverpod)
@@ -49,12 +49,15 @@ dart pub global activate --source git https://github.com/127thousand/podfly.git
 | Host CLI (`fly`, `railway`, `doctl`, …) | **Only for the `host:` you chose** (wizard asks) |
 | [Railway CLI](https://docs.railway.app/guides/cli) | `host: railway` (often `~/.railway/bin`) |
 | [doctl](https://docs.digitalocean.com/reference/doctl/) + Docker | `host: digitalocean` (DOCR registry required) |
-| [wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/) | Flutter web on Cloudflare Pages (`mode: split`) |
+| [wrangler](https://developers.cloudflare.com/workers/wrangler/install-and-update/) | Flutter web · `web_host: cloudflare` |
+| [vercel](https://vercel.com/docs/cli) | Flutter web · `web_host: vercel` |
+| [netlify-cli](https://docs.netlify.com/cli/get-started/) | Flutter web · `web_host: netlify` |
+| [gh](https://cli.github.com/) + git | Flutter web · `web_host: github_pages` |
 | [neonctl](https://neon.tech/docs/reference/neon-cli) | `database.neon.provision: true` |
 
 `podfly doctor` checks these, can install missing CLIs (TTY or `PODFLY_AUTO=1`), and can open login flows on a TTY.
 
-**CI:** see [doc/ci.md](doc/ci.md) (`FLY_API_TOKEN` / `RAILWAY_TOKEN` + `--yes --no-login`).
+**CI:** see [doc/ci.md](doc/ci.md) (`FLY_API_TOKEN` / `RAILWAY_TOKEN` / CDN tokens + `--yes --no-login`).
 
 ---
 
@@ -181,6 +184,8 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 🚂 [**Railway**](https://railway.app) | `railway` | ✅ | ✅ | ✅ | 🟡 | Separate API + static web services |
 | 🟠 [**Cloudflare Pages**](https://pages.cloudflare.com) | `wrangler` | ✅ UI | — | ✅ UI | — | Static Flutter web only (`web_host: cloudflare`); **not** the API |
 | ▲ [**Vercel**](https://vercel.com) | `vercel` | ✅ UI | — | ✅ UI | — | Static Flutter web (`web_host: vercel`); **not** the API |
+| 🟢 [**Netlify**](https://www.netlify.com) | `netlify` | ✅ UI | — | ✅ UI | — | Static Flutter web (`web_host: netlify`); **not** the API |
+| 🐙 [**GitHub Pages**](https://pages.github.com) | `gh` | ✅ UI | — | ✅ UI | — | Static Flutter web (`web_host: github_pages`); **not** the API |
 | 🟦 [**Render**](https://render.com) | `render` | ✅ | ✅ | 🟡 | 🟡 | Git + Docker; monorepo `rootDir`; `render_postgres` |
 | ☁️ [**Google Cloud Run**](https://cloud.google.com/run) | `gcloud` | ✅ | ✅ | 🟡 | ✅* | Cheap serverless; *monolith = nginx + Serverpod one container (see `gcp/realtime_monolith`) |
 | 📦 [**AWS App Runner**](https://aws.amazon.com/apprunner/) | `aws` | ✅ | ✅ | 🟡 | 🟡 | [Notes](doc/aws.md): **no WebSockets** (managed Envoy 403); not free scale-to-zero |

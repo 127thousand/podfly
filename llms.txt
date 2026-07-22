@@ -1,11 +1,12 @@
 # podfly
 
 > Deploy Serverpod on existing cloud infrastructure via each provider’s CLI.
-> Not a host — orchestrates fly, railway, wrangler, neonctl, etc., and encodes config quirks.
+> Not a host — orchestrates fly, railway, wrangler, vercel, netlify, gh, neonctl,
+> etc., and encodes config quirks.
 
 ## Start here
 
-- [README](README.md) — mission, provider roadmap, install from pub.dev, quick start
+- [README](README.md) — mission, provider table, install from pub.dev, quick start
 - [AGENTS.md](AGENTS.md) — agent rules and decision tree
 - [doc/guide.md](doc/guide.md) — commands, flags, automation, troubleshooting
 - [doc/ci.md](doc/ci.md) — GitHub Actions / CI tokens and workflows
@@ -19,9 +20,36 @@
 - [CHANGELOG.md](CHANGELOG.md) — releases
 - [doc/specs/](doc/specs/) — design history
 
+## Host notes (API)
+
+- [doc/aws.md](doc/aws.md) — App Runner (no WS) vs ECS+ALB (WS OK)
+- [doc/azure.md](doc/azure.md) — Container Apps
+- [doc/hetzner.md](doc/hetzner.md) — VPS + Docker/SSH + Caddy HTTPS
+
+## Static web CDN notes (`web_host`)
+
+Flutter **static only** — not Serverpod API or WebSockets. API stays on `host:`.
+
+- [doc/netlify.md](doc/netlify.md) — `web_host: netlify`
+- [doc/github_pages.md](doc/github_pages.md) — `web_host: github_pages`
+- Also: `web_host: cloudflare` (default, `wrangler`), `web_host: vercel`
+
 ## Examples
 
-- [example/mobile_api_only](example/mobile_api_only) — API-only Serverpod on Fly + GitHub Actions (`deploy.yml` on every push to main)
+External monorepo: https://github.com/127thousand/podfly_examples
+
+| Path | API | UI | Streams |
+|------|-----|-----|---------|
+| `fly/api_only` | Fly | — | — |
+| `vercel/split_fly` | Fly | Vercel | — |
+| `vercel/realtime_split` | Fly | Vercel | ✅ WS → Fly |
+| `netlify/split_fly` | Fly | Netlify | — |
+| `netlify/realtime_split` | Fly | Netlify | ✅ WS → Fly |
+| `github_pages/split_fly` | Fly | GitHub Pages | — |
+| `github_pages/realtime_split` | Fly | GitHub Pages | ✅ WS → Fly |
+| `hetzner/*`, `azure/*`, `aws/ecs_realtime`, … | see repo README |
+
+Package pointer: [`example/mobile_api_only`](example/mobile_api_only) (Fly API-only).
 
 ## Default commands (copy-paste)
 
@@ -41,6 +69,9 @@ podfly deploy --api --yes --smoke
 # Railway
 podfly deploy --host railway --api --yes --smoke
 
+# Split: Fly API + static Flutter on Netlify / Vercel / GitHub Pages
+# (set web_host + block in podfly.yaml — see doc/podfly.yaml.md)
+
 # Checks
 podfly doctor
 podfly smoke
@@ -50,14 +81,25 @@ podfly smoke
 
 | Layer | Providers |
 |-------|-----------|
-| API **deploy** | Fly, Railway, DigitalOcean, Render, Cloud Run, AWS App Runner |
-| API **host choice** | Wizard: fly, railway, render, cloud_run, aws, azure, digitalocean |
-| UI | Cloudflare Pages (`wrangler`) when `mode: split` + `web.enabled`; Railway/DO native web |
+| API **deploy** | Fly, Railway, DigitalOcean, Render, Cloud Run, AWS App Runner, AWS ECS+ALB, Azure Container Apps, Hetzner Cloud |
+| API **host choice** | `host: fly \| railway \| digitalocean \| render \| cloud_run \| aws \| aws_ecs \| azure \| hetzner` |
+| Static UI (`web_host`, `mode: split`) | **cloudflare** (default), **vercel**, **netlify**, **github_pages** |
+| UI (native with API host) | Railway static nginx; DO separate web app; Cloud Run / App Runner / Azure / Hetzner monolith nginx |
 | DB | none, sqlite, fly_postgres, railway_postgres, digitalocean_postgres, render_postgres, neon |
-| UI (native) | Railway static nginx; DigitalOcean separate web app; Cloud Run/App Runner monolith nginx |
 
-**App Runner (`host: aws`):** HTTP RPC + optional Flutter monolith packaging. **No WebSockets** (edge Envoy 403).  
-**ECS+ALB (`host: aws_ecs`):** Fargate + ALB — **WebSockets work**. See `doc/aws.md`, example `aws/ecs_realtime`.
+### Realtime / WebSockets
+
+| Host | Streams? |
+|------|----------|
+| Fly, Railway, DO, Render, Cloud Run, Azure ACA, Hetzner, **aws_ecs** | ✅ |
+| **aws** (App Runner) | ❌ Envoy 403 on Upgrade — use `aws_ecs` |
+| Static CDNs (Pages / Vercel / Netlify / GitHub Pages) | ❌ UI only — point `SERVER_URL` at API host |
+
+Split realtime pattern: Flutter on CDN, Serverpod on API host; bake `SERVER_URL` to API;
+do **not** fall back to same-origin when the page is on `*.vercel.app` / `*.netlify.app` / `*.github.io`.
+
+**App Runner (`host: aws`):** HTTP RPC + optional Flutter monolith. **No WebSockets.**  
+**ECS+ALB (`host: aws_ecs`):** Fargate + ALB — **WebSockets work**. See `doc/aws.md`.
 
 ## Hard rules for agents
 
@@ -66,13 +108,16 @@ podfly smoke
 3. Template Serverpod auth ≠ needs Postgres (soft warning only).
 4. No `web/` + android/ios → API-only (`web.enabled: false`).
 5. Podfly auto-creates Fly apps and sanitizes names (`_` → `-`). Railway: project + service + domain + `railway up`.
-6. **Do not require Fly CLI** when `host:` is railway/render/etc. — only that host’s CLI (`~/.railway/bin` is searched).
-7. Deploy implemented for fly, railway, digitalocean, render, cloud_run, aws (App Runner), aws_ecs (Fargate+ALB). Azure: doctor only.
-8. Fly Postgres: ensure API app **before** attach; use attach `DATABASE_URL` (sidecar), not superuser placeholders.
+6. **Do not require Fly CLI** when `host:` is railway/render/etc. — only that host’s CLI.
+7. Deploy implemented for fly, railway, digitalocean, render, cloud_run, aws, aws_ecs, azure, hetzner.
+8. Static web: `web_host: cloudflare|vercel|netlify|github_pages` + matching CLI (`wrangler` / `vercel` / `netlify` / `gh`+`git`).
+9. Fly Postgres: ensure API app **before** attach; use attach `DATABASE_URL` (sidecar), not superuser placeholders.
+10. GitHub Pages project sites need `base_href: /<repo>/` (podfly auto-sets when left as `/`).
 
 ## Package
 
 - Binary: `podfly`
 - pub.dev: https://pub.dev/packages/podfly
 - Repo: https://github.com/127thousand/podfly
-- Skill: `.grok/skills/podfly/SKILL.md`
+- Examples: https://github.com/127thousand/podfly_examples
+- Skill: `.grok/skills/podfly/SKILL.md` (or user install of same)

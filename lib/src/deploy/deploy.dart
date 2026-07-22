@@ -130,6 +130,7 @@ class Deployer {
     }
 
     if (doWeb) {
+      cfg = _withGitHubPagesBaseHref(cfg);
       await WebBuilder(config: cfg, runner: runner, log: log).build();
     }
 
@@ -147,7 +148,7 @@ class Deployer {
           publicHost: staticResult.publicHost,
           displayUrl: staticResult.displayUrl,
         );
-        // Reload if vercel.public_host was persisted
+        // Reload if vercel/netlify public_host was persisted
         if (await File(cfg.configPath).exists()) {
           try {
             cfg = await PodflyConfig.load(cfg.configPath);
@@ -176,6 +177,16 @@ class Deployer {
       } else if (cfg.mode == DeployMode.split && cfg.usesStaticWebHost) {
         if (cfg.webHost == StaticWebHost.vercel && cfg.vercel != null) {
           final h = cfg.vercel!.publicHost ?? '${cfg.vercel!.project}.vercel.app';
+          log.detail('UI:  https://$h');
+        } else if (cfg.webHost == StaticWebHost.netlify && cfg.netlify != null) {
+          final h =
+              cfg.netlify!.publicHost ?? '${cfg.netlify!.site}.netlify.app';
+          log.detail('UI:  https://$h');
+        } else if (cfg.webHost == StaticWebHost.githubPages &&
+            cfg.githubPages != null) {
+          final g = cfg.githubPages!;
+          final h = g.publicHost ??
+              (g.owner != null ? g.defaultPublicHost(g.owner!) : g.repo);
           log.detail('UI:  https://$h');
         } else if (cfg.cloudflare != null) {
           log.detail(
@@ -212,6 +223,8 @@ class Deployer {
       hetzner: c.hetzner,
       cloudflare: c.cloudflare,
       vercel: c.vercel,
+      netlify: c.netlify,
+      githubPages: c.githubPages,
       database: c.database,
       web: WebConfig(
         enabled: c.web.enabled,
@@ -220,6 +233,56 @@ class Deployer {
         patchBootstrap: c.web.patchBootstrap,
         writeHeaders: c.web.writeHeaders,
         baseHref: c.web.baseHref,
+        staticDir: c.web.staticDir,
+      ),
+      smoke: c.smoke,
+    );
+  }
+
+  /// Project Pages need `--base-href /repo/` so assets resolve under
+  /// `https://owner.github.io/repo/`.
+  PodflyConfig _withGitHubPagesBaseHref(PodflyConfig c) {
+    if (c.webHost != StaticWebHost.githubPages) return c;
+    final g = c.githubPages;
+    if (g == null) return c;
+    final current = c.web.baseHref;
+    if (current.isNotEmpty && current != '/') return c;
+    final owner = g.owner;
+    // Without owner we still use /repo/ (user sites are rare for demos).
+    final href = owner != null
+        ? g.suggestedBaseHref(owner)
+        : (g.repo.endsWith('.github.io') ? '/' : '/${g.repo}/');
+    if (href == current) return c;
+    log.detail('github_pages: using base_href $href');
+    return PodflyConfig(
+      root: c.root,
+      host: c.host,
+      webHost: c.webHost,
+      mode: c.mode,
+      name: c.name,
+      server: c.server,
+      flutter: c.flutter,
+      fly: c.fly,
+      railway: c.railway,
+      digitalOcean: c.digitalOcean,
+      render: c.render,
+      cloudRun: c.cloudRun,
+      aws: c.aws,
+      awsEcs: c.awsEcs,
+      azure: c.azure,
+      hetzner: c.hetzner,
+      cloudflare: c.cloudflare,
+      vercel: c.vercel,
+      netlify: c.netlify,
+      githubPages: c.githubPages,
+      database: c.database,
+      web: WebConfig(
+        enabled: c.web.enabled,
+        serverUrlDefine: c.web.serverUrlDefine,
+        apiUrl: c.web.apiUrl,
+        patchBootstrap: c.web.patchBootstrap,
+        writeHeaders: c.web.writeHeaders,
+        baseHref: href,
         staticDir: c.web.staticDir,
       ),
       smoke: c.smoke,

@@ -30,6 +30,9 @@ Set `PODFLY_AUTO=1` if doctor might offer CLI installs and you want auto-accept
 | Cloud Run | `GOOGLE_APPLICATION_CREDENTIALS` | Path to SA JSON; or `gcloud auth` on the runner; enable `run.googleapis.com` + Cloud Build |
 | DigitalOcean | `DIGITALOCEAN_ACCESS_TOKEN` | [API tokens](https://docs.digitalocean.com/reference/api/create-personal-access-token/); also need Docker + DOCR in CI |
 | Cloudflare Pages | `CLOUDFLARE_API_TOKEN` | Pages edit permission; often need account access |
+| Vercel static UI | `VERCEL_TOKEN` | When `web_host: vercel` |
+| Netlify static UI | `NETLIFY_AUTH_TOKEN` | When `web_host: netlify` |
+| GitHub Pages UI | `GH_TOKEN` / `GITHUB_TOKEN` | When `web_host: github_pages` (repo + pages write) |
 | Neon provision | `NEON_API_KEY` | Only if `database.neon.provision: true` |
 
 **Recommended in CI repos:** commit `podfly.yaml` and host config (`fly.toml` /

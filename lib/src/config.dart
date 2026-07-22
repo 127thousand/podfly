@@ -199,29 +199,40 @@ class RailwayPostgresConfig {
 enum StaticWebHost {
   cloudflare,
   vercel,
-  // netlify — later
+  netlify,
+  githubPages,
 }
 
 extension StaticWebHostX on StaticWebHost {
   String get yamlName => switch (this) {
         StaticWebHost.cloudflare => 'cloudflare',
         StaticWebHost.vercel => 'vercel',
+        StaticWebHost.netlify => 'netlify',
+        StaticWebHost.githubPages => 'github_pages',
       };
 
   String get label => switch (this) {
         StaticWebHost.cloudflare => 'Cloudflare Pages',
         StaticWebHost.vercel => 'Vercel',
+        StaticWebHost.netlify => 'Netlify',
+        StaticWebHost.githubPages => 'GitHub Pages',
       };
 
   List<String> get cliBinaries => switch (this) {
         StaticWebHost.cloudflare => const ['wrangler'],
         StaticWebHost.vercel => const ['vercel'],
+        StaticWebHost.netlify => const ['netlify'],
+        StaticWebHost.githubPages => const ['gh'],
       };
 
   String get installHint => switch (this) {
         StaticWebHost.cloudflare =>
           'https://developers.cloudflare.com/workers/wrangler/install-and-update/',
         StaticWebHost.vercel => 'npm i -g vercel  (https://vercel.com/docs/cli)',
+        StaticWebHost.netlify =>
+          'npm i -g netlify-cli  (https://docs.netlify.com/cli/get-started/)',
+        StaticWebHost.githubPages =>
+          'https://cli.github.com/  (brew install gh && gh auth login)',
       };
 
   static StaticWebHost parse(String? s) {
@@ -230,8 +241,16 @@ extension StaticWebHostX on StaticWebHost {
       return StaticWebHost.cloudflare;
     }
     if (v == 'vercel' || v == 'vc') return StaticWebHost.vercel;
+    if (v == 'netlify' || v == 'ntl') return StaticWebHost.netlify;
+    if (v == 'github_pages' ||
+        v == 'github' ||
+        v == 'gh_pages' ||
+        v == 'gh-pages' ||
+        v == 'ghp') {
+      return StaticWebHost.githubPages;
+    }
     throw FormatException(
-      'Unknown web_host: $s (use cloudflare or vercel)',
+      'Unknown web_host: $s (use cloudflare, vercel, netlify, or github_pages)',
     );
   }
 }
@@ -266,6 +285,85 @@ class VercelConfig {
         'project': project,
         if (publicHost != null) 'public_host': publicHost,
         if (scope != null) 'scope': scope,
+      };
+}
+
+/// Netlify site for Flutter web static (`web_host: netlify`).
+class NetlifyConfig {
+  NetlifyConfig({
+    required this.site,
+    this.siteId,
+    this.publicHost,
+    this.team,
+  });
+
+  /// Site name (`--site` / `--site-name`). Becomes `https://<site>.netlify.app`.
+  final String site;
+  /// Stable Netlify site id (preferred for `--site` after first create).
+  final String? siteId;
+  /// e.g. `my-app.netlify.app` after first deploy.
+  final String? publicHost;
+  /// Optional team slug (`--team`).
+  final String? team;
+
+  Map<String, Object?> toMap() => {
+        'site': site,
+        if (siteId != null) 'site_id': siteId,
+        if (publicHost != null) 'public_host': publicHost,
+        if (team != null) 'team': team,
+      };
+}
+
+/// GitHub Pages site for Flutter web static (`web_host: github_pages`).
+///
+/// Deploys built assets to a dedicated repo's [branch] (default `gh-pages`)
+/// via `git` + `gh`. Project pages URL: `https://<owner>.github.io/<repo>/`.
+class GitHubPagesConfig {
+  GitHubPagesConfig({
+    required this.repo,
+    this.owner,
+    this.branch = 'gh-pages',
+    this.publicHost,
+    this.private = false,
+  });
+
+  /// Repository name (created if missing).
+  final String repo;
+  /// GitHub user/org; if null, resolved from `gh api user` at deploy time.
+  final String? owner;
+  /// Branch published by GitHub Pages (legacy source).
+  final String branch;
+  /// e.g. `user.github.io/my-repo` (no scheme) after deploy.
+  final String? publicHost;
+  /// Create repo as private when provisioning (Pages requires public on free
+  /// plans for non-enterprise — default public).
+  final bool private;
+
+  /// User/org site (`owner.github.io`) vs project site (`owner.github.io/repo`).
+  bool get isUserSite {
+    final o = owner;
+    if (o == null) return false;
+    return repo == '$o.github.io';
+  }
+
+  /// Suggested Flutter `--base-href` for project pages (trailing slash).
+  String suggestedBaseHref(String resolvedOwner) {
+    if (repo == '$resolvedOwner.github.io') return '/';
+    return '/$repo/';
+  }
+
+  /// Public URL host+path without scheme, e.g. `user.github.io/repo`.
+  String defaultPublicHost(String resolvedOwner) {
+    if (repo == '$resolvedOwner.github.io') return '$resolvedOwner.github.io';
+    return '$resolvedOwner.github.io/$repo';
+  }
+
+  Map<String, Object?> toMap() => {
+        'repo': repo,
+        if (owner != null) 'owner': owner,
+        'branch': branch,
+        if (publicHost != null) 'public_host': publicHost,
+        if (private) 'private': private,
       };
 }
 
@@ -1050,6 +1148,8 @@ class PodflyConfig {
     this.hetzner,
     this.cloudflare,
     this.vercel,
+    this.netlify,
+    this.githubPages,
     required this.database,
     required this.web,
     this.smoke,
@@ -1075,11 +1175,13 @@ class PodflyConfig {
   final HetznerConfig? hetzner;
   final CloudflareConfig? cloudflare;
   final VercelConfig? vercel;
+  final NetlifyConfig? netlify;
+  final GitHubPagesConfig? githubPages;
   final DatabaseConfig database;
   final WebConfig web;
   final SmokeConfig? smoke;
 
-  /// True when split mode should push Flutter web to Pages/Vercel (not native).
+  /// True when split mode should push Flutter web to a static CDN.
   bool get usesStaticWebHost {
     if (mode != DeployMode.split || !web.enabled) return false;
     // Avoid circular host.adapter during partial construction — check enum set.
@@ -1117,7 +1219,9 @@ class PodflyConfig {
         'host': host.yamlName,
         if (usesStaticWebHost ||
             webHost != StaticWebHost.cloudflare ||
-            vercel != null)
+            vercel != null ||
+            netlify != null ||
+            githubPages != null)
           'web_host': webHost.yamlName,
         'mode': mode.yamlName,
         'name': name,
@@ -1134,6 +1238,8 @@ class PodflyConfig {
         if (hetzner != null) 'hetzner': hetzner!.toMap(),
         if (cloudflare != null) 'cloudflare': cloudflare!.toMap(),
         if (vercel != null) 'vercel': vercel!.toMap(),
+        if (netlify != null) 'netlify': netlify!.toMap(),
+        if (githubPages != null) 'github_pages': githubPages!.toMap(),
         'database': database.toMap(),
         'web': web.toMap(),
         if (smoke != null) 'smoke': smoke!.toMap(),
@@ -1145,7 +1251,7 @@ class PodflyConfig {
     buf.writeln('host: ${host.yamlName}  # API cloud: fly | railway | render | …');
     if (usesStaticWebHost) {
       buf.writeln(
-        'web_host: ${webHost.yamlName}  # Flutter static CDN: cloudflare | vercel',
+        'web_host: ${webHost.yamlName}  # Flutter static CDN: cloudflare | vercel | netlify | github_pages',
       );
     }
     buf.writeln('mode: ${mode.yamlName}');
@@ -1383,6 +1489,27 @@ class PodflyConfig {
         if (v.scope != null) buf.writeln('  scope: ${v.scope}');
         if (v.publicHost != null) {
           buf.writeln('  public_host: ${v.publicHost}');
+        }
+      }
+      if (webHost == StaticWebHost.netlify || netlify != null) {
+        final n = netlify ?? NetlifyConfig(site: name);
+        buf.writeln('netlify:');
+        buf.writeln('  site: ${n.site}');
+        if (n.siteId != null) buf.writeln('  site_id: ${n.siteId}');
+        if (n.team != null) buf.writeln('  team: ${n.team}');
+        if (n.publicHost != null) {
+          buf.writeln('  public_host: ${n.publicHost}');
+        }
+      }
+      if (webHost == StaticWebHost.githubPages || githubPages != null) {
+        final g = githubPages ?? GitHubPagesConfig(repo: name);
+        buf.writeln('github_pages:');
+        buf.writeln('  repo: ${g.repo}');
+        if (g.owner != null) buf.writeln('  owner: ${g.owner}');
+        buf.writeln('  branch: ${g.branch}');
+        if (g.private) buf.writeln('  private: true');
+        if (g.publicHost != null) {
+          buf.writeln('  public_host: ${g.publicHost}');
         }
       }
     }
@@ -1782,13 +1909,24 @@ class PodflyConfig {
 
     final webHost = StaticWebHostX.parse(
       doc['web_host']?.toString() ??
-          (doc['vercel'] != null && doc['cloudflare'] == null
-              ? 'vercel'
-              : 'cloudflare'),
+          (doc['github_pages'] != null &&
+                  doc['cloudflare'] == null &&
+                  doc['vercel'] == null &&
+                  doc['netlify'] == null
+              ? 'github_pages'
+              : (doc['netlify'] != null &&
+                      doc['cloudflare'] == null &&
+                      doc['vercel'] == null
+                  ? 'netlify'
+                  : (doc['vercel'] != null && doc['cloudflare'] == null
+                      ? 'vercel'
+                      : 'cloudflare'))),
     );
 
     CloudflareConfig? cf;
     VercelConfig? vercel;
+    NetlifyConfig? netlify;
+    GitHubPagesConfig? githubPages;
     // Split UI CDN for Fly (etc.); native API hosts skip static web host.
     final wantStaticWeb = host != AppHost.railway &&
         host != AppHost.digitalOcean &&
@@ -1800,6 +1938,8 @@ class PodflyConfig {
         host != AppHost.hetzner &&
         (doc['cloudflare'] != null ||
             doc['vercel'] != null ||
+            doc['netlify'] != null ||
+            doc['github_pages'] != null ||
             doc['web_host'] != null ||
             mode == DeployMode.split);
     if (wantStaticWeb) {
@@ -1811,20 +1951,54 @@ class PodflyConfig {
           scope: m['scope']?.toString() ?? m['team']?.toString(),
         );
       }
+      if (webHost == StaticWebHost.netlify || doc['netlify'] != null) {
+        final m = _map(doc['netlify']);
+        netlify = NetlifyConfig(
+          site: m['site']?.toString() ??
+              m['project']?.toString() ??
+              m['name']?.toString() ??
+              name,
+          siteId: m['site_id']?.toString() ?? m['id']?.toString(),
+          publicHost: m['public_host']?.toString(),
+          team: m['team']?.toString() ?? m['account_slug']?.toString(),
+        );
+      }
+      if (webHost == StaticWebHost.githubPages || doc['github_pages'] != null) {
+        final m = _map(doc['github_pages']);
+        githubPages = GitHubPagesConfig(
+          repo: m['repo']?.toString() ??
+              m['repository']?.toString() ??
+              m['project']?.toString() ??
+              name,
+          owner: m['owner']?.toString() ?? m['org']?.toString(),
+          branch: m['branch']?.toString() ?? 'gh-pages',
+          publicHost: m['public_host']?.toString(),
+          private: m['private'] == true,
+        );
+      }
       if (webHost == StaticWebHost.cloudflare ||
-          (doc['cloudflare'] != null && webHost != StaticWebHost.vercel)) {
+          (doc['cloudflare'] != null &&
+              webHost != StaticWebHost.vercel &&
+              webHost != StaticWebHost.netlify &&
+              webHost != StaticWebHost.githubPages)) {
         final m = _map(doc['cloudflare']);
         cf = CloudflareConfig(
           project: m['project']?.toString() ?? name,
           branch: m['branch']?.toString() ?? 'main',
         );
       }
-      // Default CF project if still split + cloudflare and no block
+      // Default project if still split and no block
       if (webHost == StaticWebHost.cloudflare && cf == null) {
         cf = CloudflareConfig(project: name);
       }
       if (webHost == StaticWebHost.vercel && vercel == null) {
         vercel = VercelConfig(project: name);
+      }
+      if (webHost == StaticWebHost.netlify && netlify == null) {
+        netlify = NetlifyConfig(site: name);
+      }
+      if (webHost == StaticWebHost.githubPages && githubPages == null) {
+        githubPages = GitHubPagesConfig(repo: name);
       }
     }
 
@@ -1970,6 +2144,8 @@ class PodflyConfig {
       hetzner: hetzner,
       cloudflare: cf,
       vercel: vercel,
+      netlify: netlify,
+      githubPages: githubPages,
       database: DatabaseConfig(
         provider: provider,
         sqlite: sqlite,

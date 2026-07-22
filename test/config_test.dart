@@ -170,6 +170,77 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('netlify web_host round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_netlify_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.fly,
+      webHost: StaticWebHost.netlify,
+      mode: DeployMode.split,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      netlify: NetlifyConfig(
+        site: 'demo-ui',
+        siteId: 'abc-123',
+        publicHost: 'demo-ui.netlify.app',
+        team: 'my-team',
+      ),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      web: WebConfig(
+        enabled: true,
+        apiUrl: 'https://demo.fly.dev/',
+      ),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.webHost, StaticWebHost.netlify);
+    expect(loaded.netlify?.site, 'demo-ui');
+    expect(loaded.netlify?.siteId, 'abc-123');
+    expect(loaded.netlify?.publicHost, 'demo-ui.netlify.app');
+    expect(loaded.netlify?.team, 'my-team');
+    expect(loaded.toYaml(), contains('web_host: netlify'));
+    expect(loaded.usesStaticWebHost, isTrue);
+    await dir.delete(recursive: true);
+  });
+
+  test('github_pages web_host round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_ghp_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      host: AppHost.fly,
+      webHost: StaticWebHost.githubPages,
+      mode: DeployMode.split,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo'),
+      githubPages: GitHubPagesConfig(
+        repo: 'demo-ui',
+        owner: 'acme',
+        branch: 'gh-pages',
+        publicHost: 'acme.github.io/demo-ui',
+      ),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      web: WebConfig(
+        enabled: true,
+        apiUrl: 'https://demo.fly.dev/',
+        baseHref: '/demo-ui/',
+      ),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.webHost, StaticWebHost.githubPages);
+    expect(loaded.githubPages?.repo, 'demo-ui');
+    expect(loaded.githubPages?.owner, 'acme');
+    expect(loaded.githubPages?.publicHost, 'acme.github.io/demo-ui');
+    expect(loaded.githubPages?.suggestedBaseHref('acme'), '/demo-ui/');
+    expect(loaded.toYaml(), contains('web_host: github_pages'));
+    expect(loaded.usesStaticWebHost, isTrue);
+    await dir.delete(recursive: true);
+  });
+
   test('hetzner host round-trip', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_hetzner_');
     final cfg = PodflyConfig(

@@ -9,7 +9,7 @@ Location: project root (walk-up from cwd also finds it).
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `host` | `fly` \| `railway` \| `digitalocean` \| `render` \| `cloud_run` \| `aws` \| `aws_ecs` \| `azure` \| `hetzner` \| … | `fly` | **API cloud** — see README host table. |
-| `web_host` | `cloudflare` \| `vercel` | `cloudflare` | **Flutter static CDN** when `mode: split` and API host is not web-native (e.g. Fly). |
+| `web_host` | `cloudflare` \| `vercel` \| `netlify` \| `github_pages` | `cloudflare` | **Flutter static CDN** when `mode: split` and API host is not web-native (e.g. Fly). |
 | `mode` | `split` \| `monolith` | `split` | Layout: CDN UI + API vs UI with API host. Alias: `fly` → monolith (legacy) |
 | `name` | string | directory name | Default for app + Pages project names |
 | `server` | string | discovered `*_server` | Path relative to root |
@@ -269,10 +269,10 @@ main case), podfly deploys static web to a CDN:
 |------------|-----|-------------|
 | `cloudflare` (default) | `wrangler` | `https://<project>.pages.dev` |
 | `vercel` | `vercel` | `https://<project>.vercel.app` |
+| `netlify` | `netlify` | `https://<site>.netlify.app` |
+| `github_pages` | `gh` + `git` | `https://<owner>.github.io/<repo>/` |
 
-Same role for both: **Flutter web only** — not Serverpod API/WebSockets.
-
-Planned later: Netlify, GitHub Pages (same adapter slot).
+Same role for all: **Flutter web only** — not Serverpod API/WebSockets.
 
 ## `cloudflare` (split + `web_host: cloudflare`)
 
@@ -301,6 +301,52 @@ Auth: `vercel login` or `VERCEL_TOKEN`. Doctor installs CLI via `npm i -g vercel
 
 podfly writes `vercel.json` into the web build (SPA rewrite + WASM headers) unless
 `*_flutter/web/vercel.json` already exists.
+
+## `netlify` (split + `web_host: netlify`)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `site` | string | `name` | Netlify site name (`--site-name` / default URL host) |
+| `site_id` | string | — | Stable site id after first deploy (`--site`) |
+| `team` | string | — | Optional team slug (`--team`) |
+| `public_host` | string | — | e.g. `my-app.netlify.app` after deploy |
+
+```yaml
+host: fly
+web_host: netlify
+mode: split
+netlify:
+  site: my-flutter-ui
+```
+
+Auth: `netlify login` or `NETLIFY_AUTH_TOKEN`. Doctor installs CLI via
+`npm i -g netlify-cli` when missing.
+
+podfly writes `netlify.toml` into the web build (SPA rewrite + WASM headers)
+unless `*_flutter/web/netlify.toml` already exists.
+
+## `github_pages` (split + `web_host: github_pages`)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `repo` | string | `name` | GitHub repository name (created if missing) |
+| `owner` | string | `gh` user | User or org |
+| `branch` | string | `gh-pages` | Pages source branch |
+| `private` | bool | `false` | Create private repo |
+| `public_host` | string | — | e.g. `user.github.io/my-repo` after deploy |
+
+```yaml
+host: fly
+web_host: github_pages
+mode: split
+github_pages:
+  repo: my-flutter-ui
+web:
+  base_href: /my-flutter-ui/   # auto if left as /
+  api_url: https://my-api.fly.dev/
+```
+
+Auth: `gh auth login` (repo scope). See **[github_pages.md](github_pages.md)**.
 
 ## `database`
 

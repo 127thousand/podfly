@@ -124,7 +124,7 @@ Deploy options:
 Doctor only requires the CLI for the chosen host (not always Fly).
 Supported API hosts: Fly, Railway, DigitalOcean, Render, Cloud Run, AWS App
 Runner, AWS ECS+ALB, Azure Container Apps, Hetzner Cloud. UI (split): Cloudflare
-Pages or Vercel; or host-native static. DB: Neon / Fly PG / Railway PG / DO PG /
+Pages, Vercel, Netlify, or GitHub Pages; or host-native static. DB: Neon / Fly PG / Railway PG / DO PG /
 Render PG / SQLite / none.
 Dockerfile: prefer Serverpod's *_server/Dockerfile (podfly does not invent hosts).
 
@@ -381,6 +381,38 @@ Future<int> _deploy(ArgResults g) async {
                   ? null
                   : (config.webHost == StaticWebHost.vercel
                       ? VercelConfig(project: config.name)
+                      : null))),
+      netlify: (monolith && modeOpt != null) ||
+              host == AppHost.digitalOcean ||
+              host == AppHost.railway ||
+              host == AppHost.render ||
+              host == AppHost.cloudRun ||
+              host == AppHost.aws ||
+              host == AppHost.awsEcs ||
+              host == AppHost.azure ||
+              host == AppHost.hetzner
+          ? null
+          : (config.netlify ??
+              (monolith
+                  ? null
+                  : (config.webHost == StaticWebHost.netlify
+                      ? NetlifyConfig(site: config.name)
+                      : null))),
+      githubPages: (monolith && modeOpt != null) ||
+              host == AppHost.digitalOcean ||
+              host == AppHost.railway ||
+              host == AppHost.render ||
+              host == AppHost.cloudRun ||
+              host == AppHost.aws ||
+              host == AppHost.awsEcs ||
+              host == AppHost.azure ||
+              host == AppHost.hetzner
+          ? null
+          : (config.githubPages ??
+              (monolith
+                  ? null
+                  : (config.webHost == StaticWebHost.githubPages
+                      ? GitHubPagesConfig(repo: config.name)
                       : null))),
       database: config.database,
       web: config.web,

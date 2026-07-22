@@ -59,6 +59,21 @@ class SmokeRunner {
             config.vercel!.publicHost ?? '${config.vercel!.project}.vercel.app';
         return 'https://$h/';
       }
+      if (config.webHost == StaticWebHost.netlify && config.netlify != null) {
+        final h =
+            config.netlify!.publicHost ?? '${config.netlify!.site}.netlify.app';
+        return 'https://$h/';
+      }
+      if (config.webHost == StaticWebHost.githubPages &&
+          config.githubPages != null) {
+        final g = config.githubPages!;
+        final h = g.publicHost ??
+            (g.owner != null
+                ? g.defaultPublicHost(g.owner!)
+                : '${g.repo} (set github_pages.owner or public_host)');
+        if (h.contains(' ')) return null;
+        return 'https://$h/';
+      }
       if (config.cloudflare != null) {
         return 'https://${config.cloudflare!.project}.pages.dev/';
       }

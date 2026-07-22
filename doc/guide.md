@@ -188,17 +188,23 @@ podfly deploy --yes --smoke
 |----------|--------|-----|
 | Cloudflare Pages | `web_host: cloudflare` + `cloudflare:` | `wrangler` |
 | Vercel | `web_host: vercel` + `vercel:` | `vercel` |
+| Netlify | `web_host: netlify` + `netlify:` | `netlify` |
+| GitHub Pages | `web_host: github_pages` + `github_pages:` | `gh` + `git` |
 
 Same slot: Flutter static only. API + WebSockets stay on `host:`.
+Details: [netlify.md](netlify.md), [github_pages.md](github_pages.md).
 
 ### `split` (recommended for most web apps)
 
 | Layer | Host | Content |
 |-------|------|---------|
-| Browser UI | Cloudflare Pages or Vercel (`web_host`) | Flutter web + CanvasKit |
-| API | Fly (`*.fly.dev`) or Railway | Serverpod (port 8080) |
+| Browser UI | Cloudflare / Vercel / Netlify / GitHub Pages (`web_host`) | Flutter web + CanvasKit |
+| API (+ WSS if needed) | Fly (`*.fly.dev`) or Railway | Serverpod (port 8080) |
 
 Benefits: CDN for multi‑MB WASM/assets; API can scale to zero (DB choice matters).
+
+**Realtime streams:** keep WebSockets on the API host. Point `SERVER_URL` /
+`web.api_url` at Fly (etc.), not at the static CDN origin.
 
 ### `monolith` (UI with the API host)
 

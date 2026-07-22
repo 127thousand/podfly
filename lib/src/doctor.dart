@@ -84,6 +84,10 @@ class Doctor {
             ok = await _needWrangler() && ok;
           case StaticWebHost.vercel:
             ok = await _needVercel() && ok;
+          case StaticWebHost.netlify:
+            ok = await _needNetlify() && ok;
+          case StaticWebHost.githubPages:
+            ok = await _needGitHubCli() && ok;
         }
       }
       if (config.database.provider == DatabaseProvider.neon &&
@@ -305,6 +309,125 @@ class Doctor {
       }
     } else {
       log.detail('Set VERCEL_TOKEN or run: vercel login');
+    }
+    return false;
+  }
+
+  Future<bool> _needGitHubCli() async {
+    if (!await runner.which('gh')) {
+      log.warn('gh not found (needed for GitHub Pages static UI)');
+      final installed = await _tryInstallRecipes(const [
+        CliInstallRecipe(
+          label: 'brew install gh',
+          executable: 'brew',
+          args: ['install', 'gh'],
+        ),
+      ], 'gh');
+      if (!installed || !await runner.which('gh')) {
+        log.err('gh still missing');
+        log.detail('Install: https://cli.github.com/');
+        return false;
+      }
+    }
+    if (!await runner.which('git')) {
+      log.err('git not found (required to push gh-pages branch)');
+      return false;
+    }
+    if (runner.dryRun) {
+      log.ok('gh  (auth check skipped in dry-run)');
+      return true;
+    }
+    final status = await runner.runCapture(
+      'gh',
+      ['auth', 'status'],
+      allowDryRun: false,
+    );
+    final text = status.stdout + status.stderr;
+    if (status.ok || text.toLowerCase().contains('logged in')) {
+      final user = RegExp(r'account\s+(\S+)', caseSensitive: false)
+              .firstMatch(text)
+              ?.group(1) ??
+          RegExp(r'Logged in to github\.com account (\S+)')
+              .firstMatch(text)
+              ?.group(1);
+      log.ok('gh  ${user ?? "authenticated"}');
+      return true;
+    }
+    log.warn('gh not authenticated');
+    if (_canLogin) {
+      final go = _autoLogin || await confirm('Run `gh auth login` now?');
+      if (go) {
+        final r = await runner.run('gh', ['auth', 'login'], allowDryRun: false);
+        if (r.ok) return _needGitHubCli();
+      }
+    } else {
+      log.detail('Run: gh auth login  (needs repo scope for Pages push)');
+    }
+    return false;
+  }
+
+  Future<bool> _needNetlify() async {
+    if (Platform.environment['NETLIFY_AUTH_TOKEN']?.isNotEmpty == true ||
+        Platform.environment['NETLIFY_TOKEN']?.isNotEmpty == true) {
+      log.ok('netlify  (NETLIFY_AUTH_TOKEN set)');
+      return true;
+    }
+    if (!await runner.which('netlify')) {
+      log.warn('netlify not found (needed for Netlify static UI)');
+      final installed = await _tryInstallRecipes(const [
+        CliInstallRecipe(
+          label: 'npm i -g netlify-cli',
+          executable: 'npm',
+          args: ['i', '-g', 'netlify-cli'],
+        ),
+        CliInstallRecipe(
+          label: 'brew install netlify-cli',
+          executable: 'brew',
+          args: ['install', 'netlify-cli'],
+        ),
+      ], 'netlify');
+      if (!installed || !await runner.which('netlify')) {
+        log.err('netlify still missing');
+        log.detail('Install: npm i -g netlify-cli');
+        return false;
+      }
+    }
+    if (runner.dryRun) {
+      log.ok('netlify  (auth check skipped in dry-run)');
+      return true;
+    }
+    final status = await runner.runCapture(
+      'netlify',
+      ['status'],
+      allowDryRun: false,
+    );
+    // `status` exits non-zero when cwd is unlinked even if logged in.
+    final statusText = status.stdout + status.stderr;
+    final email = RegExp(r'Email:\s*(\S+)', caseSensitive: false)
+        .firstMatch(statusText);
+    if (email != null &&
+        !statusText.toLowerCase().contains('not logged in')) {
+      log.ok('netlify  ${email.group(1)}');
+      return true;
+    }
+    final api = await runner.runCapture(
+      'netlify',
+      ['api', 'getCurrentUser'],
+      allowDryRun: false,
+    );
+    if (api.ok && api.stdout.contains('email')) {
+      log.ok('netlify  authenticated');
+      return true;
+    }
+    log.warn('netlify not authenticated');
+    if (_canLogin) {
+      final go = _autoLogin || await confirm('Run `netlify login` now?');
+      if (go) {
+        final r = await runner.run('netlify', ['login'], allowDryRun: false);
+        if (r.ok) return _needNetlify();
+      }
+    } else {
+      log.detail('Set NETLIFY_AUTH_TOKEN or run: netlify login');
     }
     return false;
   }

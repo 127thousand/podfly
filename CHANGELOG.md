@@ -9,20 +9,39 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Planned (parked)
+
+- **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps
+
+---
+
+## [0.8.0] — 2026-07-22
+
 ### Added
 
 - **`web_host: vercel`** — Flutter web static on **Vercel** (same role as Cloudflare Pages)
   - Creates project if missing (`vercel project add`), then `vercel deploy … --prod`
   - Writes `vercel.json` (SPA rewrites + WASM / cache headers) unless project provides one
   - Doctor: `vercel` CLI + `vercel whoami` / `VERCEL_TOKEN`
-  - Example: [vercel/split_fly](https://github.com/127thousand/podfly_examples/tree/main/vercel/split_fly)
-- Top-level **`web_host`**: `cloudflare` (default) \| `vercel` for `mode: split`
-- Refactor: `StaticWebDeployer` for Pages/Vercel (parallel to API host adapters)
-
-### Planned (parked)
-
-- **Upstash Redis** (optional): wire Serverpod Redis host/password/SSL for multi-instance cache/PubSub — not required for small/stateless apps
-- Static web: **Netlify**, **GitHub Pages** (same `web_host` slot)
+  - Example: [vercel/split_fly](https://github.com/127thousand/podfly_examples/tree/main/vercel/split_fly),
+    [vercel/realtime_split](https://github.com/127thousand/podfly_examples/tree/main/vercel/realtime_split)
+- **`web_host: netlify`** — Flutter web static on **Netlify**
+  - Creates site if missing (`--site-name`), then `netlify deploy --dir … --prod --no-build`
+  - Writes `netlify.toml` (SPA rewrites + WASM / cache headers) unless project provides one
+  - Doctor: `netlify` CLI + `netlify status` / `NETLIFY_AUTH_TOKEN`
+  - **[doc/netlify.md](doc/netlify.md)** — config, CI token, realtime split, teardown
+  - Examples: [netlify/split_fly](https://github.com/127thousand/podfly_examples/tree/main/netlify/split_fly),
+    [netlify/realtime_split](https://github.com/127thousand/podfly_examples/tree/main/netlify/realtime_split)
+- **`web_host: github_pages`** — Flutter web static on **GitHub Pages**
+  - Creates repo if missing (`gh repo create`), force-pushes `gh-pages` branch
+  - Writes `.nojekyll` + `404.html` SPA fallback; auto `base_href: /<repo>/`
+  - Doctor: `gh` + `git` + `gh auth status`
+  - **[doc/github_pages.md](doc/github_pages.md)**
+  - Examples: [github_pages/split_fly](https://github.com/127thousand/podfly_examples/tree/main/github_pages/split_fly),
+    [github_pages/realtime_split](https://github.com/127thousand/podfly_examples/tree/main/github_pages/realtime_split)
+- Top-level **`web_host`**: `cloudflare` (default) \| `vercel` \| `netlify` \| `github_pages`
+- Refactor: `StaticWebDeployer` for Pages/Vercel/Netlify/GitHub Pages
+- Docs: `llms.txt`, `AGENTS.md`, guide/ci/podfly.yaml updated for static CDN matrix + realtime split
 
 ---
 
