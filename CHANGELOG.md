@@ -24,6 +24,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
   - Sidecar `.podfly_supabase_pg.json`; patches `production.yaml` + `passwords.yaml`
   - Doctor: `supabase` + login / `SUPABASE_ACCESS_TOKEN`
   - **[doc/supabase.md](doc/supabase.md)**
+- **Netlify:** `sites:create` when site is missing — `--site-name` alone no longer creates sites
 
 ### Planned (parked)
 

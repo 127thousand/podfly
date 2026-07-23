@@ -285,6 +285,19 @@ class StaticWebDeployer {
 
     final token = Platform.environment['NETLIFY_AUTH_TOKEN'] ??
         Platform.environment['NETLIFY_TOKEN'];
+
+    // `--site-name` no longer creates missing sites (CLI returns Not Found).
+    // Ensure the site exists, then deploy by id when possible.
+    var siteId = nc.siteId;
+    if (siteId == null || siteId.isEmpty) {
+      siteId = await _ensureNetlifySite(
+        netlify: netlify,
+        site: site,
+        team: nc.team,
+        token: token,
+      );
+    }
+
     final args = <String>[
       'deploy',
       '--dir',
@@ -293,10 +306,9 @@ class StaticWebDeployer {
       '--no-build',
       '--json',
     ];
-    if (nc.siteId != null && nc.siteId!.isNotEmpty) {
-      args.addAll(['--site', nc.siteId!]);
+    if (siteId != null && siteId.isNotEmpty) {
+      args.addAll(['--site', siteId]);
     } else {
-      // Creates the site if missing.
       args.addAll(['--site-name', site]);
     }
     if (nc.team != null && nc.team!.isNotEmpty) {
@@ -317,7 +329,7 @@ class StaticWebDeployer {
         _parseNetlifyDeployJson(r.stderr);
     final host = _hostFromUrl(parsed?['url'] ?? parsed?['ssl_url']) ??
         stableHost;
-    final siteId = parsed?['site_id'] ?? nc.siteId;
+    final resolvedSiteId = parsed?['site_id']?.toString() ?? siteId;
     final displayUrl = host.startsWith('http') ? host : 'https://$host';
     final publicHost = host
         .replaceFirst(RegExp(r'^https?://'), '')
@@ -328,7 +340,7 @@ class StaticWebDeployer {
     if (!runner.dryRun) {
       await _persistNetlify(
         publicHost: publicHost,
-        siteId: siteId is String ? siteId : siteId?.toString(),
+        siteId: resolvedSiteId,
       );
     }
 
@@ -336,6 +348,80 @@ class StaticWebDeployer {
       publicHost: publicHost,
       displayUrl: displayUrl,
     );
+  }
+
+  /// Create the Netlify site if it does not already exist.
+  Future<String?> _ensureNetlifySite({
+    required String netlify,
+    required String site,
+    String? team,
+    String? token,
+  }) async {
+    final listArgs = <String>['sites:list', '--json'];
+    if (token != null && token.isNotEmpty) {
+      listArgs.addAll(['--auth', token]);
+    }
+    final list = await runner.runCapture(netlify, listArgs, allowDryRun: false);
+    if (list.ok) {
+      try {
+        final decoded = jsonDecode(list.stdout.trim());
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map && item['name']?.toString() == site) {
+              final id = item['id']?.toString();
+              if (id != null && id.isNotEmpty) {
+                log.detail('Netlify site $site already exists ($id)');
+                return id;
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    log.detail('creating Netlify site $site');
+    final createArgs = <String>['sites:create', '--name', site, '--json'];
+    if (team != null && team.isNotEmpty) {
+      createArgs.addAll(['--account-slug', team]);
+    }
+    if (token != null && token.isNotEmpty) {
+      createArgs.addAll(['--auth', token]);
+    }
+    final create =
+        await runner.runCapture(netlify, createArgs, allowDryRun: false);
+    if (!create.ok) {
+      // Race: site may have been created concurrently — try list again.
+      final again =
+          await runner.runCapture(netlify, listArgs, allowDryRun: false);
+      if (again.ok) {
+        try {
+          final decoded = jsonDecode(again.stdout.trim());
+          if (decoded is List) {
+            for (final item in decoded) {
+              if (item is Map && item['name']?.toString() == site) {
+                return item['id']?.toString();
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      log.warn(
+        'netlify sites:create failed — deploy may still work if the name exists:\n'
+        '${create.stderr}\n${create.stdout}',
+      );
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(create.stdout.trim());
+      if (decoded is Map) {
+        final id = decoded['id']?.toString();
+        if (id != null && id.isNotEmpty) {
+          log.ok('created Netlify site $site ($id)');
+          return id;
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> _ensureNetlifyToml(String outDir) async {
