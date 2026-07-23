@@ -63,8 +63,9 @@
 ### `supabase`
 
 - Optional `supabase projects create` (`provision: true`) with generated DB password  
-- Direct host `db.<project_ref>.supabase.co`, `requireSsl: true`  
-- Writes `server/config/.podfly_supabase_pg.json` + patches `production.yaml` / `passwords.yaml`  
+- **Default:** session pooler `aws-0-<region>.pooler.supabase.com` as `postgres.<ref>` (IPv4).  
+  Direct `db.<ref>` is often IPv6-only and hangs DB endpoints from Fly — set `use_pooler: false` only if you need direct  
+- `requireSsl: true`; writes `server/config/.podfly_supabase_pg.json` + patches `production.yaml` / `passwords.yaml`  
 - Password is **not** recoverable via CLI after create — keep the sidecar  
 
 See [supabase.md](supabase.md).

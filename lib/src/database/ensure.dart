@@ -532,7 +532,10 @@ class DatabaseEnsure {
     return 'Neon: ${adapter.secretSetHint(secret, config)}';
   }
 
-  /// Provision / reuse Supabase managed Postgres (direct host + TLS).
+  /// Provision / reuse Supabase managed Postgres (TLS).
+  ///
+  /// Defaults to the **session pooler** (IPv4). Direct `db.<ref>.supabase.co`
+  /// is often IPv6-only and hangs from Fly shared IPv4.
   Future<void> _supabase() async {
     final s = config.database.supabase ?? SupabaseConfig();
     final name = s.projectName ??
@@ -541,29 +544,58 @@ class DatabaseEnsure {
     // Prefer existing sidecar (password only known at create time).
     final existing = await _readSupabaseSidecar();
     if (existing != null &&
-        (existing['password']?.isNotEmpty ?? false) &&
-        (existing['host']?.isNotEmpty ?? false)) {
+        (existing['password']?.isNotEmpty ?? false)) {
+      final ref = existing['project_ref'] ?? s.projectRef ?? '';
+      // Rewrite legacy direct hosts to pooler when use_pooler is on.
+      final conn = (ref.isNotEmpty)
+          ? s.connectionFor(ref)
+          : (
+              host: existing['host'] ?? 'localhost',
+              user: existing['user'] ?? s.user,
+              port: int.tryParse(existing['port'] ?? '') ?? s.port,
+            );
+      final host = conn.host;
+      final user = conn.user;
+      final port = '${conn.port}';
       log.detail(
         'Supabase Postgres from sidecar: '
-        '${existing['user']}@${existing['host']}/${existing['name']}',
+        '$user@$host/${existing['name'] ?? s.database}'
+        '${s.usePooler ? " (pooler)" : ""}',
       );
       await _writePgSidecar(
         ProductionYamlPatcher.supabasePgSidecarName,
         PostgresUrl(
-          user: existing['user'] ?? s.user,
+          user: user,
           password: existing['password']!,
-          host: existing['host']!,
-          port: existing['port'] ?? '${s.port}',
+          host: host,
+          port: port,
           database: existing['name'] ?? s.database,
           requireSsl: true,
         ),
       );
-      final ref = existing['project_ref'] ?? s.projectRef;
-      if (ref != null && ref.isNotEmpty) {
+      // Keep project_ref on sidecar for pooler rewrites next time.
+      final sidecarPath = p.join(
+        config.serverPath,
+        'config',
+        ProductionYamlPatcher.supabasePgSidecarName,
+      );
+      try {
+        final map = jsonDecode(await File(sidecarPath).readAsString())
+            as Map<String, dynamic>;
+        map['host'] = host;
+        map['user'] = user;
+        map['port'] = port;
+        map['project_ref'] = ref.isNotEmpty ? ref : map['project_ref'];
+        map['project_name'] = existing['project_name'] ?? name;
+        await File(sidecarPath).writeAsString(
+          const JsonEncoder.withIndent('  ').convert(map),
+        );
+      } catch (_) {}
+      if (ref.isNotEmpty) {
         await _persistSupabaseYaml(
           projectRef: ref,
           projectName: existing['project_name'] ?? name,
-          host: existing['host'],
+          host: host,
           orgId: s.orgId,
         );
       }
@@ -606,22 +638,24 @@ class DatabaseEnsure {
           found['ref']?.toString() ??
           found['reference_id']?.toString() ??
           s.projectRef;
-      final host = s.host ??
-          (ref != null && ref.isNotEmpty ? 'db.$ref.supabase.co' : null);
+      final conn =
+          (ref != null && ref.isNotEmpty) ? s.connectionFor(ref) : null;
+      final host = conn?.host;
       log.detail(
         'Supabase project "${found['name'] ?? name}" exists '
         '(ref: $ref) — need password from sidecar',
       );
       if (host != null &&
+          ref != null &&
           existing != null &&
           (existing['password']?.isNotEmpty ?? false)) {
         await _writePgSidecar(
           ProductionYamlPatcher.supabasePgSidecarName,
           PostgresUrl(
-            user: s.user,
+            user: conn!.user,
             password: existing['password']!,
             host: host,
-            port: '${s.port}',
+            port: '${conn.port}',
             database: s.database,
             requireSsl: true,
           ),
@@ -749,12 +783,14 @@ class DatabaseEnsure {
     required String orgId,
     required SupabaseConfig s,
   }) async {
-    final host = s.host ?? 'db.$ref.supabase.co';
+    final conn = s.connectionFor(ref);
+    final host = conn.host;
+    final user = conn.user;
     final creds = PostgresUrl(
-      user: s.user,
+      user: user,
       password: password,
       host: host,
-      port: '${s.port}',
+      port: '${conn.port}',
       database: s.database,
       requireSsl: true,
     );
@@ -770,9 +806,13 @@ class DatabaseEnsure {
         'project_ref': ref,
         'project_name': name,
         'org_id': orgId,
+        'use_pooler': s.usePooler,
       }),
     );
-    log.ok('Supabase Postgres: ${s.user}@$host/${s.database} (ref $ref)');
+    log.ok(
+      'Supabase Postgres: $user@$host/${s.database} (ref $ref'
+      '${s.usePooler ? ", session pooler / IPv4" : ", direct"})',
+    );
     await _persistSupabaseYaml(
       projectRef: ref,
       projectName: name,
@@ -817,7 +857,10 @@ class DatabaseEnsure {
           orgId: orgId ?? base.orgId,
           region: base.region,
           provision: base.provision,
-          host: host ?? base.host,
+          usePooler: base.usePooler,
+          // When using pooler, host is the pooler endpoint (not stored as override
+          // unless caller forces host for non-default cases).
+          host: base.usePooler ? null : (host ?? base.host),
           database: base.database,
           user: base.user,
           port: base.port,

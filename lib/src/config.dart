@@ -514,8 +514,11 @@ class NeonConfig {
 
 /// Managed Postgres on Supabase (`database.provider: supabase`).
 ///
-/// Direct host: `db.<project_ref>.supabase.co` (TLS). Password is written to
-/// the gitignored sidecar at provision time (`--db-password` on create).
+/// Default connection uses the **session pooler** (`aws-0-<region>.pooler.supabase.com`)
+/// with user `postgres.<project_ref>`. Free-tier direct hosts (`db.<ref>.supabase.co`)
+/// are often **IPv6-only**, which hangs from IPv4-only hosts (Fly shared IPv4, etc.).
+///
+/// Password is written to the gitignored sidecar at provision time.
 class SupabaseConfig {
   SupabaseConfig({
     this.projectName,
@@ -523,6 +526,7 @@ class SupabaseConfig {
     this.orgId,
     this.region = 'us-east-1',
     this.provision = true,
+    this.usePooler = true,
     this.host,
     this.database = 'postgres',
     this.user = 'postgres',
@@ -544,12 +548,55 @@ class SupabaseConfig {
   /// Create the project when missing.
   final bool provision;
 
-  /// Override host (default `db.<project_ref>.supabase.co`).
+  /// Prefer session pooler (IPv4). Set false only if you need direct `db.<ref>`.
+  final bool usePooler;
+
+  /// Override host (default: pooler or `db.<project_ref>.supabase.co`).
   final String? host;
 
   final String database;
   final String user;
   final int port;
+
+  /// Session-mode pooler hostname (has A records / IPv4).
+  static String poolerHostForRegion(String region) =>
+      'aws-0-$region.pooler.supabase.com';
+
+  /// Pooler requires `postgres.<project_ref>` (not bare `postgres`).
+  static String poolerUserForRef(String projectRef) => 'postgres.$projectRef';
+
+  /// True when [h] is a free-tier direct host (`db.<ref>.supabase.co`).
+  /// Those are often IPv6-only and hang from IPv4-only egress (Fly shared IP).
+  static bool isDirectDbHost(String h) =>
+      RegExp(r'^db\.[a-z0-9]+\.supabase\.co$', caseSensitive: false).hasMatch(h);
+
+  /// Resolve host/user/port for Serverpod given [projectRef].
+  ///
+  /// When [usePooler] is true, always prefers the session pooler unless [host]
+  /// is an explicit non-direct override (e.g. custom pooler region). Stale
+  /// `host: db.<ref>.supabase.co` entries in podfly.yaml must not defeat the
+  /// pooler default — that was the hang on `/note/list` from Fly.
+  ({String host, String user, int port}) connectionFor(String projectRef) {
+    final override = host?.trim();
+    if (usePooler) {
+      // Ignore legacy direct hosts persisted before pooler became default.
+      if (override != null &&
+          override.isNotEmpty &&
+          !isDirectDbHost(override)) {
+        final poolerUser = user.contains('.') ? user : poolerUserForRef(projectRef);
+        return (host: override, user: poolerUser, port: port);
+      }
+      return (
+        host: poolerHostForRegion(region),
+        user: poolerUserForRef(projectRef),
+        port: port,
+      );
+    }
+    if (override != null && override.isNotEmpty) {
+      return (host: override, user: user, port: port);
+    }
+    return (host: 'db.$projectRef.supabase.co', user: user, port: port);
+  }
 
   Map<String, Object?> toMap() => {
         if (projectName != null) 'project_name': projectName,
@@ -557,6 +604,7 @@ class SupabaseConfig {
         if (orgId != null) 'org_id': orgId,
         'region': region,
         'provision': provision,
+        'use_pooler': usePooler,
         if (host != null) 'host': host,
         'database': database,
         'user': user,
@@ -1696,6 +1744,7 @@ class PodflyConfig {
       if (s.orgId != null) buf.writeln('    org_id: ${s.orgId}');
       buf.writeln('    region: ${s.region}');
       buf.writeln('    provision: ${s.provision}');
+      buf.writeln('    use_pooler: ${s.usePooler}');
       if (s.host != null) buf.writeln('    host: ${s.host}');
       buf.writeln('    database: ${s.database}');
       buf.writeln('    user: ${s.user}');
@@ -2222,6 +2271,7 @@ class PodflyConfig {
         orgId: s['org_id']?.toString(),
         region: s['region']?.toString() ?? 'us-east-1',
         provision: s['provision'] != false,
+        usePooler: s['use_pooler'] != false,
         host: s['host']?.toString(),
         database: s['database']?.toString() ?? 'postgres',
         user: s['user']?.toString() ?? 'postgres',

@@ -80,6 +80,28 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('supabase connectionFor prefers pooler over stale direct host', () {
+    const ref = 'abcdefghijklmnop';
+    final s = SupabaseConfig(
+      region: 'us-east-1',
+      usePooler: true,
+      // Legacy podfly.yaml wrote direct host even when use_pooler is true.
+      host: 'db.$ref.supabase.co',
+      user: 'postgres',
+    );
+    final c = s.connectionFor(ref);
+    expect(c.host, 'aws-0-us-east-1.pooler.supabase.com');
+    expect(c.user, 'postgres.$ref');
+
+    final direct = SupabaseConfig(
+      region: 'us-east-1',
+      usePooler: false,
+      host: 'db.$ref.supabase.co',
+    ).connectionFor(ref);
+    expect(direct.host, 'db.$ref.supabase.co');
+    expect(direct.user, 'postgres');
+  });
+
   test('cloud_run host round-trip', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_gcr_');
     final cfg = PodflyConfig(

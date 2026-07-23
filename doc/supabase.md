@@ -33,8 +33,9 @@ database:
 | `org_id` | Organization id |
 | `region` | Create region (e.g. `us-east-1`) |
 | `provision` | Create when missing (default `true`) |
-| `host` | Override (default `db.<project_ref>.supabase.co`) |
-| `database` / `user` / `port` | Defaults `postgres` / `postgres` / `5432` |
+| `use_pooler` | Prefer session pooler (IPv4). **Default `true`** — direct `db.<ref>` is often IPv6-only and hangs from Fly |
+| `host` | Optional host override. With `use_pooler: true`, stale `db.<ref>.supabase.co` is ignored (pooler wins) |
+| `database` / `user` / `port` | Defaults `postgres` / `postgres` / `5432` (pooler user becomes `postgres.<ref>`) |
 
 ## What podfly does
 
@@ -42,7 +43,15 @@ database:
 2. `supabase projects create … --db-password <generated>` when provisioning  
 3. Writes `*_server/config/.podfly_supabase_pg.json` (host, user, password, ref)  
 4. Patches `production.yaml` (`requireSsl: true`) + `passwords.yaml` → `production.database`  
-5. Persists `project_ref` + `host` into `podfly.yaml`
+5. Persists `project_ref` into `podfly.yaml` (does **not** store direct `db.<ref>` host when pooler is on)
+
+**Connection default:** session pooler `aws-0-<region>.pooler.supabase.com` as user
+`postgres.<project_ref>`. Avoids free-tier direct hosts that only publish AAAA records.
+
+**Hang symptom:** `/greeting/*` OK, any DB endpoint (e.g. `/note/list`) hangs forever.
+Almost always IPv6-only direct host — ensure `use_pooler: true` (default) and that
+stale `host: db.<ref>.supabase.co` in `podfly.yaml` is not required (podfly ignores
+those when pooler is on).
 
 **Password is only available at create time.** The sidecar must be kept (gitignored)
 for re-deploys. If you lose it, reset the DB password in the dashboard and rewrite
@@ -81,11 +90,11 @@ endpoints fail.
 
 ```bash
 supabase projects list
-supabase projects delete --project-ref <ref>
-# confirm prompts as required by CLI
+supabase projects delete <ref> --yes
 
 rm -f *_server/config/.podfly_supabase_pg.json
 # strip production.database from passwords.yaml if present
+# also destroy Fly/Railway/… app and CDN site if this was a smoke deploy
 ```
 
 Never commit the sidecar or passwords.

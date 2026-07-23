@@ -107,13 +107,22 @@ class ProductionYamlPatcher {
             'and passwords.yaml production.database');
       case DatabaseProvider.supabase:
         final sidecar = await _readSidecarMap(supabasePgSidecarName);
-        final s = config.database.supabase;
+        final s = config.database.supabase ?? SupabaseConfig();
         if (sidecar != null) {
+          // Prefer connectionFor so use_pooler rewrites stale direct hosts.
+          final ref = sidecar['project_ref'] ?? s.projectRef ?? '';
+          final conn = ref.isNotEmpty
+              ? s.connectionFor(ref)
+              : (
+                  host: sidecar['host'] ?? 'db.YOUR_REF.supabase.co',
+                  user: sidecar['user'] ?? s.user,
+                  port: int.tryParse(sidecar['port'] ?? '') ?? s.port,
+                );
           text = _upsertDatabaseBlock(text, {
-            'host': sidecar['host'] ?? s?.host ?? 'db.YOUR_REF.supabase.co',
-            'port': sidecar['port'] ?? '${s?.port ?? 5432}',
-            'name': sidecar['name'] ?? s?.database ?? 'postgres',
-            'user': sidecar['user'] ?? s?.user ?? 'postgres',
+            'host': conn.host,
+            'port': '${conn.port}',
+            'name': sidecar['name'] ?? s.database,
+            'user': conn.user,
             'requireSsl': sidecar['requireSsl'] ?? 'true',
           });
           final password = sidecar['password'];
@@ -121,16 +130,19 @@ class ProductionYamlPatcher {
             await _patchPasswordsYaml(password);
           }
         } else {
-          final ref = s?.projectRef;
-          final host = s?.host ??
-              (ref != null && ref.isNotEmpty
-                  ? 'db.$ref.supabase.co'
-                  : 'db.YOUR_REF.supabase.co');
+          final ref = s.projectRef;
+          final conn = (ref != null && ref.isNotEmpty)
+              ? s.connectionFor(ref)
+              : (
+                  host: s.host ?? 'db.YOUR_REF.supabase.co',
+                  user: s.user,
+                  port: s.port,
+                );
           text = _upsertDatabaseBlock(text, {
-            'host': host,
-            'port': '${s?.port ?? 5432}',
-            'name': s?.database ?? 'postgres',
-            'user': s?.user ?? 'postgres',
+            'host': conn.host,
+            'port': '${conn.port}',
+            'name': s.database,
+            'user': conn.user,
             'requireSsl': 'true',
           });
           log.warn(

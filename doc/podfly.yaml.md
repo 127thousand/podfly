@@ -436,7 +436,8 @@ database:
     project_name: my-app-db
     region: us-east-1
     provision: true
-    # project_ref / host set after first create
+    use_pooler: true   # default — session pooler / IPv4 (avoids hang on free direct host)
+    # project_ref set after first create
     # org_id: optional
 ```
 
