@@ -62,6 +62,7 @@ class RenderHost extends HostAdapter {
         DatabaseProvider.none,
         DatabaseProvider.renderPostgres,
         DatabaseProvider.neon,
+        DatabaseProvider.supabase,
       ];
 
   @override

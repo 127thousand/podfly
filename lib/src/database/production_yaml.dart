@@ -25,6 +25,9 @@ class ProductionYamlPatcher {
   /// Written after Render Postgres connection is fetched.
   static const renderPgSidecarName = '.podfly_render_pg.json';
 
+  /// Written after Supabase project create (password only known at create).
+  static const supabasePgSidecarName = '.podfly_supabase_pg.json';
+
   /// Written after Upstash Redis provision.
   static const upstashRedisSidecarName = '.podfly_upstash_redis.json';
 
@@ -102,6 +105,39 @@ class ProductionYamlPatcher {
         log.detail(
             'Neon: set secret ${config.database.neon?.connectionStringSecret ?? 'DATABASE_URL'} '
             'and passwords.yaml production.database');
+      case DatabaseProvider.supabase:
+        final sidecar = await _readSidecarMap(supabasePgSidecarName);
+        final s = config.database.supabase;
+        if (sidecar != null) {
+          text = _upsertDatabaseBlock(text, {
+            'host': sidecar['host'] ?? s?.host ?? 'db.YOUR_REF.supabase.co',
+            'port': sidecar['port'] ?? '${s?.port ?? 5432}',
+            'name': sidecar['name'] ?? s?.database ?? 'postgres',
+            'user': sidecar['user'] ?? s?.user ?? 'postgres',
+            'requireSsl': sidecar['requireSsl'] ?? 'true',
+          });
+          final password = sidecar['password'];
+          if (password != null && password.isNotEmpty) {
+            await _patchPasswordsYaml(password);
+          }
+        } else {
+          final ref = s?.projectRef;
+          final host = s?.host ??
+              (ref != null && ref.isNotEmpty
+                  ? 'db.$ref.supabase.co'
+                  : 'db.YOUR_REF.supabase.co');
+          text = _upsertDatabaseBlock(text, {
+            'host': host,
+            'port': '${s?.port ?? 5432}',
+            'name': s?.database ?? 'postgres',
+            'user': s?.user ?? 'postgres',
+            'requireSsl': 'true',
+          });
+          log.warn(
+            'supabase: no $supabasePgSidecarName yet — host placeholder written; '
+            'provision with database.supabase.provision: true or write the sidecar',
+          );
+        }
       case DatabaseProvider.railwayPostgres:
         final sidecar = await _readSidecarMap(railwayPgSidecarName);
         if (sidecar != null) {

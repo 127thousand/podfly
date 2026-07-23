@@ -5,7 +5,8 @@
 | [User guide](guide.md) | Commands, deploy flow, flags, automation, troubleshooting |
 | [CI & GitHub Actions](ci.md) | Tokens, example workflows, PR dry-run |
 | [Caching & Flutter web](caching.md) | WASM, service worker, `_headers`, build rules |
-| [Database](database.md) | Providers, detection, Fly/Railway/DO Postgres |
+| [Database](database.md) | Providers, detection, Fly/Railway/DO/Supabase Postgres |
+| [Supabase](supabase.md) | `database.provider: supabase` — managed Postgres via CLI |
 | [podfly.yaml reference](podfly.yaml.md) | Config field list and examples |
 | [AWS App Runner](aws.md) | `host: aws` — deploy knobs; **no WebSockets** (Envoy 403) |
 | [Azure Container Apps](azure.md) | `host: azure` — Docker → ACR → env/app; WebSockets OK |

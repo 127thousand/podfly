@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as p;
 
@@ -34,6 +35,8 @@ class DatabaseEnsure {
         await _flyPostgres();
       case DatabaseProvider.neon:
         await _neon();
+      case DatabaseProvider.supabase:
+        await _supabase();
       case DatabaseProvider.railwayPostgres:
         await _railwayPostgres();
       case DatabaseProvider.digitalOceanPostgres:
@@ -527,6 +530,401 @@ class DatabaseEnsure {
     ensureHostsRegistered();
     final adapter = HostRegistry.require(config.host);
     return 'Neon: ${adapter.secretSetHint(secret, config)}';
+  }
+
+  /// Provision / reuse Supabase managed Postgres (direct host + TLS).
+  Future<void> _supabase() async {
+    final s = config.database.supabase ?? SupabaseConfig();
+    final name = s.projectName ??
+        '${config.name.replaceAll('_', '-')}-db'.toLowerCase();
+
+    // Prefer existing sidecar (password only known at create time).
+    final existing = await _readSupabaseSidecar();
+    if (existing != null &&
+        (existing['password']?.isNotEmpty ?? false) &&
+        (existing['host']?.isNotEmpty ?? false)) {
+      log.detail(
+        'Supabase Postgres from sidecar: '
+        '${existing['user']}@${existing['host']}/${existing['name']}',
+      );
+      await _writePgSidecar(
+        ProductionYamlPatcher.supabasePgSidecarName,
+        PostgresUrl(
+          user: existing['user'] ?? s.user,
+          password: existing['password']!,
+          host: existing['host']!,
+          port: existing['port'] ?? '${s.port}',
+          database: existing['name'] ?? s.database,
+          requireSsl: true,
+        ),
+      );
+      final ref = existing['project_ref'] ?? s.projectRef;
+      if (ref != null && ref.isNotEmpty) {
+        await _persistSupabaseYaml(
+          projectRef: ref,
+          projectName: existing['project_name'] ?? name,
+          host: existing['host'],
+          orgId: s.orgId,
+        );
+      }
+      return;
+    }
+
+    final supabase = await runner.resolve('supabase');
+    if (supabase == null) {
+      throw StateError(
+        'supabase CLI not found — brew install supabase/tap/supabase '
+        '(https://supabase.com/docs/guides/cli)',
+      );
+    }
+
+    if (runner.dryRun) {
+      log.dry(
+        'supabase projects list/create $name → '
+        '${ProductionYamlPatcher.supabasePgSidecarName}',
+      );
+      return;
+    }
+
+    // Reuse by project_ref or name.
+    final list = await runner.runCapture(
+      supabase,
+      ['projects', 'list', '--output-format', 'json'],
+      allowDryRun: false,
+    );
+    Map<String, dynamic>? found;
+    if (list.ok) {
+      found = _findSupabaseProject(
+        list.stdout,
+        ref: s.projectRef,
+        name: name,
+      );
+    }
+
+    if (found != null) {
+      final ref = found['id']?.toString() ??
+          found['ref']?.toString() ??
+          found['reference_id']?.toString() ??
+          s.projectRef;
+      final host = s.host ??
+          (ref != null && ref.isNotEmpty ? 'db.$ref.supabase.co' : null);
+      log.detail(
+        'Supabase project "${found['name'] ?? name}" exists '
+        '(ref: $ref) — need password from sidecar',
+      );
+      if (host != null &&
+          existing != null &&
+          (existing['password']?.isNotEmpty ?? false)) {
+        await _writePgSidecar(
+          ProductionYamlPatcher.supabasePgSidecarName,
+          PostgresUrl(
+            user: s.user,
+            password: existing['password']!,
+            host: host,
+            port: '${s.port}',
+            database: s.database,
+            requireSsl: true,
+          ),
+        );
+        await _persistSupabaseYaml(
+          projectRef: ref,
+          projectName: name,
+          host: host,
+          orgId: s.orgId,
+        );
+        return;
+      }
+      // Password is not recoverable via CLI after create.
+      if (!s.provision) {
+        log.warn(
+          'Supabase project $ref exists but no '
+          '${ProductionYamlPatcher.supabasePgSidecarName} password. '
+          'Re-create with provision: true, or write host/user/password to the sidecar.',
+        );
+        if (host != null) {
+          await _persistSupabaseYaml(
+            projectRef: ref,
+            projectName: name,
+            host: host,
+            orgId: s.orgId,
+          );
+        }
+        return;
+      }
+      // provision true but project exists without password: do not recreate
+      // (would fail name collision). Surface clear action.
+      throw StateError(
+        'Supabase project "$name" (ref: $ref) already exists but podfly has no '
+        'DB password. Options:\n'
+        '  1. Reset DB password in Supabase dashboard and write '
+        '${ProductionYamlPatcher.supabasePgSidecarName}\n'
+        '  2. Delete the project and re-run with provision: true\n'
+        '  3. Set database.supabase.project_name to a new unique name',
+      );
+    }
+
+    if (!s.provision) {
+      throw StateError(
+        'Supabase project "$name" not found and provision: false. '
+        'Set project_ref + sidecar password, or enable provision: true.',
+      );
+    }
+
+    final orgId = s.orgId ?? await _firstSupabaseOrgId(supabase);
+    if (orgId == null || orgId.isEmpty) {
+      throw StateError(
+        'Could not resolve Supabase org id — set database.supabase.org_id '
+        'or run: supabase orgs list',
+      );
+    }
+
+    final password = _generateDbPassword();
+    log.detail('creating Supabase project $name (${s.region}, org $orgId)');
+    final create = await runner.runCapture(
+      supabase,
+      [
+        'projects',
+        'create',
+        name,
+        '--org-id',
+        orgId,
+        '--db-password',
+        password,
+        '--region',
+        s.region,
+        '--output-format',
+        'json',
+      ],
+      allowDryRun: false,
+    );
+    if (!create.ok) {
+      throw StateError(
+        'supabase projects create failed:\n'
+        '${create.stderr}\n${create.stdout}',
+      );
+    }
+    final data = _parseJsonObject(create.stdout) ??
+        _parseJsonObject(create.stderr);
+    final ref = data?['id']?.toString() ??
+        data?['ref']?.toString() ??
+        data?['reference_id']?.toString();
+    if (ref == null || ref.isEmpty) {
+      // Create may print non-JSON; list by name.
+      final list2 = await runner.runCapture(
+        supabase,
+        ['projects', 'list', '--output-format', 'json'],
+        allowDryRun: false,
+      );
+      final again = _findSupabaseProject(list2.stdout, name: name);
+      final ref2 = again?['id']?.toString() ??
+          again?['ref']?.toString() ??
+          again?['reference_id']?.toString();
+      if (ref2 == null || ref2.isEmpty) {
+        throw StateError(
+          'supabase projects create: could not parse project ref from output',
+        );
+      }
+      await _finishSupabaseCreate(
+        ref: ref2,
+        name: name,
+        password: password,
+        orgId: orgId,
+        s: s,
+      );
+      return;
+    }
+    await _finishSupabaseCreate(
+      ref: ref,
+      name: name,
+      password: password,
+      orgId: orgId,
+      s: s,
+    );
+  }
+
+  Future<void> _finishSupabaseCreate({
+    required String ref,
+    required String name,
+    required String password,
+    required String orgId,
+    required SupabaseConfig s,
+  }) async {
+    final host = s.host ?? 'db.$ref.supabase.co';
+    final creds = PostgresUrl(
+      user: s.user,
+      password: password,
+      host: host,
+      port: '${s.port}',
+      database: s.database,
+      requireSsl: true,
+    );
+    final sidecarPath = p.join(
+      config.serverPath,
+      'config',
+      ProductionYamlPatcher.supabasePgSidecarName,
+    );
+    await File(sidecarPath).parent.create(recursive: true);
+    await File(sidecarPath).writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        ...creds.toSidecarMap(),
+        'project_ref': ref,
+        'project_name': name,
+        'org_id': orgId,
+      }),
+    );
+    log.ok('Supabase Postgres: ${s.user}@$host/${s.database} (ref $ref)');
+    await _persistSupabaseYaml(
+      projectRef: ref,
+      projectName: name,
+      host: host,
+      orgId: orgId,
+    );
+  }
+
+  Future<void> _persistSupabaseYaml({
+    String? projectRef,
+    String? projectName,
+    String? host,
+    String? orgId,
+  }) async {
+    final base = config.database.supabase ?? SupabaseConfig();
+    final updated = PodflyConfig(
+      root: config.root,
+      host: config.host,
+      webHost: config.webHost,
+      mode: config.mode,
+      name: config.name,
+      server: config.server,
+      flutter: config.flutter,
+      fly: config.fly,
+      railway: config.railway,
+      digitalOcean: config.digitalOcean,
+      render: config.render,
+      cloudRun: config.cloudRun,
+      aws: config.aws,
+      awsEcs: config.awsEcs,
+      azure: config.azure,
+      hetzner: config.hetzner,
+      cloudflare: config.cloudflare,
+      vercel: config.vercel,
+      netlify: config.netlify,
+      githubPages: config.githubPages,
+      database: DatabaseConfig(
+        provider: DatabaseProvider.supabase,
+        supabase: SupabaseConfig(
+          projectName: projectName ?? base.projectName,
+          projectRef: projectRef ?? base.projectRef,
+          orgId: orgId ?? base.orgId,
+          region: base.region,
+          provision: base.provision,
+          host: host ?? base.host,
+          database: base.database,
+          user: base.user,
+          port: base.port,
+        ),
+      ),
+      redis: config.redis,
+      web: config.web,
+      smoke: config.smoke,
+    );
+    await updated.save();
+    log.detail('saved database.supabase project_ref + host');
+  }
+
+  Future<Map<String, String>?> _readSupabaseSidecar() async {
+    final f = File(
+      p.join(
+        config.serverPath,
+        'config',
+        ProductionYamlPatcher.supabasePgSidecarName,
+      ),
+    );
+    if (!await f.exists()) return null;
+    try {
+      final decoded = jsonDecode(await f.readAsString());
+      if (decoded is! Map) return null;
+      return decoded.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _firstSupabaseOrgId(String supabase) async {
+    final r = await runner.runCapture(
+      supabase,
+      ['orgs', 'list', '--output-format', 'json'],
+      allowDryRun: false,
+    );
+    if (!r.ok) return null;
+    try {
+      final v = jsonDecode(r.stdout.trim());
+      if (v is List && v.isNotEmpty) {
+        final first = v.first;
+        if (first is Map) {
+          return first['id']?.toString() ?? first['org_id']?.toString();
+        }
+      }
+      if (v is Map) {
+        final list = v['organizations'] ?? v['orgs'];
+        if (list is List && list.isNotEmpty && list.first is Map) {
+          final m = list.first as Map;
+          return m['id']?.toString() ?? m['org_id']?.toString();
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Map<String, dynamic>? _findSupabaseProject(
+    String json, {
+    String? ref,
+    String? name,
+  }) {
+    try {
+      final v = jsonDecode(json.trim());
+      final list = v is List
+          ? v
+          : (v is Map ? (v['projects'] ?? v['data']) : null);
+      if (list is! List) return null;
+      for (final item in list) {
+        if (item is! Map) continue;
+        final map = item.map((k, val) => MapEntry(k.toString(), val));
+        final id = map['id']?.toString() ??
+            map['ref']?.toString() ??
+            map['reference_id']?.toString();
+        final n = map['name']?.toString();
+        if (ref != null && ref.isNotEmpty && id == ref) return map;
+        if (name != null && n == name) return map;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Map<String, dynamic>? _parseJsonObject(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return null;
+    try {
+      final v = jsonDecode(t);
+      if (v is Map<String, dynamic>) return v;
+      if (v is Map) return v.map((k, val) => MapEntry(k.toString(), val));
+    } catch (_) {}
+    final start = t.indexOf('{');
+    final end = t.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        final v = jsonDecode(t.substring(start, end + 1));
+        if (v is Map<String, dynamic>) return v;
+        if (v is Map) return v.map((k, val) => MapEntry(k.toString(), val));
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static String _generateDbPassword() {
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final r = Random.secure();
+    return List.generate(28, (_) => chars[r.nextInt(chars.length)]).join();
   }
 
   Future<void> _railwayPostgres() async {

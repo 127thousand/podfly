@@ -61,6 +61,7 @@ class DigitalOceanHost extends HostAdapter {
         DatabaseProvider.none,
         DatabaseProvider.digitalOceanPostgres,
         DatabaseProvider.neon,
+        DatabaseProvider.supabase,
       ];
 
   @override

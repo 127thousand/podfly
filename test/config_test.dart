@@ -39,10 +39,45 @@ void main() {
     expect(DatabaseConfig.parseProvider('none'), DatabaseProvider.none);
     expect(DatabaseConfig.parseProvider('neon'), DatabaseProvider.neon);
     expect(
+        DatabaseConfig.parseProvider('supabase'), DatabaseProvider.supabase);
+    expect(
         DatabaseConfig.parseProvider('fly_postgres'), DatabaseProvider.flyPostgres);
     expect(
         DatabaseConfig.parseProvider('render_postgres'),
         DatabaseProvider.renderPostgres);
+  });
+
+  test('supabase database round-trip', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_sb_');
+    final cfg = PodflyConfig(
+      root: dir.path,
+      mode: DeployMode.split,
+      name: 'demo',
+      server: 'demo_server',
+      flutter: 'demo_flutter',
+      fly: FlyConfig(app: 'demo', region: 'iad'),
+      cloudflare: CloudflareConfig(project: 'demo'),
+      database: DatabaseConfig(
+        provider: DatabaseProvider.supabase,
+        supabase: SupabaseConfig(
+          projectName: 'demo-db',
+          projectRef: 'abcdefghijklmnop',
+          region: 'us-east-1',
+          provision: true,
+          host: 'db.abcdefghijklmnop.supabase.co',
+        ),
+      ),
+      web: WebConfig(apiUrl: 'https://demo.fly.dev/'),
+    );
+    await cfg.save();
+    final loaded = await PodflyConfig.load(cfg.configPath);
+    expect(loaded.database.provider, DatabaseProvider.supabase);
+    expect(loaded.database.supabase?.projectRef, 'abcdefghijklmnop');
+    expect(loaded.database.supabase?.host, 'db.abcdefghijklmnop.supabase.co');
+    expect(loaded.database.supabase?.database, 'postgres');
+    expect(loaded.toYaml(), contains('provider: supabase'));
+    expect(loaded.toYaml(), contains('project_ref: abcdefghijklmnop'));
+    await dir.delete(recursive: true);
   });
 
   test('cloud_run host round-trip', () async {

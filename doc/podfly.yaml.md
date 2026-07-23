@@ -382,7 +382,7 @@ Auth: `upstash login` or `UPSTASH_EMAIL` + `UPSTASH_API_KEY`. See [upstash.md](u
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `provider` | `none` \| `sqlite` \| `fly_postgres` \| `neon` | `none` | See [database.md](database.md) |
+| `provider` | `none` \| `sqlite` \| `fly_postgres` \| `neon` \| `supabase` \| … | `none` | See [database.md](database.md) |
 
 ### `database.sqlite`
 
@@ -426,6 +426,21 @@ database:
     database: neondb
     user: neondb_owner
 ```
+
+### `database.supabase`
+
+```yaml
+database:
+  provider: supabase
+  supabase:
+    project_name: my-app-db
+    region: us-east-1
+    provision: true
+    # project_ref / host set after first create
+    # org_id: optional
+```
+
+See [supabase.md](supabase.md).
 
 ## `web`
 

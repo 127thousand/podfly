@@ -58,6 +58,7 @@ class FlyHost extends HostAdapter {
         DatabaseProvider.sqlite,
         DatabaseProvider.flyPostgres,
         DatabaseProvider.neon,
+        DatabaseProvider.supabase,
       ];
 
   @override

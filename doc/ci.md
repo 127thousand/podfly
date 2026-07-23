@@ -34,6 +34,7 @@ Set `PODFLY_AUTO=1` if doctor might offer CLI installs and you want auto-accept
 | Netlify static UI | `NETLIFY_AUTH_TOKEN` | When `web_host: netlify` |
 | GitHub Pages UI | `GH_TOKEN` / `GITHUB_TOKEN` | When `web_host: github_pages` (repo + pages write) |
 | Neon provision | `NEON_API_KEY` | Only if `database.neon.provision: true` |
+| Supabase | `SUPABASE_ACCESS_TOKEN` | When `database.provider: supabase` |
 | Upstash Redis | `UPSTASH_EMAIL` + `UPSTASH_API_KEY` | When `redis.provider: upstash` |
 
 **Recommended in CI repos:** commit `podfly.yaml` and host config (`fly.toml` /
@@ -46,7 +47,7 @@ Always commit the Serverpod Dockerfile (from `serverpod create`).
 Do **not** commit:
 
 - `*_server/config/passwords.yaml` production secrets (or treat as secret-generated in CI)
-- Sidecars: `.podfly_fly_pg.json`, `.podfly_railway_pg.json`, `.podfly_do_pg.json`
+- Sidecars: `.podfly_fly_pg.json`, `.podfly_railway_pg.json`, `.podfly_do_pg.json`, `.podfly_supabase_pg.json`
 
 ### Fly Postgres in CI
 

@@ -10,6 +10,7 @@
 | **`railway_postgres`** | Railway full stack | Partial* | Yes | *Postgres plugin does not sleep with API |
 | **`digitalocean_postgres`** | DO App Platform | Partial* | Yes | *Managed DBaaS bills independently |
 | **`neon`** | Serverless PG | Yes | Yes | SSL; store URL as host secret |
+| **`supabase`** | Managed PG (Supabase) | Partial* | Yes | SSL; CLI provision + sidecar password |
 
 \* Managed Postgres usually keeps billing when the API scales to zero.
 
@@ -59,7 +60,16 @@
 - Expects host secret set (e.g. `fly secrets set DATABASE_URL=…`)  
 - Writes `requireSsl: true` host block when host is known  
 
-**Never commit DB passwords or sidecar JSON** (`.podfly_fly_pg.json`, `.podfly_railway_pg.json`, `.podfly_do_pg.json`). Prefer CI attach/patch (see [ci.md](ci.md)) or secrets managers.
+### `supabase`
+
+- Optional `supabase projects create` (`provision: true`) with generated DB password  
+- Direct host `db.<project_ref>.supabase.co`, `requireSsl: true`  
+- Writes `server/config/.podfly_supabase_pg.json` + patches `production.yaml` / `passwords.yaml`  
+- Password is **not** recoverable via CLI after create — keep the sidecar  
+
+See [supabase.md](supabase.md).
+
+**Never commit DB passwords or sidecar JSON** (`.podfly_fly_pg.json`, `.podfly_railway_pg.json`, `.podfly_do_pg.json`, `.podfly_supabase_pg.json`). Prefer CI attach/patch (see [ci.md](ci.md)) or secrets managers.
 
 ## Automatic detection
 

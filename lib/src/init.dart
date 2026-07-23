@@ -246,6 +246,21 @@ class Initer {
             host: neonHost,
           ),
         );
+      case DatabaseProvider.supabase:
+        var provision = true;
+        if (isTty && !yes) {
+          provision = await confirm(
+            'Provision Supabase project with supabase CLI?',
+            defaultYes: true,
+          );
+        }
+        database = DatabaseConfig(
+          provider: DatabaseProvider.supabase,
+          supabase: SupabaseConfig(
+            provision: provision,
+            projectName: '$flyApp-db',
+          ),
+        );
       case DatabaseProvider.railwayPostgres:
         database = DatabaseConfig(
           provider: DatabaseProvider.railwayPostgres,
@@ -345,6 +360,8 @@ class Initer {
           'fly_postgres — Fly managed Postgres (bills when API sleeps)',
         DatabaseProvider.neon =>
           'neon — serverless Postgres (good with scale-to-zero)',
+        DatabaseProvider.supabase =>
+          'supabase — managed Postgres (Supabase project / CLI)',
         DatabaseProvider.railwayPostgres =>
           'railway_postgres — Postgres plugin on Railway project',
         DatabaseProvider.digitalOceanPostgres =>

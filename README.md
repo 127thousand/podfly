@@ -205,7 +205,7 @@ Serverpod **Insights** is not covered by podfly. For Insights and the full manag
 | 🟣 [**Fly Postgres**](https://fly.io/docs/postgres/) | `fly postgres` | ✅ | Private network; often bills when API is stopped |
 | 🚂 [**Railway Postgres**](https://railway.app) | Railway CLI | ✅ | `database.provider: railway_postgres` |
 | 💾 **SQLite** (+ Fly volume) | `fly volumes` | ✅ | Single-machine only |
-| ⚡ [**Supabase**](https://supabase.com) | CLI / URL | 🗺️ | Managed PG |
+| ⚡ [**Supabase**](https://supabase.com) | `supabase` CLI | ✅ | `database.provider: supabase` — managed PG + TLS; see [doc/supabase.md](doc/supabase.md) |
 | 🟦 [**Render Postgres**](https://render.com) | `render postgres` | ✅ | `database.provider: render_postgres` |
 | 📦 [**AWS RDS**](https://aws.amazon.com/rds/) | `aws` | 🗺️ | Enterprise default |
 | ☁️ [**Google Cloud SQL**](https://cloud.google.com/sql) | `gcloud` | 🗺️ | BYO: set `cloud_run.cloud_sql_instances` + unix socket in production.yaml |

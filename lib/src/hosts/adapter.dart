@@ -43,6 +43,7 @@ abstract class HostAdapter {
   List<DatabaseProvider> get supportedDatabases => const [
         DatabaseProvider.none,
         DatabaseProvider.neon,
+        DatabaseProvider.supabase,
       ];
 
   /// Placeholder / known API base before first deploy (trailing slash).

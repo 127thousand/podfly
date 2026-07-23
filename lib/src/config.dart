@@ -53,6 +53,7 @@ enum DatabaseProvider {
   sqlite,
   flyPostgres,
   neon,
+  supabase,
   railwayPostgres,
   digitalOceanPostgres,
   renderPostgres,
@@ -508,6 +509,58 @@ class NeonConfig {
         if (host != null) 'host': host,
         'database': database,
         'user': user,
+      };
+}
+
+/// Managed Postgres on Supabase (`database.provider: supabase`).
+///
+/// Direct host: `db.<project_ref>.supabase.co` (TLS). Password is written to
+/// the gitignored sidecar at provision time (`--db-password` on create).
+class SupabaseConfig {
+  SupabaseConfig({
+    this.projectName,
+    this.projectRef,
+    this.orgId,
+    this.region = 'us-east-1',
+    this.provision = true,
+    this.host,
+    this.database = 'postgres',
+    this.user = 'postgres',
+    this.port = 5432,
+  });
+
+  /// Display name for `supabase projects create`.
+  final String? projectName;
+
+  /// Stable project ref (e.g. `abcdefghijklmnop`) — set after provision.
+  final String? projectRef;
+
+  /// Organization id (`supabase orgs list`). Defaults to first org.
+  final String? orgId;
+
+  /// Supabase region slug (e.g. `us-east-1`).
+  final String region;
+
+  /// Create the project when missing.
+  final bool provision;
+
+  /// Override host (default `db.<project_ref>.supabase.co`).
+  final String? host;
+
+  final String database;
+  final String user;
+  final int port;
+
+  Map<String, Object?> toMap() => {
+        if (projectName != null) 'project_name': projectName,
+        if (projectRef != null) 'project_ref': projectRef,
+        if (orgId != null) 'org_id': orgId,
+        'region': region,
+        'provision': provision,
+        if (host != null) 'host': host,
+        'database': database,
+        'user': user,
+        'port': port,
       };
 }
 
@@ -1078,6 +1131,7 @@ class DatabaseConfig {
     this.sqlite,
     this.flyPostgres,
     this.neon,
+    this.supabase,
     this.railwayPostgres,
     this.digitalOceanPostgres,
     this.renderPostgres,
@@ -1087,6 +1141,7 @@ class DatabaseConfig {
   final SqliteConfig? sqlite;
   final FlyPostgresConfig? flyPostgres;
   final NeonConfig? neon;
+  final SupabaseConfig? supabase;
   final RailwayPostgresConfig? railwayPostgres;
   final DigitalOceanPostgresConfig? digitalOceanPostgres;
   final RenderPostgresConfig? renderPostgres;
@@ -1096,6 +1151,7 @@ class DatabaseConfig {
     if (sqlite != null) m['sqlite'] = sqlite!.toMap();
     if (flyPostgres != null) m['fly_postgres'] = flyPostgres!.toMap();
     if (neon != null) m['neon'] = neon!.toMap();
+    if (supabase != null) m['supabase'] = supabase!.toMap();
     if (railwayPostgres != null) {
       m['railway_postgres'] = railwayPostgres!.toMap();
     }
@@ -1113,6 +1169,7 @@ class DatabaseConfig {
         DatabaseProvider.sqlite => 'sqlite',
         DatabaseProvider.flyPostgres => 'fly_postgres',
         DatabaseProvider.neon => 'neon',
+        DatabaseProvider.supabase => 'supabase',
         DatabaseProvider.railwayPostgres => 'railway_postgres',
         DatabaseProvider.digitalOceanPostgres => 'digitalocean_postgres',
         DatabaseProvider.renderPostgres => 'render_postgres',
@@ -1124,6 +1181,7 @@ class DatabaseConfig {
         'fly_postgres' || 'fly-postgres' || 'postgres' =>
           DatabaseProvider.flyPostgres,
         'neon' => DatabaseProvider.neon,
+        'supabase' => DatabaseProvider.supabase,
         'railway_postgres' || 'railway-postgres' || 'railway' =>
           DatabaseProvider.railwayPostgres,
         'digitalocean_postgres' ||
@@ -1626,6 +1684,23 @@ class PodflyConfig {
       buf.writeln('    region: ${n.region}');
       if (n.host != null) buf.writeln('    host: ${n.host}');
     }
+    if (database.supabase != null) {
+      final s = database.supabase!;
+      buf.writeln('  supabase:');
+      if (s.projectName != null) {
+        buf.writeln('    project_name: ${s.projectName}');
+      }
+      if (s.projectRef != null) {
+        buf.writeln('    project_ref: ${s.projectRef}');
+      }
+      if (s.orgId != null) buf.writeln('    org_id: ${s.orgId}');
+      buf.writeln('    region: ${s.region}');
+      buf.writeln('    provision: ${s.provision}');
+      if (s.host != null) buf.writeln('    host: ${s.host}');
+      buf.writeln('    database: ${s.database}');
+      buf.writeln('    user: ${s.user}');
+      buf.writeln('    port: ${s.port}');
+    }
     if (database.railwayPostgres != null) {
       final r = database.railwayPostgres!;
       buf.writeln('  railway_postgres:');
@@ -2106,6 +2181,7 @@ class PodflyConfig {
     SqliteConfig? sqlite;
     FlyPostgresConfig? flyPg;
     NeonConfig? neon;
+    SupabaseConfig? supabase;
     // railwayPg declared below with provider branch
     if (provider == DatabaseProvider.sqlite) {
       final s = _map(dbMap['sqlite']);
@@ -2136,6 +2212,20 @@ class PodflyConfig {
         host: n['host']?.toString(),
         database: n['database']?.toString() ?? 'neondb',
         user: n['user']?.toString() ?? 'neondb_owner',
+      );
+    }
+    if (provider == DatabaseProvider.supabase) {
+      final s = _map(dbMap['supabase']);
+      supabase = SupabaseConfig(
+        projectName: s['project_name']?.toString(),
+        projectRef: s['project_ref']?.toString(),
+        orgId: s['org_id']?.toString(),
+        region: s['region']?.toString() ?? 'us-east-1',
+        provision: s['provision'] != false,
+        host: s['host']?.toString(),
+        database: s['database']?.toString() ?? 'postgres',
+        user: s['user']?.toString() ?? 'postgres',
+        port: int.tryParse('${s['port'] ?? 5432}') ?? 5432,
       );
     }
     RailwayPostgresConfig? railwayPg;
@@ -2268,6 +2358,7 @@ class PodflyConfig {
         sqlite: sqlite,
         flyPostgres: flyPg,
         neon: neon,
+        supabase: supabase,
         railwayPostgres: railwayPg,
         digitalOceanPostgres: doPg,
         renderPostgres: renderPg,

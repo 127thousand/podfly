@@ -33,6 +33,7 @@ Flutter **static only** — not Serverpod API or WebSockets. API stays on `host:
 - [doc/netlify.md](doc/netlify.md) — `web_host: netlify`
 - [doc/github_pages.md](doc/github_pages.md) — `web_host: github_pages`
 - [doc/upstash.md](doc/upstash.md) — `redis.provider: upstash` (cache/PubSub; multi-machine proof + teardown)
+- [doc/supabase.md](doc/supabase.md) — `database.provider: supabase` (managed Postgres)
 - Also: `web_host: cloudflare` (default, `wrangler`), `web_host: vercel`
 
 ## Examples

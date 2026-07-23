@@ -57,6 +57,7 @@ class RailwayHost extends HostAdapter {
         DatabaseProvider.none,
         DatabaseProvider.railwayPostgres,
         DatabaseProvider.neon,
+        DatabaseProvider.supabase,
       ];
 
   @override

@@ -77,6 +77,7 @@ podfly deploy --yes --dry-run --no-login
 10. **Install for users:** `dart pub global activate podfly` (pub.dev). Git/path activate is for contributors.
 11. **GitHub Pages project sites** need `web.base_href: /<repo>/` (podfly auto-sets when `base_href` is still `/`).
 12. **Redis is optional.** Default off. Multi-instance cache/PubSub → `redis.provider: upstash` (`upstash` CLI). Prove fan-out with ≥2 machines + send machine ≠ WS machine (see `doc/upstash.md`, example `upstash/pubsub_chat`). Never commit `.podfly_upstash_redis.json` or Redis passwords.
+13. **Supabase is Postgres only** (`database.provider: supabase`) — not Auth/Storage/Realtime. Password lives in `.podfly_supabase_pg.json` (create-time only). See `doc/supabase.md`.
 
 ## Decision tree
 

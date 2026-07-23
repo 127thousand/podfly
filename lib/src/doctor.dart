@@ -94,6 +94,9 @@ class Doctor {
           config.database.neon?.provision == true) {
         ok = await _needNeon() && ok;
       }
+      if (config.database.provider == DatabaseProvider.supabase) {
+        ok = await _needSupabase() && ok;
+      }
       if (config.redis.provider == RedisProvider.upstash) {
         ok = await _needUpstash() && ok;
       }
@@ -539,6 +542,72 @@ class Doctor {
       log.detail('Set NEON_API_KEY or run: neonctl auth');
     }
     return false;
+  }
+
+  Future<bool> _needSupabase() async {
+    if (Platform.environment['SUPABASE_ACCESS_TOKEN']?.isNotEmpty == true) {
+      log.ok('supabase  (SUPABASE_ACCESS_TOKEN set)');
+      return true;
+    }
+    var bin = await runner.resolve('supabase');
+    if (bin == null) {
+      log.warn('supabase not found (needed for database.provider: supabase)');
+      final installed = await _tryInstallRecipes(const [
+        CliInstallRecipe(
+          label: 'brew install supabase/tap/supabase',
+          executable: 'brew',
+          args: ['install', 'supabase/tap/supabase'],
+        ),
+        CliInstallRecipe(
+          label: 'npm i -g supabase',
+          executable: 'npm',
+          args: ['i', '-g', 'supabase'],
+        ),
+      ], 'supabase');
+      bin = installed ? await runner.resolve('supabase') : null;
+      if (bin == null) {
+        log.err('supabase still missing');
+        log.detail(
+          'Install: brew install supabase/tap/supabase  '
+          'or  npm i -g supabase',
+        );
+        return false;
+      }
+    }
+    if (runner.dryRun) {
+      log.ok('$bin  (auth check skipped in dry-run)');
+      return true;
+    }
+    final list = await runner.runCapture(
+      bin,
+      ['projects', 'list'],
+      allowDryRun: false,
+    );
+    if (list.ok) {
+      log.ok('$bin  authenticated');
+      return true;
+    }
+    final err = (list.stderr + list.stdout).toLowerCase();
+    if (err.contains('login') ||
+        err.contains('token') ||
+        err.contains('auth') ||
+        err.contains('unauthorized')) {
+      log.warn('$bin not authenticated');
+      if (_canLogin) {
+        final go = _autoLogin || await confirm('Run `supabase login` now?');
+        if (go) {
+          final r = await runner.run(bin, ['login'], allowDryRun: false);
+          if (r.ok) return _needSupabase();
+        }
+      } else {
+        log.detail(
+          'Set SUPABASE_ACCESS_TOKEN or run: supabase login',
+        );
+      }
+      return false;
+    }
+    log.ok('$bin  CLI present');
+    return true;
   }
 
   void _configWarnings(PodflyConfig config) {

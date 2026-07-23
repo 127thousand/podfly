@@ -19,10 +19,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
   - **[doc/upstash.md](doc/upstash.md)** — provision, secrets, multi-machine PubSub proof, teardown
   - Example: [upstash/pubsub_chat](https://github.com/127thousand/podfly_examples/tree/main/upstash/pubsub_chat)
     (Fly HA + Netlify chat; CROSS-MACHINE UI; demo stack torn down after verify)
+- **`database.provider: supabase`** — managed Postgres via Supabase CLI
+  - `supabase projects create/list` when `provision: true` (generated DB password)
+  - Sidecar `.podfly_supabase_pg.json`; patches `production.yaml` + `passwords.yaml`
+  - Doctor: `supabase` + login / `SUPABASE_ACCESS_TOKEN`
+  - **[doc/supabase.md](doc/supabase.md)**
 
 ### Planned (parked)
 
-- **Supabase** (and other managed Postgres): additional `database.provider` options
+- **AWS RDS / Cloud SQL / Azure Database for PostgreSQL** — enterprise Postgres providers
 
 ---
 

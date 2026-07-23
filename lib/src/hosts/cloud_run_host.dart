@@ -51,6 +51,7 @@ class CloudRunHost extends HostAdapter {
   List<DatabaseProvider> get supportedDatabases => const [
         DatabaseProvider.none,
         DatabaseProvider.neon,
+        DatabaseProvider.supabase,
         // Cloud SQL: bring-your-own in production.yaml (unix socket); auto later
       ];
 

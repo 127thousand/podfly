@@ -52,6 +52,7 @@ class AwsHost extends HostAdapter {
   List<DatabaseProvider> get supportedDatabases => const [
         DatabaseProvider.none,
         DatabaseProvider.neon,
+        DatabaseProvider.supabase,
       ];
 
   @override

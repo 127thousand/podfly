@@ -57,6 +57,7 @@ class AwsEcsHost extends HostAdapter {
   List<DatabaseProvider> get supportedDatabases => const [
         DatabaseProvider.none,
         DatabaseProvider.neon,
+        DatabaseProvider.supabase,
       ];
 
   @override
