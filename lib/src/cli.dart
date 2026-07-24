@@ -318,15 +318,30 @@ Future<int> _deploy(ArgResults g) async {
       preferredHost: preferredHost,
     ).run();
   } else {
-    // configExists is true only when existingPath is non-null and file exists
+    // configExists — load, but offer to re-pick cloud when interactive.
     config = await PodflyConfig.load(existingPath);
     log.detail('config: $existingPath');
-    log.detail(
-      'host: ${config.host.yamlName}'
-      '${config.web.enabled ? ' · web_host: ${config.webHost.yamlName}' : ' · API-only'}',
-    );
+    final summary =
+        'host: ${config.host.yamlName}'
+        '${config.web.enabled ? ' · web_host: ${config.webHost.yamlName}' : ' · API-only'}';
+    log.detail(summary);
+
     if (isTty && !yes) {
-      log.tip('Re-run with --init to change host / CDN / database.');
+      log.info('');
+      log.info('  Current setup → $summary');
+      final change = await confirm(
+        'Change API cloud / UI CDN / database options?',
+        defaultYes: false,
+      );
+      if (change) {
+        config = await Initer(
+          root: root,
+          log: log,
+          yes: false,
+          configPath: existingPath,
+          preferredHost: preferredHost,
+        ).run();
+      }
     }
   }
 
@@ -480,19 +495,32 @@ Future<int> _deploy(ArgResults g) async {
         '${config.web.enabled ? '' : ' (web.enabled: false)'}');
   }
 
-  await Deployer(
-    config: config,
-    runner: runner,
-    log: log,
-    nonInteractive: yes,
-  ).run(
-    DeployOptions(
-      doApi: doApi,
-      doWeb: doWeb,
-      smoke: _flag(g, 'smoke'),
-    ),
-  );
-  return 0;
+  final wall = Stopwatch()..start();
+  try {
+    await Deployer(
+      config: config,
+      runner: runner,
+      log: log,
+      nonInteractive: yes,
+    ).run(
+      DeployOptions(
+        doApi: doApi,
+        doWeb: doWeb,
+        smoke: _flag(g, 'smoke'),
+      ),
+    );
+    return 0;
+  } catch (e, st) {
+    log.err('$e');
+    if (Platform.environment['PODFLY_DEBUG'] == '1') {
+      log.detail('$st');
+    }
+    return 1;
+  } finally {
+    // Wall clock including doctor/init — always printed.
+    wall.stop();
+    log.elapsed(wall.elapsed, label: 'podfly deploy wall clock');
+  }
 }
 
 Future<int> _destroy(ArgResults g) async {

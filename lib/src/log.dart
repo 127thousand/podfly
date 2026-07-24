@@ -92,13 +92,20 @@ class Log {
     stdout.writeln(_c(_purple, '  💡 ') + _c(_dim, msg));
   }
 
-  /// Elapsed duration line (e.g. end of deploy).
+  /// Elapsed duration line (e.g. end of deploy). Always loud — not quietable
+  /// beyond [quiet], so failures still report how long things ran.
   void elapsed(Duration d, {String label = 'Done'}) {
     if (quiet) return;
     final s = _formatDuration(d);
     stdout.writeln('');
     stdout.writeln(
+      _c(_purpleBold, '════════════════════════════════════════'),
+    );
+    stdout.writeln(
       _c(_purpleBold, '  ⏱  $label in $s'),
+    );
+    stdout.writeln(
+      _c(_purpleBold, '════════════════════════════════════════'),
     );
   }
 

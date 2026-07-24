@@ -61,7 +61,6 @@ class Deployer {
       );
 
   Future<void> run(DeployOptions opts) async {
-    final sw = Stopwatch()..start();
     ensureHostsRegistered();
     final adapter = HostRegistry.require(config.host);
 
@@ -194,8 +193,7 @@ class Deployer {
       if (!ok) throw StateError('smoke checks failed');
     }
 
-    sw.stop();
-    log.elapsed(sw.elapsed, label: 'Deploy finished');
+    log.step('Done');
     if (doWeb) {
       if (lastWebResult?.displayUrl != null) {
         log.ok('UI:  ${lastWebResult!.displayUrl}');

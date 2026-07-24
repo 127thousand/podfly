@@ -15,6 +15,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.3] — 2026-07-24
+
+### Fixed
+
+- **Timer:** always print total wall-clock time at end of `podfly deploy` (even if smoke fails)
+- **Interactive re-pick:** without `--yes`, existing `podfly.yaml` prompts
+  "Change API cloud / UI CDN / database?" instead of silently reusing Fly/Cloudflare
+
+---
+
 ## [0.10.2] — 2026-07-24
 
 ### Changed
