@@ -132,33 +132,42 @@ class Initer {
         log.warn(w);
       }
 
-      final defaultWeb = surface.deployWeb;
-      final webIdx = await choose(
-        surface.deployApiOnly
-            ? 'What should podfly deploy? (looks like mobile/API-only)'
-            : 'What should podfly deploy?',
-        [
-          'API + Flutter web (static UI host)',
-          'API only (mobile or other non-web clients)',
-        ],
-        defaultIndex: defaultWeb ? 0 : 1,
-      );
-      webEnabled = webIdx == 0;
-
-      // All-in-one layout only when host supports multi-port / static on API.
-      if (hostAdapter.supportsAllInOneWeb && webEnabled) {
-        final modeIdx = await choose(
-          'How should web + API be hosted?',
+      // One clear topology menu (avoids "monolith" with web disabled).
+      if (hostAdapter.supportsAllInOneWeb || hostAdapter.deploysWebNatively) {
+        final topoDefault = surface.deployWeb ? 0 : 2;
+        final topoIdx = await choose(
+          surface.deployApiOnly
+              ? 'Deploy topology (project looks mobile/API-first)'
+              : 'Deploy topology',
           [
-            'split — static CDN (UI) + ${hostAdapter.label} (API)',
-            'monolith — UI + API on ${hostAdapter.label}',
+            '🧱 Monolith — Flutter web + API together on ${hostAdapter.label} (one URL)',
+            '🔀 Split — Flutter web on a CDN + API on ${hostAdapter.label}',
+            '📱 API only — no Flutter web (mobile / other clients)',
           ],
-          defaultIndex: 0,
+          defaultIndex: topoDefault.clamp(0, 2),
         );
-        mode = modeIdx == 1 ? DeployMode.monolith : DeployMode.split;
-      } else if (hostAdapter.supportsAllInOneWeb) {
-        mode = DeployMode.monolith;
+        switch (topoIdx) {
+          case 0: // monolith
+            webEnabled = true;
+            mode = DeployMode.monolith;
+          case 1: // split
+            webEnabled = true;
+            mode = DeployMode.split;
+          default: // api only
+            webEnabled = false;
+            mode = DeployMode.monolith; // API-only still uses single process
+        }
       } else {
+        // Host cannot embed web — split CDN or API only.
+        final webIdx = await choose(
+          'What should podfly deploy?',
+          [
+            '🔀 API + Flutter web on a static CDN',
+            '📱 API only (no Flutter web)',
+          ],
+          defaultIndex: surface.deployWeb ? 0 : 1,
+        );
+        webEnabled = webIdx == 0;
         mode = webEnabled ? DeployMode.split : DeployMode.monolith;
       }
 
@@ -167,7 +176,7 @@ class Initer {
           !hostAdapter.deploysWebNatively;
       if (needsStaticCdn) {
         final cdnIdx = await choose(
-          'Where should Flutter web (static UI) be hosted?',
+          'Static CDN for Flutter web',
           [
             '🟠 Cloudflare Pages',
             '▲  Vercel',
@@ -364,9 +373,9 @@ class Initer {
       web: WebConfig(
         enabled: webEnabled,
         apiUrl: apiUrl,
-        // No need to patch bootstrap/headers when not deploying web.
+        // CDN split needs bootstrap/headers; monolith serves from the API host.
         patchBootstrap: webEnabled,
-        writeHeaders: webEnabled,
+        writeHeaders: webEnabled && mode == DeployMode.split,
       ),
       smoke: SmokeConfig(
         api: SmokeEndpoint(

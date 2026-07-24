@@ -15,6 +15,18 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.5] — 2026-07-24
+
+### Fixed
+
+- **Monolith vs API-only:** topology menu is one clear choice (Monolith / Split / API only).
+  Previously API-only was saved as `mode: monolith` with `web.enabled: false`, so picking
+  “monolith” intent was easy to miss and only the API deployed.
+- **Monolith web copy:** fallback recursive copy when `rsync` is missing; verify `index.html`
+- Warn when `mode: monolith` + `web.enabled: false`; print UI URL for true monolith deploys
+
+---
+
 ## [0.10.4] — 2026-07-24
 
 ### Changed

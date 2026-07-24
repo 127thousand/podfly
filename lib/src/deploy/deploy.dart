@@ -120,6 +120,18 @@ class Deployer {
     final doApi = opts.doApi;
     if (opts.doWeb && !cfg.web.enabled) {
       log.detail('web.enabled: false — skipping Flutter web build/deploy');
+      if (cfg.mode == DeployMode.monolith) {
+        log.warn(
+          'mode: monolith but web.enabled: false → API only. '
+          'Re-run without --yes and pick “Monolith — Flutter web + API”, '
+          'or set web.enabled: true in podfly.yaml',
+        );
+      }
+    }
+    if (doWeb && cfg.mode == DeployMode.monolith && adapter.supportsAllInOneWeb) {
+      log.detail(
+        'monolith: will build Flutter web and copy into ${cfg.server}/web/app',
+      );
     }
 
     final buildCtx = _ctx(cfg);
@@ -194,9 +206,19 @@ class Deployer {
     }
 
     log.step('Done');
+    final apiUrl = lastApiResult?.displayUrl ??
+        lastApiResult?.publicHost ??
+        adapter.publicApiBase(cfg) ??
+        cfg.web.apiUrlNormalized;
     if (doWeb) {
       if (lastWebResult?.displayUrl != null) {
         log.ok('UI:  ${lastWebResult!.displayUrl}');
+      } else if (cfg.mode == DeployMode.monolith && doApi) {
+        // Same origin as API when web was embedded in the container.
+        final ui = apiUrl.startsWith('http')
+            ? (apiUrl.endsWith('/') ? apiUrl : '$apiUrl/')
+            : 'https://$apiUrl/';
+        log.ok('UI:  $ui  (monolith — same host as API)');
       } else if (cfg.mode == DeployMode.split && cfg.usesStaticWebHost) {
         if (cfg.webHost == StaticWebHost.vercel && cfg.vercel != null) {
           final h = cfg.vercel!.publicHost ?? '${cfg.vercel!.project}.vercel.app';
@@ -217,11 +239,7 @@ class Deployer {
       }
     }
     if (doApi) {
-      final url = lastApiResult?.displayUrl ??
-          lastApiResult?.publicHost ??
-          adapter.publicApiBase(cfg) ??
-          cfg.web.apiUrlNormalized;
-      log.ok('API: $url');
+      log.ok('API: $apiUrl');
     }
     log.tip('Tear down later: podfly destroy   (add --database to drop managed PG)');
   }
@@ -374,7 +392,7 @@ class Deployer {
     final dest = p.isAbsolute(staticDir)
         ? staticDir
         : p.join(config.root, staticDir);
-    log.step('Copy web → $staticDir (all-in-one)');
+    log.step('Copy web → $staticDir (monolith / all-in-one)');
     if (runner.dryRun) {
       log.dry('copy ${config.webOutPath} → $dest');
       return;
@@ -383,14 +401,41 @@ class Deployer {
     if (!await Directory(src).exists()) {
       throw StateError('build web first: missing $src');
     }
+    final index = File(p.join(src, 'index.html'));
+    if (!await index.exists()) {
+      throw StateError('web build missing index.html at $src');
+    }
     await Directory(dest).create(recursive: true);
     if (await runner.which('rsync')) {
-      await runner.run(
+      final sync = await runner.run(
         'rsync',
         ['-a', '--delete', '$src/', '$dest/'],
         allowDryRun: false,
       );
+      if (!sync.ok) {
+        log.warn('rsync failed — falling back to recursive copy');
+        await _copyDir(src, dest);
+      }
+    } else {
+      await _copyDir(src, dest);
     }
-    log.ok('static files in $dest');
+    if (!await File(p.join(dest, 'index.html')).exists()) {
+      throw StateError('copy web failed — no index.html in $dest');
+    }
+    log.ok('static files in $dest (served by Serverpod with the API)');
+  }
+
+  Future<void> _copyDir(String from, String to) async {
+    await for (final ent
+        in Directory(from).list(recursive: true, followLinks: false)) {
+      final rel = p.relative(ent.path, from: from);
+      final target = p.join(to, rel);
+      if (ent is Directory) {
+        await Directory(target).create(recursive: true);
+      } else if (ent is File) {
+        await File(target).parent.create(recursive: true);
+        await ent.copy(target);
+      }
+    }
   }
 }
