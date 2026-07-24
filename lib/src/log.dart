@@ -46,7 +46,7 @@ class Log {
       stdout.writeln(_c(_purpleBold, line));
     }
     stdout.writeln(
-      _c(_dim, '  Serverpod → your cloud'),
+      _c(_dim, '  🚀 Serverpod, 🍷 BYO cloud.'),
     );
     if (subtitle != null) {
       stdout.writeln(_c(_dim, '  $subtitle'));

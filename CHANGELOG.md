@@ -15,6 +15,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.2] — 2026-07-24
+
+### Changed
+
+- Banner slogan: `🚀 Serverpod, 🍷 BYO cloud.`
+
+---
+
 ## [0.10.1] — 2026-07-24
 
 ### Changed
