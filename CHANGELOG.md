@@ -9,6 +9,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Planned (parked)
+
+- **AWS RDS / Cloud SQL / Azure Database for PostgreSQL** — enterprise Postgres providers
+
+---
+
+## [0.9.0] — 2026-07-24
+
 ### Added
 
 - **`mobile.provider: codemagic`** — generate **`codemagic.yaml`** for Flutter iOS/Android
@@ -40,14 +48,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
   - `supabase projects create/list` when `provision: true` (generated DB password)
   - Sidecar `.podfly_supabase_pg.json`; patches `production.yaml` + `passwords.yaml`
   - Doctor: `supabase` + login / `SUPABASE_ACCESS_TOKEN`
+  - Default **session pooler** (IPv4) so Fly DB endpoints do not hang on
+    IPv6-only `db.<ref>.supabase.co`; ignores stale direct `host` overrides
   - **[doc/supabase.md](doc/supabase.md)**
 - **Netlify:** `sites:create` when site is missing — `--site-name` alone no longer creates sites
-- **Supabase:** default **session pooler** (IPv4) so Fly DB endpoints do not hang on
-  IPv6-only `db.<ref>.supabase.co`; ignores stale direct `host` overrides
-
-### Planned (parked)
-
-- **AWS RDS / Cloud SQL / Azure Database for PostgreSQL** — enterprise Postgres providers
 
 ---
 
