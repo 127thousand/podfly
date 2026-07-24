@@ -115,6 +115,7 @@ class ProcessRunner {
     log.detail('→ $cmdLine');
 
     if (inheritStdio) {
+      // Long cloud CLIs stream their own UI; we only show the command line.
       final proc = await Process.start(
         executable,
         arguments,

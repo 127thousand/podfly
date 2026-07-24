@@ -15,6 +15,20 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.0] — 2026-07-24
+
+### Added
+
+- **Purple banner**, restrained ANSI color, emojis, ASCII spinners (`Log`); respects `NO_COLOR`
+- **Deploy timer** — `⏱ Deploy finished in Xm Ys` plus tip for `podfly destroy`
+- **`podfly destroy` / `nuke`** — tear down API + static web from `podfly.yaml`
+  - Confirm on TTY; `--yes` for CI; `--dry-run`; `--database` opt-in for managed PG
+  - Fly, Cloudflare Pages, Vercel, Netlify, GitHub Pages, DO apps, Cloud Run; others warned
+- **Interactive CDN picker** on first init (Cloudflare / Vercel / Netlify / GitHub Pages)
+- Tips when `--yes` skips host/CDN questions; show host from existing config on redeploy
+
+---
+
 ## [0.9.1] — 2026-07-24
 
 ### Fixed

@@ -49,6 +49,7 @@ class Initer {
     final String smokePath;
     final String smokeMethod;
     late final bool webEnabled;
+    var webHost = StaticWebHost.cloudflare;
 
     // Host menu from registry (✅ = canDeploy)
     final hostAdapters = HostRegistry.all;
@@ -149,7 +150,7 @@ class Initer {
         final modeIdx = await choose(
           'How should web + API be hosted?',
           [
-            'split — Cloudflare Pages (UI) + ${hostAdapter.label} (API)',
+            'split — static CDN (UI) + ${hostAdapter.label} (API)',
             'monolith — UI + API on ${hostAdapter.label}',
           ],
           defaultIndex: 0,
@@ -159,6 +160,28 @@ class Initer {
         mode = DeployMode.monolith;
       } else {
         mode = webEnabled ? DeployMode.split : DeployMode.monolith;
+      }
+
+      final needsStaticCdn = mode == DeployMode.split &&
+          webEnabled &&
+          !hostAdapter.deploysWebNatively;
+      if (needsStaticCdn) {
+        final cdnIdx = await choose(
+          'Where should Flutter web (static UI) be hosted?',
+          [
+            '🟠 Cloudflare Pages',
+            '▲  Vercel',
+            '🟢 Netlify',
+            '🐙 GitHub Pages',
+          ],
+          defaultIndex: 0,
+        );
+        webHost = switch (cdnIdx) {
+          1 => StaticWebHost.vercel,
+          2 => StaticWebHost.netlify,
+          3 => StaticWebHost.githubPages,
+          _ => StaticWebHost.cloudflare,
+        };
       }
 
       region = host == AppHost.fly
@@ -294,7 +317,7 @@ class Initer {
     final config = PodflyConfig(
       root: root,
       host: host,
-      webHost: StaticWebHost.cloudflare,
+      webHost: splitStatic ? webHost : StaticWebHost.cloudflare,
       mode: mode,
       name: name,
       server: server,
@@ -318,9 +341,18 @@ class Initer {
       hetzner: host == AppHost.hetzner
           ? HetznerConfig(serverName: flyApp)
           : null,
-      cloudflare:
-          // Pages names: lowercase + dashes only (no underscores).
-          splitStatic ? CloudflareConfig(project: flyApp) : null,
+      cloudflare: splitStatic && webHost == StaticWebHost.cloudflare
+          ? CloudflareConfig(project: flyApp)
+          : null,
+      vercel: splitStatic && webHost == StaticWebHost.vercel
+          ? VercelConfig(project: flyApp)
+          : null,
+      netlify: splitStatic && webHost == StaticWebHost.netlify
+          ? NetlifyConfig(site: flyApp)
+          : null,
+      githubPages: splitStatic && webHost == StaticWebHost.githubPages
+          ? GitHubPagesConfig(repo: flyApp)
+          : null,
       database: database,
       // Mobile-first monorepos get Codemagic scaffolding (codemagic.yaml).
       mobile: !webEnabled

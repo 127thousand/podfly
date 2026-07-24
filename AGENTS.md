@@ -54,6 +54,7 @@ podfly deploy --yes --dry-run --no-login
 | `podfly init` | Write `podfly.yaml` only |
 | `podfly smoke` | HTTP checks only |
 | `podfly deploy --api` | **API only** (mobile / skip web); writes `codemagic.yaml` if `mobile.provider: codemagic` |
+| `podfly destroy` / `nuke` | Tear down API + CDN from `podfly.yaml` (`--database` opt-in) |
 | `podfly deploy --web` | Web half only (static CDN or host-native) |
 | `podfly deploy --dry-run` | Plan only, no side effects |
 

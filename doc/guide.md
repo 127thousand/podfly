@@ -120,6 +120,21 @@ my_app/
 
 If `server` / `flutter` are omitted from config, podfly scans for `*_server` and `*_flutter` directories.
 
+## Destroy / nuke
+
+Tear down cloud resources listed in `podfly.yaml`:
+
+```bash
+podfly destroy              # plan + confirm (TTY)
+podfly destroy --yes        # no prompt
+podfly destroy --dry-run    # print plan only
+podfly destroy --database   # also managed Postgres (Supabase / Fly PG / …)
+podfly nuke --yes           # alias for destroy
+```
+
+Default targets: **API host** + **static web CDN**. Database is opt-in.
+Local `podfly.yaml` is kept so you can redeploy.
+
 ## Mobile vs web (client surface)
 
 podfly inspects the Flutter package at init:

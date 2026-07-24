@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import 'config.dart';
 import 'deploy/deploy.dart';
+import 'destroy/destroy.dart';
 import 'doctor.dart';
 import 'fly_name.dart';
 import 'hosts/hosts.dart';
@@ -19,7 +20,15 @@ Future<int> runPodfly(List<String> args) async {
   final parser = _buildParser();
 
   // Allow `podfly --smoke` as shorthand for `podfly deploy --smoke`
-  final knownCommands = {'doctor', 'init', 'deploy', 'smoke', 'help'};
+  final knownCommands = {
+    'doctor',
+    'init',
+    'deploy',
+    'destroy',
+    'nuke',
+    'smoke',
+    'help',
+  };
   var effectiveArgs = List<String>.from(args);
   if (args.isEmpty) {
     effectiveArgs = ['deploy'];
@@ -54,6 +63,9 @@ Future<int> runPodfly(List<String> args) async {
       return _init(global);
     case 'deploy':
       return _deploy(global);
+    case 'destroy':
+    case 'nuke':
+      return _destroy(global);
     case 'smoke':
       return _smokeOnly(global);
     default:
@@ -69,13 +81,17 @@ Future<int> runPodfly(List<String> args) async {
 ArgParser _buildParser() {
   ArgParser deployFlags() => ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false)
-    ..addFlag('api', negatable: false, help: 'Deploy API only')
-    ..addFlag('web', negatable: false, help: 'Deploy web only')
+    ..addFlag('api', negatable: false, help: 'Deploy / destroy API')
+    ..addFlag('web', negatable: false, help: 'Deploy / destroy web only')
     ..addFlag('dry-run', negatable: false, help: 'Plan only')
     ..addFlag('smoke', negatable: false, help: 'HTTP checks after deploy')
-    ..addFlag('yes', abbr: 'y', negatable: false, help: 'Non-interactive defaults')
+    ..addFlag('yes', abbr: 'y', negatable: false,
+        help: 'Non-interactive defaults / confirm destroy')
     ..addFlag('no-login', negatable: false, help: 'No browser logins')
     ..addFlag('init', negatable: false, help: 'Force init wizard')
+    ..addFlag('database',
+        negatable: false,
+        help: 'destroy: also delete managed database (Supabase/Fly PG/…)')
     ..addOption(
       'mode',
       allowed: ['split', 'monolith', 'fly'],
@@ -92,6 +108,8 @@ ArgParser _buildParser() {
     ..addCommand('doctor', deployFlags())
     ..addCommand('init', deployFlags())
     ..addCommand('deploy', deployFlags())
+    ..addCommand('destroy', deployFlags())
+    ..addCommand('nuke', deployFlags()) // alias
     ..addCommand('smoke', deployFlags());
 }
 
@@ -100,12 +118,14 @@ void _usage(ArgParser parser) {
 podfly — deploy Serverpod via existing cloud CLIs (not a host)
 
   serverpod create …  →  monorepo + Dockerfile (Serverpod)
-  podfly deploy       →  fly/railway/wrangler/neonctl + config quirks
+  podfly deploy       →  fly/railway/wrangler/… + config quirks
+  podfly destroy      →  tear down API + static web (opt-in DB)
 
 Usage:
   podfly deploy [options]   Doctor → init if needed → deploy
+  podfly destroy [options]  Tear down cloud resources from podfly.yaml
   podfly doctor             Check tools + auth
-  podfly init               Write podfly.yaml only
+  podfly init               Write podfly.yaml only (interactive host picker)
   podfly smoke              HTTP checks only
 
 Deploy options:
@@ -113,33 +133,21 @@ Deploy options:
   --smoke       After deploy, hit smoke: endpoints in podfly.yaml
   --api         API only (skip Flutter web / Pages) — use for mobile
   --web         Web only (or force web even if web.enabled: false)
-  --yes / -y    Non-interactive init defaults
+  --yes / -y    Non-interactive init defaults (skips host/CDN questions!)
   --no-login    Do not open browser logins (CI: use tokens)
   --init        Force wizard; confirms before overwriting podfly.yaml
-  --host        API cloud: fly | railway | digitalocean | render |
-                cloud_run | aws | aws_ecs | azure | hetzner | …
-  --mode        split | monolith   (fly = legacy alias for monolith)
-  --root        Project root (default: cwd)
-  --config      Path to podfly.yaml
+  --host        API cloud: fly | railway | digitalocean | render | …
+  --mode        split | monolith
+  --root / --config
 
-Doctor only requires the CLI for the chosen host (not always Fly).
-Supported API hosts: Fly, Railway, DigitalOcean, Render, Cloud Run, AWS App
-Runner, AWS ECS+ALB, Azure Container Apps, Hetzner Cloud. UI (split): Cloudflare
-Pages, Vercel, Netlify, or GitHub Pages; or host-native static. DB: Neon / Fly PG / Railway PG / DO PG /
-Render PG / SQLite / none.
-Dockerfile: prefer Serverpod's *_server/Dockerfile (podfly does not invent hosts).
+Destroy options:
+  --yes         Required non-interactively; confirm destruction
+  --api / --web Limit what is destroyed (default: both)
+  --database    Also delete managed Postgres (Supabase / Fly PG / …)
+  --dry-run     Print plan only
 
-Install: dart pub global activate podfly
-
-Examples:
-  serverpod create my_app --mini -f && cd my_app
-  podfly deploy --yes --smoke
-
-  podfly deploy --host railway --api --yes --smoke
-  podfly deploy --host digitalocean --yes --smoke
-  podfly deploy --yes --dry-run --no-login   # plan
-  podfly deploy --api --yes --smoke          # mobile / API-only
-  podfly doctor
+Tip: first-time interactive demo — omit --yes so you are asked for cloud + CDN:
+  serverpod create my_app --mini -f && cd my_app && podfly deploy --smoke
 
 Docs: https://pub.dev/packages/podfly · https://github.com/127thousand/podfly
 ''');
@@ -174,6 +182,7 @@ String? _opt(ArgResults g, String name) {
 
 Future<int> _doctor(ArgResults g) async {
   final log = Log();
+  log.banner(subtitle: 'doctor');
   final runner = ProcessRunner(log: log, dryRun: _flag(g, 'dry-run'));
   final doctor = Doctor(
     runner: runner,
@@ -199,6 +208,7 @@ Future<int> _doctor(ArgResults g) async {
 
 Future<int> _init(ArgResults g) async {
   final log = Log();
+  log.banner(subtitle: 'init');
   final root = _root(g);
   final runner = ProcessRunner(log: log, dryRun: _flag(g, 'dry-run'));
   final doctor = Doctor(
@@ -235,6 +245,9 @@ Future<int> _deploy(ArgResults g) async {
   );
 
   final root = _root(g);
+  log.banner(
+    subtitle: dry ? 'deploy (dry-run)' : 'deploy',
+  );
   log.step('podfly deploy${dry ? ' (dry-run)' : ''}');
   log.detail('root: $root');
 
@@ -289,6 +302,14 @@ Future<int> _deploy(ArgResults g) async {
       ).run();
     }
   } else if (forceInit || !configExists) {
+    if (yes) {
+      log.tip(
+        '--yes skips the host/CDN picker (defaults: Fly + Cloudflare). '
+        'Omit --yes for interactive choice.',
+      );
+    } else if (isTty) {
+      log.tip('Interactive setup — pick API cloud and UI CDN when asked.');
+    }
     config = await Initer(
       root: root,
       log: log,
@@ -300,6 +321,13 @@ Future<int> _deploy(ArgResults g) async {
     // configExists is true only when existingPath is non-null and file exists
     config = await PodflyConfig.load(existingPath);
     log.detail('config: $existingPath');
+    log.detail(
+      'host: ${config.host.yamlName}'
+      '${config.web.enabled ? ' · web_host: ${config.webHost.yamlName}' : ' · API-only'}',
+    );
+    if (isTty && !yes) {
+      log.tip('Re-run with --init to change host / CDN / database.');
+    }
   }
 
   final modeOpt = _opt(g, 'mode');
@@ -467,8 +495,51 @@ Future<int> _deploy(ArgResults g) async {
   return 0;
 }
 
+Future<int> _destroy(ArgResults g) async {
+  final log = Log();
+  final dry = _flag(g, 'dry-run');
+  final yes = _flag(g, 'yes');
+  log.banner(subtitle: dry ? 'destroy (dry-run)' : 'destroy');
+  final root = _root(g);
+  final explicit = _opt(g, 'config');
+  final cfgPath = explicit ?? await PodflyConfig.findConfigPath(root);
+  if (cfgPath == null || !await File(cfgPath).exists()) {
+    log.err('No podfly.yaml — nothing to destroy');
+    return 1;
+  }
+  final config = await PodflyConfig.load(cfgPath);
+  log.detail('config: $cfgPath');
+
+  var doApi = true;
+  var doWeb = true;
+  if (_flag(g, 'api') && !_flag(g, 'web')) doWeb = false;
+  if (_flag(g, 'web') && !_flag(g, 'api')) doApi = false;
+
+  final runner = ProcessRunner(log: log, dryRun: dry);
+  final sw = Stopwatch()..start();
+  try {
+    await Destroyer(
+      config: config,
+      runner: runner,
+      log: log,
+      yes: yes,
+    ).run(
+      doApi: doApi,
+      doWeb: doWeb && config.web.enabled,
+      doDatabase: _flag(g, 'database'),
+    );
+  } catch (e) {
+    log.err('$e');
+    return 1;
+  }
+  sw.stop();
+  log.elapsed(sw.elapsed, label: 'Destroy finished');
+  return 0;
+}
+
 Future<int> _smokeOnly(ArgResults g) async {
   final log = Log();
+  log.banner(subtitle: 'smoke');
   final root = _root(g);
   final cfgPath = await PodflyConfig.findConfigPath(root);
   if (cfgPath == null) {

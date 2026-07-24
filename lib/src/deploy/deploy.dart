@@ -61,6 +61,7 @@ class Deployer {
       );
 
   Future<void> run(DeployOptions opts) async {
+    final sw = Stopwatch()..start();
     ensureHostsRegistered();
     final adapter = HostRegistry.require(config.host);
 
@@ -193,27 +194,27 @@ class Deployer {
       if (!ok) throw StateError('smoke checks failed');
     }
 
-    log.step('Done');
+    sw.stop();
+    log.elapsed(sw.elapsed, label: 'Deploy finished');
     if (doWeb) {
       if (lastWebResult?.displayUrl != null) {
-        log.detail('UI:  ${lastWebResult!.displayUrl}');
+        log.ok('UI:  ${lastWebResult!.displayUrl}');
       } else if (cfg.mode == DeployMode.split && cfg.usesStaticWebHost) {
         if (cfg.webHost == StaticWebHost.vercel && cfg.vercel != null) {
           final h = cfg.vercel!.publicHost ?? '${cfg.vercel!.project}.vercel.app';
-          log.detail('UI:  https://$h');
+          log.ok('UI:  https://$h');
         } else if (cfg.webHost == StaticWebHost.netlify && cfg.netlify != null) {
           final h =
               cfg.netlify!.publicHost ?? '${cfg.netlify!.site}.netlify.app';
-          log.detail('UI:  https://$h');
+          log.ok('UI:  https://$h');
         } else if (cfg.webHost == StaticWebHost.githubPages &&
             cfg.githubPages != null) {
           final g = cfg.githubPages!;
           final h = g.publicHost ??
               (g.owner != null ? g.defaultPublicHost(g.owner!) : g.repo);
-          log.detail('UI:  https://$h');
+          log.ok('UI:  https://$h');
         } else if (cfg.cloudflare != null) {
-          log.detail(
-              'UI:  https://${cfg.cloudflare!.project}.pages.dev');
+          log.ok('UI:  https://${cfg.cloudflare!.project}.pages.dev');
         }
       }
     }
@@ -222,8 +223,9 @@ class Deployer {
           lastApiResult?.publicHost ??
           adapter.publicApiBase(cfg) ??
           cfg.web.apiUrlNormalized;
-      log.detail('API: $url');
+      log.ok('API: $url');
     }
+    log.tip('Tear down later: podfly destroy   (add --database to drop managed PG)');
   }
 
   PodflyConfig _withApiUrl(PodflyConfig c, String apiUrl) {
