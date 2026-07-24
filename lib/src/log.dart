@@ -28,23 +28,30 @@ class Log {
 
   String _c(String code, String s) => color ? '$code$s$_reset' : s;
 
-  /// Purple podfly banner (startup).
+  /// Big-letter PODFLY banner (Serverpod-style block font), purple.
   void banner({String? subtitle}) {
     if (quiet) return;
-    final lines = <String>[
-      '',
-      _c(_purpleBold, '  ╔══════════════════════════════════════╗'),
-      _c(_purpleBold, '  ║                                      ║'),
-      _c(_purpleBold, '  ║   ✈  p o d f l y                     ║'),
-      _c(_purpleBold, '  ║      Serverpod → your cloud          ║'),
-      _c(_purpleBold, '  ║                                      ║'),
-      _c(_purpleBold, '  ╚══════════════════════════════════════╝'),
-      if (subtitle != null) _c(_dim, '  $subtitle'),
-      '',
-    ];
-    for (final l in lines) {
-      stdout.writeln(l);
+    // ANSI Shadow–style (same family as `serverpod` CLI wordmarks).
+    const art = r'''
+  ██████╗   ██████╗  ██████╗  ███████╗ ██╗     ██╗   ██╗
+  ██╔══██╗ ██╔═══██╗ ██╔══██╗ ██╔════╝ ██║     ╚██╗ ██╔╝
+  ██████╔╝ ██║   ██║ ██║  ██║ █████╗   ██║      ╚████╔╝ 
+  ██╔═══╝  ██║   ██║ ██║  ██║ ██╔══╝   ██║       ╚██╔╝  
+  ██║      ╚██████╔╝ ██████╔╝ ██║      ███████╗   ██║   
+  ╚═╝       ╚═════╝  ╚═════╝  ╚═╝      ╚══════╝   ╚═╝   
+''';
+    stdout.writeln('');
+    for (final line in art.split('\n')) {
+      if (line.isEmpty) continue;
+      stdout.writeln(_c(_purpleBold, line));
     }
+    stdout.writeln(
+      _c(_dim, '  Serverpod → your cloud'),
+    );
+    if (subtitle != null) {
+      stdout.writeln(_c(_dim, '  $subtitle'));
+    }
+    stdout.writeln('');
   }
 
   void info(String msg) {

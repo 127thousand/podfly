@@ -15,6 +15,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.1] — 2026-07-24
+
+### Changed
+
+- **Banner:** Serverpod-style big-letter `PODFLY` ASCII art in purple (replaces the small box)
+
+---
+
 ## [0.10.0] — 2026-07-24
 
 ### Added
