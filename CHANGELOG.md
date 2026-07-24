@@ -15,6 +15,18 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.6] — 2026-07-24
+
+### Fixed
+
+- **Host capability menus:** each API cloud shows what it supports
+  (`API · monolith · CDN split` or `native web`). Topology choices are built
+  from those flags so Cloud Run / Azure / Hetzner / AWS offer **monolith**.
+- Cloud Run (and peers) can use **CDN split** again (`usesStaticWebHost`).
+- Tip when monolith is unavailable for a host.
+
+---
+
 ## [0.10.5] — 2026-07-24
 
 ### Fixed

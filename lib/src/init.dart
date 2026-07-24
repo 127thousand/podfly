@@ -41,21 +41,23 @@ class Initer {
     final nameDefault = p.basename(root);
     final String name;
     late final AppHost host;
-    final DeployMode mode;
+    late DeployMode mode;
     final String server;
     final String flutter;
     final String region;
     final DatabaseProvider dbProvider;
     final String smokePath;
     final String smokeMethod;
-    late final bool webEnabled;
+    late bool webEnabled;
     var webHost = StaticWebHost.cloudflare;
 
-    // Host menu from registry (✅ = canDeploy)
+    // Host menu: status + what topologies this host supports.
     final hostAdapters = HostRegistry.all;
-    String hostMenuLabel(HostAdapter a) =>
-        '${a.canDeploy ? '✅' : '🗺️'} ${a.label}'
-        '${a.canDeploy ? '' : ' (planned — doctor only for now)'}';
+    String hostMenuLabel(HostAdapter a) {
+      final status = a.canDeploy ? '✅' : '🗺️';
+      final planned = a.canDeploy ? '' : ' — planned (doctor only)';
+      return '$status ${a.label}  ·  ${a.capabilitySummary}$planned';
+    }
 
     if (yes || !isTty) {
       name = nameDefault;
@@ -132,47 +134,71 @@ class Initer {
         log.warn(w);
       }
 
-      // One clear topology menu (avoids "monolith" with web disabled).
-      if (hostAdapter.supportsAllInOneWeb || hostAdapter.deploysWebNatively) {
-        final topoDefault = surface.deployWeb ? 0 : 2;
-        final topoIdx = await choose(
-          surface.deployApiOnly
-              ? 'Deploy topology (project looks mobile/API-first)'
-              : 'Deploy topology',
-          [
-            '🧱 Monolith — Flutter web + API together on ${hostAdapter.label} (one URL)',
-            '🔀 Split — Flutter web on a CDN + API on ${hostAdapter.label}',
-            '📱 API only — no Flutter web (mobile / other clients)',
-          ],
-          defaultIndex: topoDefault.clamp(0, 2),
+      // Topology options depend on the host (shown above in the host menu).
+      log.detail(
+        '${hostAdapter.label} supports: ${hostAdapter.capabilitySummary}',
+      );
+
+      final topoLabels = <String>[];
+      final topoActions = <void Function()>[];
+
+      if (hostAdapter.supportsAllInOneWeb) {
+        topoLabels.add(
+          '🧱 Monolith — Flutter web + API on ${hostAdapter.label} (one URL)',
         );
-        switch (topoIdx) {
-          case 0: // monolith
-            webEnabled = true;
-            mode = DeployMode.monolith;
-          case 1: // split
-            webEnabled = true;
-            mode = DeployMode.split;
-          default: // api only
-            webEnabled = false;
-            mode = DeployMode.monolith; // API-only still uses single process
-        }
-      } else {
-        // Host cannot embed web — split CDN or API only.
-        final webIdx = await choose(
-          'What should podfly deploy?',
-          [
-            '🔀 API + Flutter web on a static CDN',
-            '📱 API only (no Flutter web)',
-          ],
-          defaultIndex: surface.deployWeb ? 0 : 1,
-        );
-        webEnabled = webIdx == 0;
-        mode = webEnabled ? DeployMode.split : DeployMode.monolith;
+        topoActions.add(() {
+          webEnabled = true;
+          mode = DeployMode.monolith;
+        });
       }
+      if (hostAdapter.deploysWebNatively) {
+        topoLabels.add(
+          '🏠 ${hostAdapter.label} web — Flutter UI as a service on '
+          '${hostAdapter.label} (with the API)',
+        );
+        topoActions.add(() {
+          webEnabled = true;
+          mode = DeployMode.split; // native web path, not third-party CDN
+        });
+      }
+      if (hostAdapter.supportsSplitCdn) {
+        topoLabels.add(
+          '🔀 CDN split — Flutter web on Cloudflare/Vercel/… + API on '
+          '${hostAdapter.label}',
+        );
+        topoActions.add(() {
+          webEnabled = true;
+          mode = DeployMode.split;
+        });
+      }
+      topoLabels.add('📱 API only — no Flutter web (mobile / other clients)');
+      topoActions.add(() {
+        webEnabled = false;
+        mode = DeployMode.monolith;
+      });
+
+      if (!hostAdapter.supportsAllInOneWeb && !hostAdapter.deploysWebNatively) {
+        log.tip(
+          'Monolith (web+API one process) is not automated for '
+          '${hostAdapter.label} yet — use CDN split or API only.',
+        );
+      }
+
+      final defaultTopo = surface.deployWeb
+          ? 0
+          : (topoLabels.length - 1); // prefer last = API only when mobile-like
+      final topoIdx = await choose(
+        surface.deployApiOnly
+            ? 'Deploy topology for ${hostAdapter.label} (project looks mobile/API-first)'
+            : 'Deploy topology for ${hostAdapter.label}',
+        topoLabels,
+        defaultIndex: defaultTopo.clamp(0, topoLabels.length - 1),
+      );
+      topoActions[topoIdx]();
 
       final needsStaticCdn = mode == DeployMode.split &&
           webEnabled &&
+          hostAdapter.supportsSplitCdn &&
           !hostAdapter.deploysWebNatively;
       if (needsStaticCdn) {
         final cdnIdx = await choose(
@@ -312,16 +338,11 @@ class Initer {
         );
     }
 
+    // CDN project block only when this host uses a third-party static host.
+    final hostAdapterFinal = HostRegistry.require(host);
     final splitStatic = mode == DeployMode.split &&
         webEnabled &&
-        host != AppHost.railway &&
-        host != AppHost.digitalOcean &&
-        host != AppHost.render &&
-        host != AppHost.cloudRun &&
-        host != AppHost.aws &&
-        host != AppHost.awsEcs &&
-        host != AppHost.azure &&
-        host != AppHost.hetzner;
+        hostAdapterFinal.supportsSplitCdn;
 
     final config = PodflyConfig(
       root: root,

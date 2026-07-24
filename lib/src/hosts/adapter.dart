@@ -33,11 +33,30 @@ abstract class HostAdapter {
   /// Extra YAML aliases (e.g. `gcp` → `cloud_run`).
   List<String> get idAliases => const [];
 
-  /// Hosts that fit multi-port / static web on the same machine.
+  /// Hosts that can embed Flutter web in the API process/image (one URL).
+  ///
+  /// podfly builds Flutter web and copies into `*_server/web/app` before deploy.
   bool get supportsAllInOneWeb => false;
 
-  /// When true, Flutter web is deployed via [deployWeb] (not Cloudflare Pages).
+  /// When true, Flutter web is deployed via [deployWeb] on this host
+  /// (separate service), not a third-party static CDN.
   bool get deploysWebNatively => false;
+
+  /// Whether split mode may use Cloudflare/Vercel/Netlify/GitHub Pages for UI.
+  /// Default true when the host does not ship web natively.
+  bool get supportsSplitCdn => !deploysWebNatively;
+
+  /// Short capability tags for interactive menus, e.g. `API · monolith · CDN`.
+  String get capabilitySummary {
+    final caps = <String>['API'];
+    if (supportsAllInOneWeb) caps.add('monolith');
+    if (deploysWebNatively) {
+      caps.add('native web');
+    } else if (supportsSplitCdn) {
+      caps.add('CDN split');
+    }
+    return caps.join(' · ');
+  }
 
   /// Database providers this host can automate (or sensibly pair with).
   List<DatabaseProvider> get supportedDatabases => const [

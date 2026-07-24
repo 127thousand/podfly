@@ -54,6 +54,9 @@ class HetznerHost extends HostAdapter {
   String get configKey => 'hetzner';
 
   @override
+  bool get supportsAllInOneWeb => true;
+
+  @override
   List<DatabaseProvider> get supportedDatabases => const [
         DatabaseProvider.none,
         DatabaseProvider.neon,

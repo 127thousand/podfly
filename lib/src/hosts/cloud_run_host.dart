@@ -47,6 +47,10 @@ class CloudRunHost extends HostAdapter {
   @override
   String get configKey => 'cloud_run';
 
+  /// One container: Serverpod + Flutter web under `web/app` (see examples).
+  @override
+  bool get supportsAllInOneWeb => true;
+
   @override
   List<DatabaseProvider> get supportedDatabases => const [
         DatabaseProvider.none,

@@ -51,6 +51,9 @@ class AzureHost extends HostAdapter {
   String get configKey => 'azure';
 
   @override
+  bool get supportsAllInOneWeb => true;
+
+  @override
   List<DatabaseProvider> get supportedDatabases => const [
         DatabaseProvider.none,
         DatabaseProvider.neon,

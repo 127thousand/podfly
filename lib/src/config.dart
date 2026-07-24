@@ -1559,20 +1559,22 @@ class PodflyConfig {
   final SmokeConfig? smoke;
 
   /// True when split mode should push Flutter web to a static CDN.
+  ///
+  /// Hosts that [HostAdapter.deploysWebNatively] (Railway, DO, Render) use their
+  /// own web service instead. Fly / Cloud Run / AWS / Azure / Hetzner use a CDN.
   bool get usesStaticWebHost {
     if (mode != DeployMode.split || !web.enabled) return false;
-    // Avoid circular host.adapter during partial construction — check enum set.
     switch (host) {
       case AppHost.railway:
       case AppHost.digitalOcean:
       case AppHost.render:
+        return false; // native web services
+      case AppHost.fly:
       case AppHost.cloudRun:
       case AppHost.aws:
       case AppHost.awsEcs:
       case AppHost.azure:
       case AppHost.hetzner:
-        return false;
-      case AppHost.fly:
         return true;
     }
   }

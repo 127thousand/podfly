@@ -42,6 +42,10 @@ class AwsHost extends HostAdapter {
   @override
   bool get canDeploy => true;
 
+  /// Static web can ship in the same image (HTTP only — no WebSockets on App Runner).
+  @override
+  bool get supportsAllInOneWeb => true;
+
   @override
   AppHost get appHost => AppHost.aws;
 
