@@ -15,6 +15,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.11] — 2026-07-24
+
+### Fixed
+
+- **`web.build: wasm` on nginx hosts:** serve `.mjs` as `text/javascript` (Alpine
+  mime.types defaults to `application/octet-stream`, so browsers reject
+  `main.dart.mjs` after a successful first paint / cold cache).
+
+---
+
 ## [0.10.10] — 2026-07-24
 
 ### Added

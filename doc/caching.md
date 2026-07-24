@@ -70,9 +70,25 @@ Must be exactly **`application/wasm`**. A duplicated header such as
 `application/wasm,application/wasm` (from nginx `add_header Content-Type`
 stacked on `mime.types`) makes browsers reject the module.
 
+For **`web.build: wasm`** (`flutter build web --wasm`), also check:
+
+```bash
+curl -sI https://your-web-host/main.dart.mjs | grep -i content-type
+```
+
+Must be **`text/javascript`** (or `application/javascript`). Alpine nginx has
+no `.mjs` in `mime.types`, so the default is `application/octet-stream` and
+Chrome fails with *Expected a JavaScript-or-Wasm module script*.
+
 **podfly nginx template** uses:
 
 ```nginx
+location ~* \.mjs$ {
+    types { }
+    default_type text/javascript;
+    try_files $uri =404;
+}
+
 location ~* \.wasm$ {
     types { }
     default_type application/wasm;
@@ -81,9 +97,10 @@ location ~* \.wasm$ {
 }
 ```
 
-The build already ships `build/web/canvaskit/*.wasm`. Pages serves them with
-long cache headers (below). **Do not** pass `--web-resources-cdn` in the
-podfly build (we intentionally omit it).
+The build already ships `build/web/canvaskit/*.wasm` (and `main.dart.mjs` /
+`main.dart.wasm` for `--wasm`). Pages serves them with long cache headers
+(below). **Do not** pass `--web-resources-cdn` for same-origin CanvasKit builds
+(we intentionally omit it in `web.build: canvaskit`).
 
 ### 4. Cache-Control strategy (Cloudflare Pages)
 

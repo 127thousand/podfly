@@ -13,6 +13,17 @@
 /main.dart.js
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
+# dart2wasm (flutter build web --wasm)
+/main.dart.mjs
+  Content-Type: text/javascript
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/*.mjs
+  Content-Type: text/javascript
+
+/*.wasm
+  Content-Type: application/wasm
+
 /flutter.js
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
