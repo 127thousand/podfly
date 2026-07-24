@@ -95,8 +95,9 @@ class Initer {
       dbProvider = detection.need == DatabaseNeed.required
           ? DatabaseProvider.neon
           : DatabaseProvider.none;
-      smokePath = '/';
-      smokeMethod = 'GET';
+      // Serverpod mini default greeting endpoint (used by --smoke).
+      smokePath = '/greeting/hello';
+      smokeMethod = 'POST';
       log.detail('using defaults (--yes / non-TTY); host: ${host.yamlName}');
     } else {
       name = await prompt('App name', defaultValue: nameDefault);
@@ -256,8 +257,13 @@ class Initer {
         defaultIndex: defaultDbIdx.clamp(0, dbLabels.length - 1),
       );
       dbProvider = dbProviders[dbIdx];
-      smokeMethod = await prompt('Smoke HTTP method', defaultValue: 'POST');
-      smokePath = await prompt('Smoke API path', defaultValue: '/');
+      // Smoke checks: sensible Serverpod defaults — edit smoke: in podfly.yaml
+      // if you need a custom health endpoint. Don't bother users mid-wizard.
+      smokeMethod = 'POST';
+      smokePath = '/greeting/hello';
+      log.detail(
+        'smoke check will use POST /greeting/hello (edit smoke: in podfly.yaml to change)',
+      );
     }
 
     // DNS-friendly names prefer hyphens.

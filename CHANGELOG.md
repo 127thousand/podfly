@@ -15,6 +15,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.7] — 2026-07-24
+
+### Fixed
+
+- **Wizard:** stop asking for smoke HTTP method/path — default `POST /greeting/hello`
+  (Serverpod mini). Override via `smoke:` in `podfly.yaml` if needed.
+
+---
+
 ## [0.10.6] — 2026-07-24
 
 ### Fixed
