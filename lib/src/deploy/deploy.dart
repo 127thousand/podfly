@@ -116,12 +116,6 @@ class Deployer {
       } catch (_) {/* keep in-memory */}
     }
 
-    // Mobile CI: write pipeline files only (Codemagic / GHA). Does not build
-    // or publish — runners/dashboard execute workflows.
-    await CodemagicYamlWriter(config: cfg, runner: runner, log: log).ensure();
-    await GithubActionsMobileWriter(config: cfg, runner: runner, log: log)
-        .ensure();
-
     final doWeb = opts.doWeb && cfg.web.enabled;
     final doApi = opts.doApi;
     if (opts.doWeb && !cfg.web.enabled) {
@@ -178,7 +172,20 @@ class Deployer {
     }
     if (doApi && !nativeWeb) {
       lastApiResult = await adapter.deployApi(buildCtx);
+      final live = lastApiResult?.displayUrl ?? lastApiResult?.publicHost;
+      if (live != null) {
+        final url = live.startsWith('http')
+            ? (live.endsWith('/') ? live : '$live/')
+            : 'https://$live/';
+        cfg = _withApiUrl(cfg, url);
+      }
     }
+
+    // Mobile CI after API URL is known: create pipeline files if missing, and
+    // re-sync SERVER_URL / dart-define into existing workflows (never full rewrite).
+    await CodemagicYamlWriter(config: cfg, runner: runner, log: log).ensure();
+    await GithubActionsMobileWriter(config: cfg, runner: runner, log: log)
+        .ensure();
 
     if (opts.smoke && !runner.dryRun) {
       final smokeCfg = await _smokeConfig(cfg);

@@ -54,9 +54,10 @@ Workflows (when enabled):
 `SERVER_URL` (or `web.server_url_define`) is baked from **`web.api_url`** so the
 mobile app talks to the same API podfly just deployed.
 
-podfly **never overwrites** an existing `codemagic.yaml` (hand-tuned signing
-must not be clobbered). Delete the file and re-deploy to regenerate, or edit
-`SERVER_URL` by hand when the API host changes.
+podfly **does not rewrite** an existing `codemagic.yaml` wholesale (hand-tuned
+signing stays). Each deploy **re-syncs** `$SERVER_URL` / `web.server_url_define`
+lines from `web.api_url` (marked `# podfly:api_url`). Delete the file only if
+you want a full regenerate.
 
 ## One-time Codemagic setup
 

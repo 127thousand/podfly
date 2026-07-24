@@ -39,7 +39,17 @@ web:
 | `*_flutter/fastlane/Appfile` | bundle id / package stubs |
 | `*_flutter/fastlane/Matchfile` | match stub (optional signing repo) |
 
-All writes are **if missing only** (never overwrite hand-tuned files).
+**Create** missing files only (never full-overwrite hand-tuned workflows/Fastlane).
+
+Each **`podfly deploy`** (after the API URL is known) **re-syncs** URL lines in
+existing workflows from `web.api_url` / the live host:
+
+```yaml
+          SERVER_URL: https://my-api.fly.dev  # podfly:api_url
+```
+
+Also updates `--dart-define=SERVER_URL=…` in compile-only scripts. Fastfile reads
+`ENV` (no hard-coded host). Structure, secrets, and custom steps stay intact.
 
 `SERVER_URL` (or `web.server_url_define`) is set in the workflow env from
 `web.api_url` and passed into Flutter via `--dart-define`.

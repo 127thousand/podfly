@@ -5,11 +5,16 @@ import 'package:path/path.dart' as p;
 import '../config.dart';
 import '../log.dart';
 import '../process_runner.dart';
+import 'api_url_sync.dart';
 
 /// Writes [CodemagicConfig.path] for Serverpod monorepos (Flutter iOS/Android).
 ///
 /// Does **not** trigger builds or manage signing — generate config only.
 /// Trigger via Codemagic dashboard or REST API (`POST /builds`).
+///
+/// On each deploy: create file if missing; if present, **sync** `SERVER_URL`
+/// (or [WebConfig.serverUrlDefine]) from [WebConfig.apiUrl] without rewriting
+/// the rest of the file.
 class CodemagicYamlWriter {
   CodemagicYamlWriter({
     required this.config,
@@ -22,7 +27,7 @@ class CodemagicYamlWriter {
   final Log log;
 
   /// When [mobile.provider] is codemagic and [writeYaml] is true, write
-  /// `codemagic.yaml` if missing. Never overwrites an existing file.
+  /// `codemagic.yaml` if missing; always sync API URL when the file exists.
   Future<void> ensure() async {
     if (config.mobile.provider != MobileProvider.codemagic) return;
     final cm = config.mobile.codemagicOrDefault;
@@ -37,8 +42,7 @@ class CodemagicYamlWriter {
 
     final path = p.join(config.root, cm.path);
     if (await File(path).exists()) {
-      log.detail('${cm.path} already present — leaving in place '
-          '(edit SERVER_URL / workflows by hand or delete to regenerate)');
+      await _syncApiUrl(path);
       return;
     }
 
@@ -50,6 +54,33 @@ class CodemagicYamlWriter {
     await File(path).writeAsString(body);
     log.ok('wrote ${p.relative(path, from: config.root)} '
         '(Codemagic iOS/Android — connect repo + signing in dashboard)');
+  }
+
+  Future<void> _syncApiUrl(String path) async {
+    final rel = p.relative(path, from: config.root);
+    final raw = await File(path).readAsString();
+    final result = MobileApiUrlSync.apply(
+      raw,
+      defineName: config.web.serverUrlDefine,
+      apiUrl: config.web.apiUrlNormalized,
+    );
+    if (!result.changed) {
+      log.detail(
+        '$rel — API URL already '
+        '${MobileApiUrlSync.apiForDefine(config.web.apiUrlNormalized)}',
+      );
+      return;
+    }
+    if (runner.dryRun) {
+      log.dry('sync API URL in $rel (${result.replacements} site(s))');
+      return;
+    }
+    await File(path).writeAsString(result.text);
+    log.ok(
+      'synced ${config.web.serverUrlDefine} → '
+      '${MobileApiUrlSync.apiForDefine(config.web.apiUrlNormalized)} in $rel '
+      '(${result.replacements} site(s))',
+    );
   }
 
   /// Pure generator for tests / force-regenerate tooling.
@@ -76,8 +107,8 @@ class CodemagicYamlWriter {
     buf.writeln('#   3. Run workflow ios-ipa / android-appbundle from the UI');
     buf.writeln('#      or: POST https://api.codemagic.io/builds  (x-auth-token)');
     buf.writeln('#');
-    buf.writeln('# podfly does not overwrite this file once it exists.');
-    buf.writeln('# Sync SERVER_URL with web.api_url in podfly.yaml when the API host changes.');
+    buf.writeln('# Structure is left alone after create; each deploy re-syncs');
+    buf.writeln('# $define lines marked # ${MobileApiUrlSync.marker} from web.api_url.');
     buf.writeln('#');
     buf.writeln('# Docs: https://docs.codemagic.io/flutter-configuration/flutter-projects/');
     buf.writeln('#       https://github.com/127thousand/podfly/blob/main/doc/codemagic.md');
@@ -142,7 +173,8 @@ class CodemagicYamlWriter {
     buf.writeln('      cocoapods: default');
     buf.writeln('      vars:');
     buf.writeln('        BUNDLE_ID: $bundle');
-    buf.writeln('        $define: $apiUrl');
+    buf.writeln(
+        '        $define: $apiUrl  # ${MobileApiUrlSync.marker}');
     if (cm.appId != null) {
       buf.writeln('        # CODEMAGIC_APP_ID: ${cm.appId}');
     }
@@ -216,7 +248,8 @@ class CodemagicYamlWriter {
     buf.writeln('      flutter: stable');
     buf.writeln('      vars:');
     buf.writeln('        PACKAGE_NAME: $package');
-    buf.writeln('        $define: $apiUrl');
+    buf.writeln(
+        '        $define: $apiUrl  # ${MobileApiUrlSync.marker}');
     buf.writeln();
     buf.writeln('    cache:');
     buf.writeln('      cache_paths:');

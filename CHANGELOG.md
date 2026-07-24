@@ -22,8 +22,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
     under the Flutter package; workflows run `bundle exec fastlane` (lanes: `build` /
     `ios beta` / `android internal`). Store upload steps commented until secrets are set.
   - **`fastlane: false`** — compile-only plain `flutter build` workflows
-  - Same `SERVER_URL` dart-define; never overwrites existing files
+  - Same `SERVER_URL` dart-define; never full-overwrites existing files
   - **[doc/github_actions_mobile.md](doc/github_actions_mobile.md)**
+- **Mobile API URL sync** — each `podfly deploy` rewrites only `SERVER_URL` /
+  `--dart-define=…` lines in existing GHA workflows and `codemagic.yaml` from
+  the live/configured API URL (`# podfly:api_url`); runs after API deploy so the
+  host is known
 - **`redis.provider: upstash`** — optional Serverpod Redis (cache/PubSub)
   - `upstash redis create/list/get` when `provision: true`
   - Sidecar `.podfly_upstash_redis.json`; patches `production.yaml` + `passwords.yaml`

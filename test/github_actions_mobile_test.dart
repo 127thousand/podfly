@@ -142,4 +142,54 @@ void main() {
     expect(await ff.readAsString(), startsWith('# hand'));
     await dir.delete(recursive: true);
   });
+
+  test('ensure syncs SERVER_URL in existing workflow without full rewrite',
+      () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_gha_sync_');
+    final log = Log(quiet: true);
+    final runner = ProcessRunner(log: log);
+    final wfDir = Directory('${dir.path}/.github/workflows')
+      ..createSync(recursive: true);
+    final android = File('${wfDir.path}/mobile-android.yml');
+    await android.writeAsString('''
+# hand-tuned header — must survive
+name: Mobile Android
+jobs:
+  fastlane:
+    steps:
+      - name: Fastlane
+        env:
+          SERVER_URL: https://old.example.com
+          KEEP_ME: yes
+        run: bundle exec fastlane android build
+''');
+    final c = PodflyConfig(
+      root: dir.path,
+      mode: DeployMode.monolith,
+      name: 'm',
+      server: 'm_server',
+      flutter: 'm_flutter',
+      fly: FlyConfig(app: 'm', region: 'iad'),
+      database: DatabaseConfig(provider: DatabaseProvider.none),
+      mobile: MobileConfig(
+        provider: MobileProvider.githubActions,
+        githubActions: GithubActionsMobileConfig(
+          fastlane: true,
+          ios: false,
+        ),
+      ),
+      web: WebConfig(enabled: false, apiUrl: 'https://new.example.com/'),
+    );
+    await GithubActionsMobileWriter(config: c, runner: runner, log: log)
+        .ensure();
+    final text = await android.readAsString();
+    expect(text, startsWith('# hand-tuned header'));
+    expect(text, contains('KEEP_ME: yes'));
+    expect(
+      text,
+      contains('SERVER_URL: https://new.example.com  # podfly:api_url'),
+    );
+    expect(text, isNot(contains('old.example.com')));
+    await dir.delete(recursive: true);
+  });
 }
