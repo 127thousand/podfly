@@ -134,12 +134,19 @@ podfly inspects the Flutter package at init:
 ```yaml
 web:
   enabled: false   # mobile clients hit the API; no Pages / no flutter build web
+
+mobile:
+  provider: codemagic   # write codemagic.yaml for iOS/Android store CI
 ```
 
 ```bash
-podfly deploy --api          # force API only
+podfly deploy --api          # force API only (+ codemagic.yaml if mobile.provider set)
 podfly deploy --web          # force web half (even if enabled: false)
 ```
+
+API-only init defaults `mobile.provider: codemagic` and writes `codemagic.yaml` when
+missing (never overwrites). Store signing stays in the Codemagic dashboard — see
+[codemagic.md](codemagic.md).
 
 Sample: [`example/mobile_api_only`](../example/mobile_api_only).
 

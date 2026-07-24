@@ -10,6 +10,7 @@ import '../log.dart';
 import '../process_runner.dart';
 import '../smoke.dart';
 import '../templates.dart';
+import '../mobile/codemagic.dart';
 import '../web/build.dart';
 import '../web/static_web.dart';
 
@@ -113,6 +114,10 @@ class Deployer {
         cfg = await PodflyConfig.load(cfg.configPath);
       } catch (_) {/* keep in-memory */}
     }
+
+    // Mobile CI: write codemagic.yaml when mobile.provider: codemagic
+    // (does not build or publish — store CI runs in Codemagic).
+    await CodemagicYamlWriter(config: cfg, runner: runner, log: log).ensure();
 
     final doWeb = opts.doWeb && cfg.web.enabled;
     final doApi = opts.doApi;
@@ -235,6 +240,7 @@ class Deployer {
       githubPages: c.githubPages,
       database: c.database,
       redis: c.redis,
+      mobile: c.mobile,
       web: WebConfig(
         enabled: c.web.enabled,
         serverUrlDefine: c.web.serverUrlDefine,
@@ -286,6 +292,7 @@ class Deployer {
       githubPages: c.githubPages,
       database: c.database,
       redis: c.redis,
+      mobile: c.mobile,
       web: WebConfig(
         enabled: c.web.enabled,
         serverUrlDefine: c.web.serverUrlDefine,

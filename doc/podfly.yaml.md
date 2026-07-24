@@ -443,6 +443,32 @@ database:
 
 See [supabase.md](supabase.md).
 
+## `mobile`
+
+Store / binary CI for Flutter **iOS/Android** (not Flutter web). Orthogonal to `host:`.
+
+```yaml
+mobile:
+  provider: codemagic   # none | codemagic
+  codemagic:
+    path: codemagic.yaml
+    write_yaml: true    # write if missing; never overwrite
+    ios: true
+    android: true
+    instance_type: mac_mini_m2
+    # bundle_id: com.example.app
+    # app_store_connect: MyIntegration
+    # publish_testflight: false
+    # publish_play: false
+    # app_id: <codemagic-app-uuid>
+```
+
+On API-only init (`web.enabled: false`), podfly defaults `provider: codemagic`.
+`podfly deploy` writes `codemagic.yaml` with workflows that bake `web.api_url` into
+`--dart-define` (`web.server_url_define`, default `SERVER_URL`).
+
+See [codemagic.md](codemagic.md).
+
 ## `web`
 
 | Key | Type | Default | Description |

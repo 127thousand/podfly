@@ -419,6 +419,8 @@ class RenderHost extends HostAdapter {
       render: r.copyWith(webServiceId: id),
       cloudflare: cfg.cloudflare,
       database: cfg.database,
+      redis: cfg.redis,
+      mobile: cfg.mobile,
       web: cfg.web,
       smoke: cfg.smoke,
     );
@@ -446,6 +448,8 @@ class RenderHost extends HostAdapter {
       render: r.copyWith(webServiceId: serviceId, webPublicHost: host),
       cloudflare: cfg.cloudflare,
       database: cfg.database,
+      redis: cfg.redis,
+      mobile: cfg.mobile,
       web: cfg.web,
       smoke: cfg.smoke,
     );
@@ -818,6 +822,8 @@ class RenderHost extends HostAdapter {
       render: r.copyWith(serviceId: id),
       cloudflare: cfg.cloudflare,
       database: cfg.database,
+      redis: cfg.redis,
+      mobile: cfg.mobile,
       web: cfg.web,
       smoke: cfg.smoke,
     );
@@ -846,6 +852,8 @@ class RenderHost extends HostAdapter {
       render: r.copyWith(serviceId: serviceId, publicHost: host),
       cloudflare: cfg.cloudflare,
       database: cfg.database,
+      redis: cfg.redis,
+      mobile: cfg.mobile,
       web: WebConfig(
         enabled: cfg.web.enabled,
         serverUrlDefine: cfg.web.serverUrlDefine,

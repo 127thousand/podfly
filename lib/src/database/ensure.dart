@@ -867,6 +867,7 @@ class DatabaseEnsure {
         ),
       ),
       redis: config.redis,
+      mobile: config.mobile,
       web: config.web,
       smoke: config.smoke,
     );

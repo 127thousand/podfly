@@ -321,6 +321,13 @@ class Initer {
       cloudflare:
           splitStatic ? CloudflareConfig(project: name) : null,
       database: database,
+      // Mobile-first monorepos get Codemagic scaffolding (codemagic.yaml).
+      mobile: !webEnabled
+          ? MobileConfig(
+              provider: MobileProvider.codemagic,
+              codemagic: CodemagicConfig(),
+            )
+          : MobileConfig(),
       web: WebConfig(
         enabled: webEnabled,
         apiUrl: apiUrl,

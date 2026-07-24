@@ -49,13 +49,21 @@ Every push to `main` runs `.github/workflows/deploy.yml`.
 example/mobile_api_only/          ← monorepo root for this example
   podfly.yaml                     ← product config (also auto-created by deploy)
   fly.toml                        ← Fly platform config (also auto-created if missing)
+  codemagic.yaml                  ← iOS/Android CI (generated; Codemagic dashboard)
   .github/workflows/
-    deploy.yml                    ← push to main → Fly
+    deploy.yml                    ← push to main → Fly API
     plan.yml                      ← PR → dry-run only
   mobile_api_only_server/         ← Serverpod + Dockerfile
   mobile_api_only_client/
-  mobile_api_only_flutter/        ← android/ios only (not deployed by podfly)
+  mobile_api_only_flutter/        ← android/ios — built by Codemagic, not podfly
 ```
+
+| Layer | Who ships it |
+|-------|----------------|
+| Serverpod API | **podfly** + Fly (this example’s GHA) |
+| Flutter iOS/Android | **Codemagic** (`codemagic.yaml`) — signing/store keys in dashboard |
+
+See [doc/codemagic.md](../../doc/codemagic.md).
 
 ---
 

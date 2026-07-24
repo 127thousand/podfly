@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import 'config.dart';
 import 'hosts/hosts.dart';
 import 'log.dart';
@@ -634,6 +636,27 @@ class Doctor {
           log.warn(
               'database.provider is none but migrations/ exist — production has no DB');
         }
+      }
+    }
+    if (config.mobile.provider == MobileProvider.codemagic) {
+      final cm = config.mobile.codemagicOrDefault;
+      final yamlPath = p.join(config.root, cm.path);
+      if (File(yamlPath).existsSync()) {
+        log.detail(
+          'mobile: codemagic — ${cm.path} present '
+          '(signing/store keys live in Codemagic dashboard; '
+          'see doc/codemagic.md)',
+        );
+      } else if (cm.writeYaml) {
+        log.detail(
+          'mobile: codemagic — ${cm.path} will be written on next '
+          'podfly deploy (or run deploy --dry-run to plan)',
+        );
+      } else {
+        log.warn(
+          'mobile.provider: codemagic but ${cm.path} missing and '
+          'write_yaml: false — add the file or set write_yaml: true',
+        );
       }
     }
   }

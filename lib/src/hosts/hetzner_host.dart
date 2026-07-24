@@ -1064,6 +1064,8 @@ done
       ),
       cloudflare: cfg.cloudflare,
       database: cfg.database,
+      redis: cfg.redis,
+      mobile: cfg.mobile,
       web: WebConfig(
         enabled: cfg.web.enabled,
         serverUrlDefine: cfg.web.serverUrlDefine,

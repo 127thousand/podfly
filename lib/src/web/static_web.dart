@@ -245,6 +245,7 @@ class StaticWebDeployer {
       githubPages: cfg.githubPages,
       database: cfg.database,
       redis: cfg.redis,
+      mobile: cfg.mobile,
       web: cfg.web,
       smoke: cfg.smoke,
     );
@@ -475,6 +476,7 @@ class StaticWebDeployer {
       githubPages: cfg.githubPages,
       database: cfg.database,
       redis: cfg.redis,
+      mobile: cfg.mobile,
       web: cfg.web,
       smoke: cfg.smoke,
     );
@@ -794,6 +796,7 @@ class StaticWebDeployer {
       ),
       database: cfg.database,
       redis: cfg.redis,
+      mobile: cfg.mobile,
       web: cfg.web,
       smoke: cfg.smoke,
     );

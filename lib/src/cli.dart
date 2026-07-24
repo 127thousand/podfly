@@ -415,6 +415,8 @@ Future<int> _deploy(ArgResults g) async {
                       ? GitHubPagesConfig(repo: config.name)
                       : null))),
       database: config.database,
+      redis: config.redis,
+      mobile: config.mobile,
       web: config.web,
       smoke: config.smoke,
     );

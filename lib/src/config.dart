@@ -1311,6 +1311,116 @@ class SmokeConfig {
       };
 }
 
+/// Mobile CI provider (store builds). Not an app host — generates pipeline config.
+enum MobileProvider {
+  none,
+  codemagic,
+}
+
+extension MobileProviderX on MobileProvider {
+  String get yamlName => switch (this) {
+        MobileProvider.none => 'none',
+        MobileProvider.codemagic => 'codemagic',
+      };
+
+  static MobileProvider parse(String? s) => switch (s?.toLowerCase()) {
+        null || '' || 'none' || 'false' => MobileProvider.none,
+        'codemagic' || 'cm' => MobileProvider.codemagic,
+        _ => throw FormatException(
+            'Unknown mobile.provider: $s (use none or codemagic)',
+          ),
+      };
+}
+
+/// Flutter iOS/Android CI via Codemagic (`mobile.provider: codemagic`).
+///
+/// podfly writes [path] (`codemagic.yaml`) with workflows that bake
+/// [WebConfig.apiUrl] into `--dart-define`. Signing and store keys stay in
+/// the Codemagic dashboard — there is no `codemagic deploy` CLI like Fly.
+class CodemagicConfig {
+  CodemagicConfig({
+    this.path = 'codemagic.yaml',
+    this.writeYaml = true,
+    this.ios = true,
+    this.android = true,
+    this.instanceType = 'mac_mini_m2',
+    this.appId,
+    this.bundleId,
+    this.appStoreConnectIntegration,
+    this.publishTestflight = false,
+    this.publishPlay = false,
+    this.androidPackageName,
+  });
+
+  /// Relative to monorepo root.
+  final String path;
+
+  /// Write [path] when missing (never overwrite hand-edited files).
+  final bool writeYaml;
+
+  final bool ios;
+  final bool android;
+
+  /// Codemagic mac instance (e.g. `mac_mini_m2`).
+  final String instanceType;
+
+  /// Codemagic application id (dashboard / REST API). Optional docs only.
+  final String? appId;
+
+  /// iOS bundle id for signing scripts (optional until you enable publish).
+  final String? bundleId;
+
+  /// Name of App Store Connect integration in Codemagic Teams → Integrations.
+  final String? appStoreConnectIntegration;
+
+  /// When true, add TestFlight publish block (needs integration + signing groups).
+  final bool publishTestflight;
+
+  /// When true, add Google Play publish placeholders.
+  final bool publishPlay;
+
+  /// Android applicationId (optional).
+  final String? androidPackageName;
+
+  Map<String, Object?> toMap() => {
+        'path': path,
+        'write_yaml': writeYaml,
+        'ios': ios,
+        'android': android,
+        'instance_type': instanceType,
+        if (appId != null) 'app_id': appId,
+        if (bundleId != null) 'bundle_id': bundleId,
+        if (appStoreConnectIntegration != null)
+          'app_store_connect': appStoreConnectIntegration,
+        'publish_testflight': publishTestflight,
+        'publish_play': publishPlay,
+        if (androidPackageName != null)
+          'android_package_name': androidPackageName,
+      };
+}
+
+/// Mobile client CI (store builds). Orthogonal to [web] and API [AppHost].
+class MobileConfig {
+  MobileConfig({
+    this.provider = MobileProvider.none,
+    this.codemagic,
+  });
+
+  final MobileProvider provider;
+  final CodemagicConfig? codemagic;
+
+  bool get enabled => provider != MobileProvider.none;
+
+  CodemagicConfig get codemagicOrDefault =>
+      codemagic ?? CodemagicConfig();
+
+  Map<String, Object?> toMap() => {
+        'provider': provider.yamlName,
+        if (provider == MobileProvider.codemagic || codemagic != null)
+          'codemagic': (codemagic ?? CodemagicConfig()).toMap(),
+      };
+}
+
 class PodflyConfig {
   PodflyConfig({
     required this.root,
@@ -1335,9 +1445,11 @@ class PodflyConfig {
     this.githubPages,
     required this.database,
     RedisConfig? redis,
+    MobileConfig? mobile,
     required this.web,
     this.smoke,
-  }) : redis = redis ?? RedisConfig();
+  })  : redis = redis ?? RedisConfig(),
+        mobile = mobile ?? MobileConfig();
 
   final String root;
   /// Cloud that runs the Serverpod API container.
@@ -1363,6 +1475,8 @@ class PodflyConfig {
   final GitHubPagesConfig? githubPages;
   /// Optional Serverpod Redis (Upstash, …). Default: disabled.
   final RedisConfig redis;
+  /// Optional mobile CI (Codemagic). Default: disabled.
+  final MobileConfig mobile;
   final DatabaseConfig database;
   final WebConfig web;
   final SmokeConfig? smoke;
@@ -1428,6 +1542,7 @@ class PodflyConfig {
         if (githubPages != null) 'github_pages': githubPages!.toMap(),
         'database': database.toMap(),
         if (redis.enabled || redis.upstash != null) 'redis': redis.toMap(),
+        if (mobile.enabled || mobile.codemagic != null) 'mobile': mobile.toMap(),
         'web': web.toMap(),
         if (smoke != null) 'smoke': smoke!.toMap(),
       };
@@ -1798,6 +1913,32 @@ class PodflyConfig {
         }
         if (u.endpoint != null) buf.writeln('    endpoint: ${u.endpoint}');
         buf.writeln('    port: ${u.port}');
+      }
+    }
+    if (mobile.enabled || mobile.codemagic != null) {
+      buf.writeln();
+      buf.writeln('mobile:');
+      buf.writeln('  provider: ${mobile.provider.yamlName}');
+      if (mobile.provider == MobileProvider.codemagic ||
+          mobile.codemagic != null) {
+        final c = mobile.codemagicOrDefault;
+        buf.writeln('  codemagic:');
+        buf.writeln('    path: ${c.path}');
+        buf.writeln('    write_yaml: ${c.writeYaml}');
+        buf.writeln('    ios: ${c.ios}');
+        buf.writeln('    android: ${c.android}');
+        buf.writeln('    instance_type: ${c.instanceType}');
+        if (c.appId != null) buf.writeln('    app_id: ${c.appId}');
+        if (c.bundleId != null) buf.writeln('    bundle_id: ${c.bundleId}');
+        if (c.appStoreConnectIntegration != null) {
+          buf.writeln(
+              '    app_store_connect: ${c.appStoreConnectIntegration}');
+        }
+        buf.writeln('    publish_testflight: ${c.publishTestflight}');
+        buf.writeln('    publish_play: ${c.publishPlay}');
+        if (c.androidPackageName != null) {
+          buf.writeln('    android_package_name: ${c.androidPackageName}');
+        }
       }
     }
     buf.writeln();
@@ -2382,6 +2523,32 @@ class PodflyConfig {
       smoke = SmokeConfig(api: api, web: webEp);
     }
 
+    MobileConfig mobile = MobileConfig();
+    if (doc['mobile'] != null) {
+      final m = _map(doc['mobile']);
+      final provider = MobileProviderX.parse(m['provider']?.toString());
+      CodemagicConfig? codemagic;
+      if (provider == MobileProvider.codemagic || m['codemagic'] != null) {
+        final c = _map(m['codemagic']);
+        codemagic = CodemagicConfig(
+          path: c['path']?.toString() ?? 'codemagic.yaml',
+          writeYaml: c['write_yaml'] != false,
+          ios: c['ios'] != false,
+          android: c['android'] != false,
+          instanceType: c['instance_type']?.toString() ?? 'mac_mini_m2',
+          appId: c['app_id']?.toString(),
+          bundleId: c['bundle_id']?.toString(),
+          appStoreConnectIntegration: c['app_store_connect']?.toString() ??
+              c['app_store_connect_integration']?.toString(),
+          publishTestflight: c['publish_testflight'] == true,
+          publishPlay: c['publish_play'] == true,
+          androidPackageName: c['android_package_name']?.toString() ??
+              c['package_name']?.toString(),
+        );
+      }
+      mobile = MobileConfig(provider: provider, codemagic: codemagic);
+    }
+
     return PodflyConfig(
       root: root,
       host: host,
@@ -2414,6 +2581,7 @@ class PodflyConfig {
         renderPostgres: renderPg,
       ),
       redis: redis,
+      mobile: mobile,
       web: web,
       smoke: smoke,
     );

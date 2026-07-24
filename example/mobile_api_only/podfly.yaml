@@ -24,6 +24,19 @@ database:
   # Stateless mini example — no Postgres required for /greeting/hello.
   provider: none
 
+# Flutter iOS/Android → Codemagic (writes codemagic.yaml if missing).
+# API still: podfly deploy --api  |  store builds: Codemagic dashboard / REST.
+mobile:
+  provider: codemagic
+  codemagic:
+    path: codemagic.yaml
+    write_yaml: true
+    ios: true
+    android: true
+    instance_type: mac_mini_m2
+    publish_testflight: false
+    publish_play: false
+
 web:
   enabled: false
   api_url: https://podfly-api-only-demo.fly.dev/

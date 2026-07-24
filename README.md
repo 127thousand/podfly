@@ -86,7 +86,7 @@ Same idea for `podfly.yaml`: created on first deploy (`--yes` = non-interactive 
 
 **Examples by cloud** (separate repo, monorepo leaves):  
 [github.com/127thousand/podfly_examples](https://github.com/127thousand/podfly_examples) — e.g. `fly/api_only`, `render/api_postgres`.  
-Package pointer: [`example/mobile_api_only`](example/mobile_api_only) (Fly API-only).
+Package pointer: [`example/mobile_api_only`](example/mobile_api_only) (Fly API-only + Codemagic for iOS/Android).
 
 What deploy automates (Fly path today):
 
@@ -95,9 +95,10 @@ What deploy automates (Fly path today):
 3. Detect web vs **API-only** (e.g. mobile without `web/`)  
 4. Ensure API app exists (needed before Postgres attach)  
 5. Database ensure (`fly_postgres` / `railway_postgres` / neon / none)  
-6. Write `fly.toml` / `railway.toml` if missing; Serverpod-style Dockerfile only if missing  
-7. Patch production `publicHost`  
-8. Build/deploy + optional smoke  
+6. Mobile CI: write `codemagic.yaml` when `mobile.provider: codemagic` (if missing)  
+7. Write `fly.toml` / `railway.toml` if missing; Serverpod-style Dockerfile only if missing  
+8. Patch production `publicHost`  
+9. Build/deploy + optional smoke  
 
 ```bash
 podfly deploy --dry-run
@@ -226,6 +227,16 @@ Most small apps **do not need Redis**. When you run **multiple instances** and n
 | Host-managed Redis | — | Fly/Railway Redis plugins — manual config today |
 
 See [doc/upstash.md](doc/upstash.md).
+
+### Mobile (iOS / Android)
+
+Stores are not PaaS hosts. podfly ships the **API**; Codemagic (or GHA) ships binaries.
+
+| Provider | podfly | Notes |
+|----------|--------|--------|
+| 📱 [**Codemagic**](https://codemagic.io) | ✅ `mobile.provider: codemagic` | Generates **`codemagic.yaml`** (iOS IPA + Android AAB); `SERVER_URL` from `web.api_url`. Signing/store keys in Codemagic UI. No product deploy CLI — trigger via dashboard or REST. |
+
+See [doc/codemagic.md](doc/codemagic.md). API-only init enables this by default.
 
 ---
 

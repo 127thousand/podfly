@@ -11,6 +11,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`mobile.provider: codemagic`** — generate **`codemagic.yaml`** for Flutter iOS/Android
+  - Workflows `ios-ipa` / `android-appbundle` bake `web.api_url` into `--dart-define`
+  - Writes only when missing (never overwrites hand-tuned signing)
+  - API-only init defaults Codemagic on; doctor notes file status
+  - Does **not** trigger builds or manage store secrets (dashboard / REST API)
+  - **[doc/codemagic.md](doc/codemagic.md)** · example `example/mobile_api_only`
 - **`redis.provider: upstash`** — optional Serverpod Redis (cache/PubSub)
   - `upstash redis create/list/get` when `provision: true`
   - Sidecar `.podfly_upstash_redis.json`; patches `production.yaml` + `passwords.yaml`
@@ -25,6 +31,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
   - Doctor: `supabase` + login / `SUPABASE_ACCESS_TOKEN`
   - **[doc/supabase.md](doc/supabase.md)**
 - **Netlify:** `sites:create` when site is missing — `--site-name` alone no longer creates sites
+- **Supabase:** default **session pooler** (IPv4) so Fly DB endpoints do not hang on
+  IPv6-only `db.<ref>.supabase.co`; ignores stale direct `host` overrides
 
 ### Planned (parked)
 

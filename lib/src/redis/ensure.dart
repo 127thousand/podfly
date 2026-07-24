@@ -225,6 +225,7 @@ class RedisEnsure {
           port: port,
         ),
       ),
+      mobile: config.mobile,
       web: config.web,
       smoke: config.smoke,
     );
