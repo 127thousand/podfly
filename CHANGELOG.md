@@ -15,6 +15,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.4] — 2026-07-24
+
+### Changed
+
+- **Interactive menus:** ↑/↓ arrow selection (j/k + Enter) via `mason_logger`
+  instead of numbered `1) 2) 3)` prompts — host, CDN, database, confirmations
+
+---
+
 ## [0.10.3] — 2026-07-24
 
 ### Fixed
