@@ -911,7 +911,7 @@ class CloudRunConfig {
     this.minInstances = 0,
     this.maxInstances = 10,
     this.timeoutSeconds = 300,
-    this.sessionAffinity = false,
+    this.sessionAffinity = true,
     this.executionEnvironment = 'gen2',
     this.cloudSqlInstances = const [],
     this.extraEnv = const {},
@@ -930,7 +930,8 @@ class CloudRunConfig {
   final int maxInstances;
   /// Request timeout (Cloud Run max 3600). Raise for long WebSocket streams.
   final int timeoutSeconds;
-  /// Sticky sessions — recommended for WebSockets when max_instances > 1.
+  /// Sticky sessions — default on so multi-instance WebSocket streams stay
+  /// on one revision instance. Set `session_affinity: false` to disable.
   final bool sessionAffinity;
   /// `gen1` or `gen2` (`gcloud run deploy --execution-environment`). Default gen2.
   final String executionEnvironment;
@@ -2307,7 +2308,7 @@ class PodflyConfig {
         minInstances: int.tryParse('${m['min_instances'] ?? 0}') ?? 0,
         maxInstances: int.tryParse('${m['max_instances'] ?? 10}') ?? 10,
         timeoutSeconds: int.tryParse('${m['timeout_seconds'] ?? 300}') ?? 300,
-        sessionAffinity: m['session_affinity'] == true,
+        sessionAffinity: m['session_affinity'] != false,
         executionEnvironment: () {
           final raw =
               (m['execution_environment'] ?? m['executionEnvironment'] ?? 'gen2')

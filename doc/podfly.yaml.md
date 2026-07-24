@@ -252,7 +252,7 @@ Deploys via `gcloud run deploy --source` (Dockerfile at monorepo root or copied 
 | `min_instances` | int | `0` | Scale-to-zero when 0 |
 | `max_instances` | int | `10` | Max concurrency scale |
 | `timeout_seconds` | int | `300` | Request timeout (max **3600**). Raise for long WebSocket streams |
-| `session_affinity` | bool | `false` | Sticky sessions — recommended for WebSockets when `max_instances` > 1 |
+| `session_affinity` | bool | `true` | Sticky sessions for WebSockets when `max_instances` > 1 (`gcloud --session-affinity`) |
 | `execution_environment` | `gen1` \| `gen2` | **`gen2`** | Passed as `gcloud run deploy --execution-environment` (pinned; not left to CLI default) |
 | `cloud_sql_instances` | list | — | e.g. `project:region:instance` for Cloud SQL Auth Proxy |
 | `env` | map | — | Extra env vars |

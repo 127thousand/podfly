@@ -15,6 +15,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.14] — 2026-07-24
+
+### Changed
+
+- **Cloud Run** `session_affinity` defaults to **`true`** (sticky sessions for
+  WebSocket streams when scaled out). Set `cloud_run.session_affinity: false`
+  to opt out. Omitted YAML key now means on (`!= false`), not off.
+
+---
+
 ## [0.10.13] — 2026-07-24
 
 ### Fixed
