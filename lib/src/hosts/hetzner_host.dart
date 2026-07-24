@@ -1069,15 +1069,7 @@ done
       database: cfg.database,
       redis: cfg.redis,
       mobile: cfg.mobile,
-      web: WebConfig(
-        enabled: cfg.web.enabled,
-        serverUrlDefine: cfg.web.serverUrlDefine,
-        apiUrl: apiUrl,
-        patchBootstrap: cfg.web.patchBootstrap,
-        writeHeaders: cfg.web.writeHeaders,
-        baseHref: cfg.web.baseHref,
-        staticDir: cfg.web.staticDir,
-      ),
+      web: cfg.web.copyWith(apiUrl: apiUrl),
       smoke: cfg.smoke,
     );
     await updated.save();

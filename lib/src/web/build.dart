@@ -22,16 +22,29 @@ class WebBuilder {
     if (!config.web.patchBootstrap) return;
     final dest =
         File(p.join(config.flutterPath, 'web', 'flutter_bootstrap.js'));
-    final marker = 'canvasKitBaseUrl';
+    final sameOrigin = config.web.build.useSameOriginCanvasKit;
+    final marker = sameOrigin ? 'canvasKitBaseUrl' : 'serviceWorker';
     if (await dest.exists()) {
       final existing = await dest.readAsString();
-      if (existing.contains(marker) &&
-          !existing.contains('serviceWorkerSettings')) {
-        log.detail('bootstrap already podfly-style');
+      // Refresh bootstrap when build mode and file disagree on CanvasKit origin.
+      final hasSameOrigin = existing.contains('canvasKitBaseUrl');
+      if (sameOrigin && hasSameOrigin && !existing.contains('serviceWorkerSettings')) {
+        log.detail('bootstrap already podfly-style (same-origin CanvasKit)');
         return;
       }
-      log.warn('web/flutter_bootstrap.js exists; leaving in place '
-          '(set patch_bootstrap and replace manually if needed)');
+      if (!sameOrigin && !hasSameOrigin && existing.contains('unregister')) {
+        log.detail('bootstrap already podfly-style (CDN / wasm)');
+        return;
+      }
+      if (runner.dryRun) {
+        log.dry('rewrite ${dest.path} for web.build=${config.web.build.yamlName}');
+        return;
+      }
+      await dest.writeAsString(_bootstrapSource(sameOrigin: sameOrigin));
+      log.ok(
+        'rewrote ${p.relative(dest.path, from: config.root)} '
+        '(web.build: ${config.web.build.yamlName})',
+      );
       return;
     }
     if (runner.dryRun) {
@@ -39,8 +52,15 @@ class WebBuilder {
       return;
     }
     await dest.parent.create(recursive: true);
-    await dest.writeAsString(readTemplate('flutter_bootstrap.js'));
+    await dest.writeAsString(_bootstrapSource(sameOrigin: sameOrigin));
     log.ok('wrote ${p.relative(dest.path, from: config.root)}');
+  }
+
+  String _bootstrapSource({required bool sameOrigin}) {
+    if (sameOrigin) {
+      return readTemplate('flutter_bootstrap.js');
+    }
+    return readTemplate('flutter_bootstrap_cdn.js');
   }
 
   Future<void> ensureHeadersSource() async {
@@ -58,22 +78,29 @@ class WebBuilder {
     }
   }
 
-  Future<void> build() async {
-    log.step('Build Flutter web');
-    await ensureBootstrap();
-    await ensureHeadersSource();
-
-    // Always build inside the package (asset path bug with external --output).
-    final r = await runner.run(
-      'flutter',
-      [
+  /// Args for `flutter build web` (excluding the `flutter` binary).
+  static List<String> flutterBuildArgs(WebConfig web) => [
         'build',
         'web',
         '--release',
         '--base-href',
-        config.web.baseHref,
-        '--dart-define=${config.web.serverUrlDefine}=${config.web.apiUrlNormalized}',
-      ],
+        web.baseHref,
+        ...web.build.flutterBuildFlags,
+        '--dart-define=${web.serverUrlDefine}=${web.apiUrlNormalized}',
+      ];
+
+  Future<void> build() async {
+    log.step('Build Flutter web (${config.web.build.yamlName})');
+    await ensureBootstrap();
+    await ensureHeadersSource();
+
+    final args = flutterBuildArgs(config.web);
+    log.detail('flutter ${args.join(' ')}');
+
+    // Always build inside the package (asset path bug with external --output).
+    final r = await runner.run(
+      'flutter',
+      args,
       workingDirectory: config.flutterPath,
     );
     if (!r.ok && !runner.dryRun) {
@@ -120,7 +147,7 @@ class WebBuilder {
 
     final jpgCount = await _countFiles(out, '.jpg');
     log.detail('asset jpgs in build: $jpgCount (info only)');
-    log.ok('web → $out');
+    log.ok('web → $out (${config.web.build.yamlName})');
   }
 
   Future<void> _copyDir(String from, String to) async {

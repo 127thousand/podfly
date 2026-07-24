@@ -32,6 +32,10 @@ ENV role=monolith
 COPY --from=server /runtime/ /
 COPY --from=server /app/{{SERVER_DIR}}/build/bundle/ ./
 COPY --from=server /app/{{SERVER_DIR}}/config/ config/
+# Mini Serverpod templates register StaticRoute on web/static at startup — must exist.
+COPY --from=server /app/{{SERVER_DIR}}/web/ web/
+COPY --from=server /app/{{SERVER_DIR}}/migrations/ migrations/
+RUN mkdir -p web/static web/app migrations
 COPY --from=server /app/{{SERVER_DIR}}/lib/src/generated/protocol.yaml \
   lib/src/generated/protocol.yaml
 

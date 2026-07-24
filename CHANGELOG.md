@@ -15,6 +15,23 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.10] — 2026-07-24
+
+### Added
+
+- **`web.build`** Flutter web compile mode (init menu + `podfly.yaml`):
+  - `canvaskit` (default) — same-origin CanvasKit; silences wasm dry-run noise
+  - `canvaskit_cdn` — CanvasKit engine from Flutter CDN (smaller image)
+  - `wasm` — `flutter build web --wasm` (dart2wasm / skwasm)
+- Init asks **Flutter web build** when topology includes web.
+
+### Fixed
+
+- Cloud Run default `api_url` no longer invents a fake `*-region-project.a.run.app`
+  host (was baked into `SERVER_URL` and 404’d form submits).
+
+---
+
 ## [0.10.9] — 2026-07-24
 
 ### Fixed

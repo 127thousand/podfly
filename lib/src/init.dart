@@ -50,6 +50,7 @@ class Initer {
     final String smokeMethod;
     late bool webEnabled;
     var webHost = StaticWebHost.cloudflare;
+    var flutterWebBuild = FlutterWebBuild.canvaskit;
 
     // Host menu: status + what topologies this host supports.
     final hostAdapters = HostRegistry.all;
@@ -80,6 +81,7 @@ class Initer {
       webEnabled = surface.deployWeb;
       // API-only apps don't need Cloudflare Pages.
       mode = webEnabled ? DeployMode.split : DeployMode.monolith;
+      flutterWebBuild = FlutterWebBuild.canvaskit;
 
       final detection = await detectDatabaseNeed(
         p.join(root, server),
@@ -196,6 +198,16 @@ class Initer {
         defaultIndex: defaultTopo.clamp(0, topoLabels.length - 1),
       );
       topoActions[topoIdx]();
+
+      if (webEnabled) {
+        final builds = FlutterWebBuild.values;
+        final buildIdx = await choose(
+          'Flutter web build (first-load size vs fidelity)',
+          builds.map((b) => b.menuLabel).toList(),
+          defaultIndex: 0,
+        );
+        flutterWebBuild = builds[buildIdx];
+      }
 
       final needsStaticCdn = mode == DeployMode.split &&
           webEnabled &&
@@ -403,6 +415,7 @@ class Initer {
         // CDN split needs bootstrap/headers; monolith serves from the API host.
         patchBootstrap: webEnabled,
         writeHeaders: webEnabled && mode == DeployMode.split,
+        build: flutterWebBuild,
       ),
       smoke: SmokeConfig(
         api: SmokeEndpoint(

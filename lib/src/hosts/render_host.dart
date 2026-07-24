@@ -854,15 +854,7 @@ class RenderHost extends HostAdapter {
       database: cfg.database,
       redis: cfg.redis,
       mobile: cfg.mobile,
-      web: WebConfig(
-        enabled: cfg.web.enabled,
-        serverUrlDefine: cfg.web.serverUrlDefine,
-        apiUrl: 'https://$host/',
-        patchBootstrap: cfg.web.patchBootstrap,
-        writeHeaders: cfg.web.writeHeaders,
-        baseHref: cfg.web.baseHref,
-        staticDir: cfg.web.staticDir,
-      ),
+      web: cfg.web.copyWith(apiUrl: 'https://$host/'),
       smoke: cfg.smoke,
     );
     await updated.save();

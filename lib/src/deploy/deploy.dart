@@ -283,15 +283,7 @@ class Deployer {
       database: c.database,
       redis: c.redis,
       mobile: c.mobile,
-      web: WebConfig(
-        enabled: c.web.enabled,
-        serverUrlDefine: c.web.serverUrlDefine,
-        apiUrl: apiUrl,
-        patchBootstrap: c.web.patchBootstrap,
-        writeHeaders: c.web.writeHeaders,
-        baseHref: c.web.baseHref,
-        staticDir: c.web.staticDir,
-      ),
+      web: c.web.copyWith(apiUrl: apiUrl),
       smoke: c.smoke,
     );
   }
@@ -335,15 +327,7 @@ class Deployer {
       database: c.database,
       redis: c.redis,
       mobile: c.mobile,
-      web: WebConfig(
-        enabled: c.web.enabled,
-        serverUrlDefine: c.web.serverUrlDefine,
-        apiUrl: c.web.apiUrl,
-        patchBootstrap: c.web.patchBootstrap,
-        writeHeaders: c.web.writeHeaders,
-        baseHref: href,
-        staticDir: c.web.staticDir,
-      ),
+      web: c.web.copyWith(baseHref: href),
       smoke: c.smoke,
     );
   }

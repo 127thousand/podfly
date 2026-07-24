@@ -494,7 +494,20 @@ See [codemagic.md](codemagic.md) and [github_actions_mobile.md](github_actions_m
 | `patch_bootstrap` | bool | `true` | Install podfly Flutter bootstrap if missing |
 | `write_headers` | bool | `true` | Install Pages `_headers` / `_redirects` if missing |
 | `base_href` | string | `/` | `flutter build web --base-href` |
+| `build` | string | `canvaskit` | Flutter web compile mode (menu at `podfly init`) |
 | `static_dir` | string | `server/web/app` | Target for monolith mode copy into the server tree |
+
+### `web.build` (Flutter web type)
+
+Chosen interactively during `podfly init` when web is enabled; editable in yaml.
+
+| Value | `flutter build web` | Notes |
+|-------|---------------------|--------|
+| `canvaskit` (default) | `--no-web-resources-cdn --no-wasm-dry-run` | JS app + CanvasKit **from your host** (`canvasKitBaseUrl: canvaskit/`). Full fidelity; first load pulls ~5–7MB `canvaskit.wasm`. Best for monoliths. |
+| `canvaskit_cdn` | `--web-resources-cdn --no-wasm-dry-run` | JS app + CanvasKit engine from **Flutter’s CDN** (smaller deploy tree; needs Google CDN reachability). |
+| `wasm` | `--wasm` | Compile the **app** with dart2wasm / skwasm. Newer; requires a current Flutter SDK. |
+
+The “Wasm dry run succeeded…” message on default builds is Flutter advertising `--wasm`. Podfly’s `canvaskit` / `canvaskit_cdn` modes pass `--no-wasm-dry-run` to silence it.
 
 See [caching.md](caching.md) for bootstrap and header semantics.
 

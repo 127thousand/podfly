@@ -66,8 +66,11 @@ class CloudRunHost extends HostAdapter {
     required String name,
     required String sanitizedName,
   }) =>
-      // Final URL is project/region-specific; placeholder until first deploy.
-      'https://$sanitizedName-REGION-PROJECT.a.run.app/';
+      // Never invent a fake *.run.app host (e.g. …-region-project) — that was
+      // baked into SERVER_URL and browsers DNS-404 on form submit. Use localhost
+      // until public_host / web.api_url is known; monolith web should use
+      // same-origin (Uri.base) when it sees localhost.
+      'http://localhost:8080/';
 
   @override
   String? publicApiBase(PodflyConfig config) {
@@ -354,26 +357,15 @@ class CloudRunHost extends HostAdapter {
       log.warn('no production.yaml — ensure apiServer.port: $port for monolith');
       return;
     }
-    var text = await f.readAsString();
-    final original = text;
-    // Replace first apiServer port: N under apiServer block.
-    text = text.replaceFirstMapped(
-      RegExp(
-        r'(apiServer:\s*\n(?:[ \t]+.+\n)*?[ \t]+port:\s*)(\d+)',
-      ),
-      (m) => '${m.group(1)}$port',
-    );
-    if (text == original) {
-      // Insert port if missing after apiServer:
-      if (text.contains('apiServer:')) {
-        text = text.replaceFirst(
-          'apiServer:',
-          'apiServer:\n  port: $port',
-        );
-      }
-    }
+    final original = await f.readAsString();
+    final text = patchCloudRunMonolithProductionYaml(original, port: port);
     if (text != original) {
       await f.writeAsString(text);
+      if (text.contains(RegExp(r'insightsServer:[\s\S]*?port:\s*8083'))) {
+        log.ok(
+          'production.yaml insightsServer.port → 8083 (avoid dual-bind with API)',
+        );
+      }
       log.ok('production.yaml apiServer.port → $port (nginx proxies public PORT)');
     } else {
       log.detail('production.yaml apiServer.port already $port (or unparsed)');
@@ -479,18 +471,59 @@ class CloudRunHost extends HostAdapter {
       database: cfg.database,
       redis: cfg.redis,
       mobile: cfg.mobile,
-      web: WebConfig(
-        enabled: cfg.web.enabled,
-        serverUrlDefine: cfg.web.serverUrlDefine,
-        apiUrl: 'https://$publicHost/',
-        patchBootstrap: cfg.web.patchBootstrap,
-        writeHeaders: cfg.web.writeHeaders,
-        baseHref: cfg.web.baseHref,
-        staticDir: cfg.web.staticDir,
-      ),
+      web: cfg.web.copyWith(apiUrl: 'https://$publicHost/'),
       smoke: cfg.smoke,
     );
     await updated.save();
     ctx.log.detail('saved cloud_run.public_host → $publicHost');
   }
+}
+
+/// Rewrite Serverpod production.yaml for Cloud Run monolith (nginx → :8081 API).
+///
+/// Mini `serverpod create` templates put insightsServer on 8081 and api on 8080.
+/// Only rewriting api→8081 dual-binds both and Serverpod dies on start.
+/// Also enable console session logs so Cloud Run shows crash output.
+String patchCloudRunMonolithProductionYaml(String text, {int port = 8081}) {
+  final apiPortRe = RegExp(
+    r'(apiServer:\s*\n(?:[ \t]+.+\n)*?[ \t]+port:\s*)(\d+)',
+  );
+  if (apiPortRe.hasMatch(text)) {
+    text = text.replaceFirstMapped(
+      apiPortRe,
+      (m) => '${m.group(1)}$port',
+    );
+  } else if (text.contains('apiServer:')) {
+    text = text.replaceFirst(
+      'apiServer:',
+      'apiServer:\n  port: $port',
+    );
+  }
+
+  final insightsConflict = RegExp(
+    r'(insightsServer:\s*\n(?:[ \t]+.+\n)*?[ \t]+port:\s*)(\d+)',
+  );
+  final insightsMatch = insightsConflict.firstMatch(text);
+  if (insightsMatch != null && insightsMatch.group(2) == '$port') {
+    // 8083 is free (api 8081, web typically 8082).
+    text = text.replaceFirstMapped(
+      insightsConflict,
+      (m) => '${m.group(1)}8083',
+    );
+  }
+
+  if (RegExp(r'consoleEnabled:\s*false').hasMatch(text)) {
+    text = text.replaceFirst(
+      RegExp(r'consoleEnabled:\s*false'),
+      'consoleEnabled: true',
+    );
+  } else if (text.contains('sessionLogs:') &&
+      !RegExp(r'consoleEnabled:\s*true').hasMatch(text)) {
+    text = text.replaceFirst(
+      'sessionLogs:',
+      'sessionLogs:\n  consoleEnabled: true',
+    );
+  }
+
+  return text;
 }

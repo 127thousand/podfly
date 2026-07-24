@@ -1244,6 +1244,74 @@ class DatabaseConfig {
       };
 }
 
+/// How [WebBuilder] invokes `flutter build web`.
+///
+/// CanvasKit always downloads a multi‑MB Skia wasm engine; the choice is
+/// **where** that engine comes from and whether the **app** is JS or wasm.
+enum FlutterWebBuild {
+  /// JS app + CanvasKit from your host (`canvasKitBaseUrl: canvaskit/`).
+  /// Best for monoliths and offline-ish deploys; larger first paint.
+  canvaskit,
+
+  /// JS app + CanvasKit engine from Flutter’s CDN (smaller deploy tree).
+  canvaskitCdn,
+
+  /// `flutter build web --wasm` (dart2wasm + skwasm). Newer toolchain.
+  wasm,
+}
+
+extension FlutterWebBuildX on FlutterWebBuild {
+  String get yamlName => switch (this) {
+        FlutterWebBuild.canvaskit => 'canvaskit',
+        FlutterWebBuild.canvaskitCdn => 'canvaskit_cdn',
+        FlutterWebBuild.wasm => 'wasm',
+      };
+
+  String get menuLabel => switch (this) {
+        FlutterWebBuild.canvaskit =>
+          '🎨 CanvasKit (same-origin) — full fidelity; ~5–7MB engine from your host',
+        FlutterWebBuild.canvaskitCdn =>
+          '☁️  CanvasKit (Flutter CDN) — smaller image; browser pulls engine from Google',
+        FlutterWebBuild.wasm =>
+          '⚡ WebAssembly (--wasm) — compile app with dart2wasm / skwasm',
+      };
+
+  /// Extra flags after `flutter build web --release --base-href …`.
+  List<String> get flutterBuildFlags => switch (this) {
+        FlutterWebBuild.canvaskit => const [
+            '--no-web-resources-cdn',
+            '--no-wasm-dry-run',
+          ],
+        FlutterWebBuild.canvaskitCdn => const [
+            '--web-resources-cdn',
+            '--no-wasm-dry-run',
+          ],
+        FlutterWebBuild.wasm => const [
+            '--wasm',
+            '--no-web-resources-cdn',
+          ],
+      };
+
+  /// Whether podfly bootstrap should force same-origin CanvasKit.
+  bool get useSameOriginCanvasKit => this == FlutterWebBuild.canvaskit;
+
+  static FlutterWebBuild parse(String? raw) {
+    final s = (raw ?? '').trim().toLowerCase().replaceAll('-', '_');
+    return switch (s) {
+      '' || 'canvaskit' || 'default' || 'js' || 'canvas_kit' =>
+        FlutterWebBuild.canvaskit,
+      'canvaskit_cdn' || 'cdn' || 'canvas_kit_cdn' =>
+        FlutterWebBuild.canvaskitCdn,
+      'wasm' || 'webassembly' || 'dart2wasm' || 'skwasm' =>
+        FlutterWebBuild.wasm,
+      _ => throw FormatException(
+          'Unknown web.build: $raw '
+          '(expected canvaskit | canvaskit_cdn | wasm)',
+        ),
+    };
+  }
+}
+
 class WebConfig {
   WebConfig({
     this.enabled = true,
@@ -1253,6 +1321,7 @@ class WebConfig {
     this.writeHeaders = true,
     this.baseHref = '/',
     this.staticDir,
+    this.build = FlutterWebBuild.canvaskit,
   });
 
   /// When false, podfly deploys API only (mobile / non-web clients).
@@ -1264,10 +1333,34 @@ class WebConfig {
   final String baseHref;
   final String? staticDir;
 
+  /// `flutter build web` mode — see [FlutterWebBuild].
+  final FlutterWebBuild build;
+
   String get apiUrlNormalized {
     if (apiUrl.endsWith('/')) return apiUrl;
     return '$apiUrl/';
   }
+
+  WebConfig copyWith({
+    bool? enabled,
+    String? serverUrlDefine,
+    String? apiUrl,
+    bool? patchBootstrap,
+    bool? writeHeaders,
+    String? baseHref,
+    String? staticDir,
+    FlutterWebBuild? build,
+  }) =>
+      WebConfig(
+        enabled: enabled ?? this.enabled,
+        serverUrlDefine: serverUrlDefine ?? this.serverUrlDefine,
+        apiUrl: apiUrl ?? this.apiUrl,
+        patchBootstrap: patchBootstrap ?? this.patchBootstrap,
+        writeHeaders: writeHeaders ?? this.writeHeaders,
+        baseHref: baseHref ?? this.baseHref,
+        staticDir: staticDir ?? this.staticDir,
+        build: build ?? this.build,
+      );
 
   Map<String, Object?> toMap() => {
         'enabled': enabled,
@@ -1276,6 +1369,7 @@ class WebConfig {
         'patch_bootstrap': patchBootstrap,
         'write_headers': writeHeaders,
         'base_href': baseHref,
+        'build': build.yamlName,
         if (staticDir != null) 'static_dir': staticDir,
       };
 }
@@ -2050,6 +2144,7 @@ class PodflyConfig {
     buf.writeln('  patch_bootstrap: ${web.patchBootstrap}');
     buf.writeln('  write_headers: ${web.writeHeaders}');
     buf.writeln('  base_href: ${web.baseHref}');
+    buf.writeln('  build: ${web.build.yamlName}');
     if (web.staticDir != null) {
       buf.writeln('  static_dir: ${web.staticDir}');
     }
@@ -2571,6 +2666,8 @@ class PodflyConfig {
           sanitized,
     );
     final apiUrl = webMap['api_url']?.toString() ?? defaultApiUrl;
+    final webBuildRaw =
+        webMap['build']?.toString() ?? webMap['flutter_web']?.toString();
     final web = WebConfig(
       enabled: webMap['enabled'] != false,
       serverUrlDefine:
@@ -2580,6 +2677,7 @@ class PodflyConfig {
       writeHeaders: webMap['write_headers'] != false,
       baseHref: webMap['base_href']?.toString() ?? '/',
       staticDir: webMap['static_dir']?.toString(),
+      build: FlutterWebBuildX.parse(webBuildRaw),
     );
 
     RedisConfig redis = RedisConfig();
