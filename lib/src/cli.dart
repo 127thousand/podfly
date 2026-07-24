@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'config.dart';
 import 'deploy/deploy.dart';
 import 'doctor.dart';
+import 'fly_name.dart';
 import 'hosts/hosts.dart';
 import 'init.dart';
 import 'log.dart';
@@ -364,7 +365,9 @@ Future<int> _deploy(ArgResults g) async {
               (monolith
                   ? null
                   : (config.webHost == StaticWebHost.cloudflare
-                      ? CloudflareConfig(project: config.name)
+                      ? CloudflareConfig(
+                          project: sanitizeFlyAppName(config.name),
+                        )
                       : null))),
       vercel: (monolith && modeOpt != null) ||
               host == AppHost.digitalOcean ||

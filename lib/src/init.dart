@@ -319,7 +319,8 @@ class Initer {
           ? HetznerConfig(serverName: flyApp)
           : null,
       cloudflare:
-          splitStatic ? CloudflareConfig(project: name) : null,
+          // Pages names: lowercase + dashes only (no underscores).
+          splitStatic ? CloudflareConfig(project: flyApp) : null,
       database: database,
       // Mobile-first monorepos get Codemagic scaffolding (codemagic.yaml).
       mobile: !webEnabled

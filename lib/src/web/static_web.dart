@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../config.dart';
+import '../fly_name.dart';
 import '../log.dart';
 import '../process_runner.dart';
 import '../templates.dart';
@@ -44,7 +45,13 @@ class StaticWebDeployer {
         'web_host: cloudflare requires a cloudflare: project block in podfly.yaml',
       );
     }
-    final project = cf.project;
+    // Pages: 1–58 lowercase + dashes only (no underscores).
+    final project = sanitizeFlyAppName(cf.project);
+    if (project != cf.project) {
+      log.detail(
+        'Cloudflare Pages project sanitized: ${cf.project} → $project',
+      );
+    }
     log.step('Deploy Cloudflare Pages ($project)');
     final out = config.webOutPath;
     if (!runner.dryRun && !await File(p.join(out, 'index.html')).exists()) {
@@ -77,6 +84,9 @@ class StaticWebDeployer {
       ]);
       if (create.ok) {
         log.ok('created Pages project $project');
+        if (project != cf.project) {
+          await _persistCloudflareProject(project);
+        }
       } else {
         log.warn(
           'pages project create failed — deploy may still work if project exists',
@@ -99,6 +109,41 @@ class StaticWebDeployer {
     final url = 'https://$project.pages.dev';
     log.ok('Pages: $url');
     return HostDeployResultLike(publicHost: '$project.pages.dev', displayUrl: url);
+  }
+
+  Future<void> _persistCloudflareProject(String project) async {
+    try {
+      final base = config.cloudflare ?? CloudflareConfig(project: project);
+      final updated = PodflyConfig(
+        root: config.root,
+        host: config.host,
+        webHost: config.webHost,
+        mode: config.mode,
+        name: config.name,
+        server: config.server,
+        flutter: config.flutter,
+        fly: config.fly,
+        railway: config.railway,
+        digitalOcean: config.digitalOcean,
+        render: config.render,
+        cloudRun: config.cloudRun,
+        aws: config.aws,
+        awsEcs: config.awsEcs,
+        azure: config.azure,
+        hetzner: config.hetzner,
+        cloudflare: CloudflareConfig(project: project, branch: base.branch),
+        vercel: config.vercel,
+        netlify: config.netlify,
+        githubPages: config.githubPages,
+        database: config.database,
+        redis: config.redis,
+        mobile: config.mobile,
+        web: config.web,
+        smoke: config.smoke,
+      );
+      await updated.save();
+      log.detail('saved cloudflare.project: $project');
+    } catch (_) {/* non-fatal */}
   }
 
   Future<HostDeployResultLike> _vercel() async {

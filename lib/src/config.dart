@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import 'fly_name.dart';
 import 'hosts/hosts.dart';
 
 /// How UI is packaged relative to the API host.
@@ -2443,14 +2444,16 @@ class PodflyConfig {
               webHost != StaticWebHost.netlify &&
               webHost != StaticWebHost.githubPages)) {
         final m = _map(doc['cloudflare']);
+        final rawProject = m['project']?.toString() ?? name;
         cf = CloudflareConfig(
-          project: m['project']?.toString() ?? name,
+          // Pages: lowercase + dashes only (wrangler rejects underscores).
+          project: sanitizeFlyAppName(rawProject),
           branch: m['branch']?.toString() ?? 'main',
         );
       }
       // Default project if still split and no block
       if (webHost == StaticWebHost.cloudflare && cf == null) {
-        cf = CloudflareConfig(project: name);
+        cf = CloudflareConfig(project: sanitizeFlyAppName(name));
       }
       if (webHost == StaticWebHost.vercel && vercel == null) {
         vercel = VercelConfig(project: name);

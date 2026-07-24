@@ -15,6 +15,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.1] — 2026-07-24
+
+### Fixed
+
+- **Cloudflare Pages:** sanitize project names (underscores → hyphens). Wrangler
+  rejects names like `hello_podfly` (`code: 8000003`); use `hello-podfly`.
+
+---
+
 ## [0.9.0] — 2026-07-24
 
 ### Added
