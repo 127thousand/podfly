@@ -33,9 +33,12 @@ abstract class HostAdapter {
   /// Extra YAML aliases (e.g. `gcp` → `cloud_run`).
   List<String> get idAliases => const [];
 
-  /// Hosts that can embed Flutter web in the API process/image (one URL).
+  /// Hosts that can embed Flutter web in the API image (one public URL).
   ///
-  /// podfly builds Flutter web and copies into `*_server/web/app` before deploy.
+  /// When [DeployMode.monolith] + `web.enabled`, podfly writes the shared
+  /// **nginx + Serverpod** image ([NginxMonolithImage]): public port serves
+  /// Flutter static and proxies API/WS to Serverpod on :8081. Do not rely on
+  /// copying into `*_server/web/app` alone (webServer is a different port).
   bool get supportsAllInOneWeb => false;
 
   /// When true, Flutter web is deployed via [deployWeb] on this host

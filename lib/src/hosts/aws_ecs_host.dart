@@ -8,6 +8,7 @@ import '../fly_name.dart';
 import '../log.dart';
 import 'adapter.dart';
 import 'auth_helpers.dart';
+import 'nginx_monolith_image.dart';
 
 /// AWS ECS Fargate + Application Load Balancer.
 ///
@@ -457,13 +458,7 @@ class AwsEcsHost extends HostAdapter {
     required String platform,
   }) async {
     final config = ctx.config;
-    final rootDocker = File(p.join(config.root, 'Dockerfile'));
-    final serverDocker = File(p.join(config.root, config.server, 'Dockerfile'));
-    final df = await rootDocker.exists()
-        ? 'Dockerfile'
-        : (await serverDocker.exists()
-            ? p.join(config.server, 'Dockerfile')
-            : 'Dockerfile');
+    final df = NginxMonolithImage.relativeDockerfile(config);
     if (ctx.runner.dryRun) {
       ctx.log.dry('docker build --platform $platform -t $imageUri -f $df .');
       ctx.log.dry('docker push $imageUri');

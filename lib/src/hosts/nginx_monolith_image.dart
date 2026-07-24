@@ -8,11 +8,15 @@ import '../templates.dart';
 import 'adapter.dart';
 
 /// Shared nginx + Serverpod image for one-public-port monoliths
-/// (Cloud Run, Fly.io, …).
+/// (Cloud Run, Fly.io, AWS, Azure, Hetzner, ECS, …).
 ///
 /// - nginx listens on public port (8080 / `$PORT`)
 /// - static Flutter from monorepo `build/web` → `/app/public`
 /// - Serverpod API/WS on `127.0.0.1:8081`
+///
+/// **Do not** only copy Flutter into `*_server/web/app` for these hosts:
+/// Serverpod serves UI on [webServer] (often 8082) while the platform
+/// proxies a single port to [apiServer] — wrong port = timeout / blank UI.
 class NginxMonolithImage {
   /// Marker line at top of generated root Dockerfile.
   static const dockerMarker = '# podfly:nginx_monolith';
@@ -22,6 +26,23 @@ class NginxMonolithImage {
 
   static bool isMonolithDockerfile(String text) =>
       text.contains(dockerMarker) || text.contains(legacyCloudRunMarker);
+
+  /// True when this deploy should ship the nginx multi-process image.
+  static bool wanted(PodflyConfig config, HostAdapter adapter) =>
+      adapter.supportsAllInOneWeb &&
+      config.mode == DeployMode.monolith &&
+      config.web.enabled;
+
+  /// Dockerfile path relative to monorepo root for [docker build -f].
+  ///
+  /// Monolith+web → root `Dockerfile` (nginx image). API-only → server package
+  /// Dockerfile even if a stale root monolith Dockerfile remains from a prior deploy.
+  static String relativeDockerfile(PodflyConfig config) {
+    if (config.mode == DeployMode.monolith && config.web.enabled) {
+      return 'Dockerfile';
+    }
+    return p.join(config.server, 'Dockerfile');
+  }
 
   /// Write root Dockerfile + deploy/nginx + start.sh; patch production.yaml.
   static Future<void> ensure(DeployContext ctx) async {

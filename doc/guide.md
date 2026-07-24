@@ -223,7 +223,7 @@ Details: [netlify.md](netlify.md), [github_pages.md](github_pages.md).
 | Layer | Host | Content |
 |-------|------|---------|
 | Browser UI | Cloudflare / Vercel / Netlify / GitHub Pages (`web_host`) | Flutter web + CanvasKit |
-| API (+ WSS if needed) | Fly (`*.fly.dev`) or Railway | Serverpod (port 8080) |
+| API (+ WSS if needed) | Fly (`*.fly.dev`) or Railway | Serverpod (port 8080 API-only; **monolith** nginx :8080 → API :8081) |
 
 Benefits: CDN for multi‑MB WASM/assets; API can scale to zero (DB choice matters).
 

@@ -1,13 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../config.dart';
 import '../fly_name.dart';
 import '../log.dart';
 import 'adapter.dart';
 import 'auth_helpers.dart';
+import 'nginx_monolith_image.dart';
 
 /// AWS App Runner — container image from ECR (local Docker build + push).
 ///
@@ -519,14 +518,9 @@ class AwsHost extends HostAdapter {
     final config = ctx.config;
     final runner = ctx.runner;
     final log = ctx.log;
-    // Prefer monorepo root Dockerfile (monolith nginx image); else server.
-    final rootDocker = File(p.join(config.root, 'Dockerfile'));
-    final serverDocker = File(p.join(config.root, config.server, 'Dockerfile'));
-    final df = await rootDocker.exists()
-        ? 'Dockerfile'
-        : (await serverDocker.exists()
-            ? p.join(config.server, 'Dockerfile')
-            : 'Dockerfile');
+    // Monolith+web → root nginx image; API-only → server Dockerfile
+    // (ignore stale root monolith Dockerfile after mode switch).
+    final df = NginxMonolithImage.relativeDockerfile(config);
 
     if (runner.dryRun) {
       log.dry('docker build --platform $platform -t $imageUri -f $df .');

@@ -2,13 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:path/path.dart' as p;
-
 import '../config.dart';
 import '../fly_name.dart';
 import '../log.dart';
 import 'adapter.dart';
 import 'auth_helpers.dart';
+import 'nginx_monolith_image.dart';
 
 /// Azure Container Apps — Docker → ACR → env + container app.
 ///
@@ -393,13 +392,7 @@ class AzureHost extends HostAdapter {
     final config = ctx.config;
     final runner = ctx.runner;
     final log = ctx.log;
-    final rootDocker = File(p.join(config.root, 'Dockerfile'));
-    final serverDocker = File(p.join(config.root, config.server, 'Dockerfile'));
-    final df = await rootDocker.exists()
-        ? 'Dockerfile'
-        : (await serverDocker.exists()
-            ? p.join(config.server, 'Dockerfile')
-            : 'Dockerfile');
+    final df = NginxMonolithImage.relativeDockerfile(config);
 
     if (runner.dryRun) {
       log.dry('docker build --platform $platform -t $imageUri -f $df .');

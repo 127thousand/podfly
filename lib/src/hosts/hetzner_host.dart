@@ -1,14 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../config.dart';
 import '../fly_name.dart';
 import '../log.dart';
 import '../tty.dart';
 import 'adapter.dart';
 import 'auth_helpers.dart';
+import 'nginx_monolith_image.dart';
 
 /// Hetzner Cloud VPS — bind existing or create, then Docker over SSH.
 ///
@@ -813,13 +812,7 @@ systemctl enable --now docker
     final config = ctx.config;
     final runner = ctx.runner;
     final log = ctx.log;
-    final rootDocker = File(p.join(config.root, 'Dockerfile'));
-    final serverDocker = File(p.join(config.root, config.server, 'Dockerfile'));
-    final df = await rootDocker.exists()
-        ? 'Dockerfile'
-        : (await serverDocker.exists()
-            ? p.join(config.server, 'Dockerfile')
-            : 'Dockerfile');
+    final df = NginxMonolithImage.relativeDockerfile(config);
 
     if (runner.dryRun) {
       log.dry('docker build --platform $platform -t $image -f $df .');

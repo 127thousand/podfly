@@ -6,6 +6,7 @@ import '../config.dart';
 import '../database/ensure.dart';
 import '../redis/ensure.dart';
 import '../hosts/hosts.dart';
+import '../hosts/nginx_monolith_image.dart';
 import '../log.dart';
 import '../process_runner.dart';
 import '../smoke.dart';
@@ -128,9 +129,12 @@ class Deployer {
         );
       }
     }
-    if (doWeb && cfg.mode == DeployMode.monolith && adapter.supportsAllInOneWeb) {
+    if (doWeb &&
+        cfg.mode == DeployMode.monolith &&
+        adapter.supportsAllInOneWeb) {
       log.detail(
-        'monolith: will build Flutter web and copy into ${cfg.server}/web/app',
+        'monolith: will build Flutter web into nginx image '
+        '(build/web → /app/public, Serverpod :8081)',
       );
     }
 
@@ -177,24 +181,20 @@ class Deployer {
           } catch (_) {/* keep */}
         }
       } else if (adapter.supportsAllInOneWeb) {
-        final nginxMonolith = cfg.mode == DeployMode.monolith &&
-            cfg.web.enabled &&
-            (cfg.host == AppHost.cloudRun || cfg.host == AppHost.fly);
-        if (nginxMonolith) {
-          // One public port: nginx image bakes build/web (see NginxMonolithImage).
-          // Copying only into server web/app leaves UI on webServer:8082 while
-          // fly/Cloud Run proxy a single port — or api on 8081 with nothing on 8080.
+        // Every all-in-one host uses the same nginx monolith image (Fly, Cloud
+        // Run, AWS, Azure, Hetzner, ECS, …). Copying only into web/app is not
+        // enough: Serverpod webServer is a separate port from the platform proxy.
+        if (NginxMonolithImage.wanted(cfg, adapter)) {
           log.detail(
-            '${adapter.label} monolith: Flutter web → image /app/public via '
-            'nginx Dockerfile (not Serverpod web/ alone)',
+            '${adapter.label} monolith: ensure nginx Dockerfile '
+            '(Flutter /app/public + Serverpod :8081)',
           );
           if (!await File(p.join(cfg.webOutPath, 'index.html')).exists()) {
             throw StateError(
               'missing ${cfg.webOutPath}/index.html after flutter build web',
             );
           }
-        } else {
-          await _copyWebIntoServer();
+          await NginxMonolithImage.ensure(_ctx(cfg));
         }
       } else {
         log.warn('no web deploy path for ${adapter.label}');
@@ -386,58 +386,5 @@ class Deployer {
     await File(abs).parent.create(recursive: true);
     await File(abs).writeAsString(body);
     log.ok('wrote $rel (prefer `serverpod create` Dockerfile when available)');
-  }
-
-  Future<void> _copyWebIntoServer() async {
-    final staticDir =
-        config.web.staticDir ?? p.join(config.server, 'web', 'app');
-    final dest = p.isAbsolute(staticDir)
-        ? staticDir
-        : p.join(config.root, staticDir);
-    log.step('Copy web → $staticDir (monolith / all-in-one)');
-    if (runner.dryRun) {
-      log.dry('copy ${config.webOutPath} → $dest');
-      return;
-    }
-    final src = config.webOutPath;
-    if (!await Directory(src).exists()) {
-      throw StateError('build web first: missing $src');
-    }
-    final index = File(p.join(src, 'index.html'));
-    if (!await index.exists()) {
-      throw StateError('web build missing index.html at $src');
-    }
-    await Directory(dest).create(recursive: true);
-    if (await runner.which('rsync')) {
-      final sync = await runner.run(
-        'rsync',
-        ['-a', '--delete', '$src/', '$dest/'],
-        allowDryRun: false,
-      );
-      if (!sync.ok) {
-        log.warn('rsync failed — falling back to recursive copy');
-        await _copyDir(src, dest);
-      }
-    } else {
-      await _copyDir(src, dest);
-    }
-    if (!await File(p.join(dest, 'index.html')).exists()) {
-      throw StateError('copy web failed — no index.html in $dest');
-    }
-    log.ok('static files in $dest (served by Serverpod with the API)');
-  }
-
-  Future<void> _copyDir(String from, String to) async {
-    await for (final ent
-        in Directory(from).list(recursive: true, followLinks: false)) {
-      final rel = p.relative(ent.path, from: from);
-      final target = p.join(to, rel);
-      if (ent is Directory) {
-        await Directory(target).create(recursive: true);
-      } else if (ent is File) {
-        await File(target).parent.create(recursive: true);
-        await ent.copy(target);
-      }
-    }
   }
 }

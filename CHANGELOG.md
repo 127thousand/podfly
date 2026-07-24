@@ -15,6 +15,21 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.13] — 2026-07-24
+
+### Fixed
+
+- **All all-in-one monoliths** (Fly, Cloud Run, AWS App Runner, ECS, Azure,
+  Hetzner) share one path: [NginxMonolithImage] writes root Dockerfile + nginx
+  + start.sh, patches `apiServer.port: 8081`, and deploys never rely on
+  “copy into `web/app` only”. Docker builds use
+  `NginxMonolithImage.relativeDockerfile` so API-only does not pick a stale
+  root monolith image.
+- CDN split: Vercel/Netlify headers for `*.mjs` (`text/javascript`) for
+  `web.build: wasm`.
+
+---
+
 ## [0.10.12] — 2026-07-24
 
 ### Fixed

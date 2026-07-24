@@ -1,8 +1,6 @@
 import 'dart:io';
 import 'dart:math';
 
-import 'package:path/path.dart' as p;
-
 import '../config.dart';
 import '../fly_name.dart';
 import '../log.dart';
@@ -169,8 +167,7 @@ class FlyHost extends HostAdapter {
     final log = ctx.log;
     final f = File(config.flyTomlPath);
     // Monolith: root nginx Dockerfile. API-only: Serverpod package Dockerfile.
-    final dockerfile =
-        monolithWeb ? 'Dockerfile' : p.join(config.server, 'Dockerfile');
+    final dockerfile = NginxMonolithImage.relativeDockerfile(config);
 
     if (await f.exists()) {
       var text = await f.readAsString();
