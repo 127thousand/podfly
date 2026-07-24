@@ -11,6 +11,7 @@ import '../process_runner.dart';
 import '../smoke.dart';
 import '../templates.dart';
 import '../mobile/codemagic.dart';
+import '../mobile/github_actions.dart';
 import '../web/build.dart';
 import '../web/static_web.dart';
 
@@ -115,9 +116,11 @@ class Deployer {
       } catch (_) {/* keep in-memory */}
     }
 
-    // Mobile CI: write codemagic.yaml when mobile.provider: codemagic
-    // (does not build or publish — store CI runs in Codemagic).
+    // Mobile CI: write pipeline files only (Codemagic / GHA). Does not build
+    // or publish — runners/dashboard execute workflows.
     await CodemagicYamlWriter(config: cfg, runner: runner, log: log).ensure();
+    await GithubActionsMobileWriter(config: cfg, runner: runner, log: log)
+        .ensure();
 
     final doWeb = opts.doWeb && cfg.web.enabled;
     final doApi = opts.doApi;

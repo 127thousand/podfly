@@ -234,9 +234,10 @@ Stores are not PaaS hosts. podfly ships the **API**; Codemagic (or GHA) ships bi
 
 | Provider | podfly | Notes |
 |----------|--------|--------|
-| 📱 [**Codemagic**](https://codemagic.io) | ✅ `mobile.provider: codemagic` | Generates **`codemagic.yaml`** (iOS IPA + Android AAB); `SERVER_URL` from `web.api_url`. Signing/store keys in Codemagic UI. No product deploy CLI — trigger via dashboard or REST. |
+| 📱 [**Codemagic**](https://codemagic.io) | ✅ `mobile.provider: codemagic` | Generates **`codemagic.yaml`** (iOS IPA + Android AAB); `SERVER_URL` from `web.api_url`. Signing in Codemagic UI. |
+| 🐙 [**GitHub Actions**](https://docs.github.com/actions) | ✅ `mobile.provider: github_actions` | Generates **`mobile-android.yml` / `mobile-ios.yml`**; same `SERVER_URL` define. Signing via repo secrets. |
 
-See [doc/codemagic.md](doc/codemagic.md). API-only init enables this by default.
+See [doc/codemagic.md](doc/codemagic.md) and [doc/github_actions_mobile.md](doc/github_actions_mobile.md). API-only init defaults to Codemagic; switch provider for GHA.
 
 ---
 

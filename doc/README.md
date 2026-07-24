@@ -16,6 +16,7 @@
 | [GitHub Pages](github_pages.md) | `web_host: github_pages` — static Flutter CDN via `gh` + `git` |
 | [Upstash Redis](upstash.md) | `redis.provider: upstash` — optional cache/PubSub |
 | [Codemagic](codemagic.md) | `mobile.provider: codemagic` — iOS/Android CI (`codemagic.yaml`) |
+| [GitHub Actions mobile](github_actions_mobile.md) | `mobile.provider: github_actions` — `mobile-android.yml` / `mobile-ios.yml` |
 | [Design specs](specs/) | Architecture decisions (incl. [ECS+ALB realtime sketch](specs/2026-07-21-aws-ecs-realtime-sketch.md)) |
 
 Start at the [root README](../README.md) for install and quick start.

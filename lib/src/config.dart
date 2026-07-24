@@ -1315,19 +1315,27 @@ class SmokeConfig {
 enum MobileProvider {
   none,
   codemagic,
+  githubActions,
 }
 
 extension MobileProviderX on MobileProvider {
   String get yamlName => switch (this) {
         MobileProvider.none => 'none',
         MobileProvider.codemagic => 'codemagic',
+        MobileProvider.githubActions => 'github_actions',
       };
 
   static MobileProvider parse(String? s) => switch (s?.toLowerCase()) {
         null || '' || 'none' || 'false' => MobileProvider.none,
         'codemagic' || 'cm' => MobileProvider.codemagic,
+        'github_actions' ||
+        'github-actions' ||
+        'gha' ||
+        'github' =>
+          MobileProvider.githubActions,
         _ => throw FormatException(
-            'Unknown mobile.provider: $s (use none or codemagic)',
+            'Unknown mobile.provider: $s '
+            '(use none, codemagic, or github_actions)',
           ),
       };
 }
@@ -1399,25 +1407,75 @@ class CodemagicConfig {
       };
 }
 
+/// Flutter iOS/Android CI via GitHub Actions (`mobile.provider: github_actions`).
+///
+/// Writes workflow files under [.github/workflows] that build with
+/// `--dart-define` from [WebConfig.apiUrl]. Same role as [CodemagicConfig]:
+/// generate pipeline config only — signing secrets stay in GitHub.
+class GithubActionsMobileConfig {
+  GithubActionsMobileConfig({
+    this.workflowsDir = '.github/workflows',
+    this.writeYaml = true,
+    this.ios = true,
+    this.android = true,
+    this.androidWorkflow = 'mobile-android.yml',
+    this.iosWorkflow = 'mobile-ios.yml',
+    this.flutterChannel = 'stable',
+  });
+
+  /// Relative to monorepo root.
+  final String workflowsDir;
+
+  /// Write workflow files when missing (never overwrite).
+  final bool writeYaml;
+
+  final bool ios;
+  final bool android;
+
+  final String androidWorkflow;
+  final String iosWorkflow;
+
+  /// `subosito/flutter-action` channel.
+  final String flutterChannel;
+
+  Map<String, Object?> toMap() => {
+        'workflows_dir': workflowsDir,
+        'write_yaml': writeYaml,
+        'ios': ios,
+        'android': android,
+        'android_workflow': androidWorkflow,
+        'ios_workflow': iosWorkflow,
+        'flutter_channel': flutterChannel,
+      };
+}
+
 /// Mobile client CI (store builds). Orthogonal to [web] and API [AppHost].
 class MobileConfig {
   MobileConfig({
     this.provider = MobileProvider.none,
     this.codemagic,
+    this.githubActions,
   });
 
   final MobileProvider provider;
   final CodemagicConfig? codemagic;
+  final GithubActionsMobileConfig? githubActions;
 
   bool get enabled => provider != MobileProvider.none;
 
   CodemagicConfig get codemagicOrDefault =>
       codemagic ?? CodemagicConfig();
 
+  GithubActionsMobileConfig get githubActionsOrDefault =>
+      githubActions ?? GithubActionsMobileConfig();
+
   Map<String, Object?> toMap() => {
         'provider': provider.yamlName,
         if (provider == MobileProvider.codemagic || codemagic != null)
           'codemagic': (codemagic ?? CodemagicConfig()).toMap(),
+        if (provider == MobileProvider.githubActions || githubActions != null)
+          'github_actions':
+              (githubActions ?? GithubActionsMobileConfig()).toMap(),
       };
 }
 
@@ -1542,7 +1600,10 @@ class PodflyConfig {
         if (githubPages != null) 'github_pages': githubPages!.toMap(),
         'database': database.toMap(),
         if (redis.enabled || redis.upstash != null) 'redis': redis.toMap(),
-        if (mobile.enabled || mobile.codemagic != null) 'mobile': mobile.toMap(),
+        if (mobile.enabled ||
+            mobile.codemagic != null ||
+            mobile.githubActions != null)
+          'mobile': mobile.toMap(),
         'web': web.toMap(),
         if (smoke != null) 'smoke': smoke!.toMap(),
       };
@@ -1915,7 +1976,9 @@ class PodflyConfig {
         buf.writeln('    port: ${u.port}');
       }
     }
-    if (mobile.enabled || mobile.codemagic != null) {
+    if (mobile.enabled ||
+        mobile.codemagic != null ||
+        mobile.githubActions != null) {
       buf.writeln();
       buf.writeln('mobile:');
       buf.writeln('  provider: ${mobile.provider.yamlName}');
@@ -1939,6 +2002,18 @@ class PodflyConfig {
         if (c.androidPackageName != null) {
           buf.writeln('    android_package_name: ${c.androidPackageName}');
         }
+      }
+      if (mobile.provider == MobileProvider.githubActions ||
+          mobile.githubActions != null) {
+        final g = mobile.githubActionsOrDefault;
+        buf.writeln('  github_actions:');
+        buf.writeln('    workflows_dir: ${g.workflowsDir}');
+        buf.writeln('    write_yaml: ${g.writeYaml}');
+        buf.writeln('    ios: ${g.ios}');
+        buf.writeln('    android: ${g.android}');
+        buf.writeln('    android_workflow: ${g.androidWorkflow}');
+        buf.writeln('    ios_workflow: ${g.iosWorkflow}');
+        buf.writeln('    flutter_channel: ${g.flutterChannel}');
       }
     }
     buf.writeln();
@@ -2546,7 +2621,27 @@ class PodflyConfig {
               c['package_name']?.toString(),
         );
       }
-      mobile = MobileConfig(provider: provider, codemagic: codemagic);
+      GithubActionsMobileConfig? gha;
+      if (provider == MobileProvider.githubActions ||
+          m['github_actions'] != null) {
+        final g = _map(m['github_actions']);
+        gha = GithubActionsMobileConfig(
+          workflowsDir:
+              g['workflows_dir']?.toString() ?? '.github/workflows',
+          writeYaml: g['write_yaml'] != false,
+          ios: g['ios'] != false,
+          android: g['android'] != false,
+          androidWorkflow:
+              g['android_workflow']?.toString() ?? 'mobile-android.yml',
+          iosWorkflow: g['ios_workflow']?.toString() ?? 'mobile-ios.yml',
+          flutterChannel: g['flutter_channel']?.toString() ?? 'stable',
+        );
+      }
+      mobile = MobileConfig(
+        provider: provider,
+        codemagic: codemagic,
+        githubActions: gha,
+      );
     }
 
     return PodflyConfig(

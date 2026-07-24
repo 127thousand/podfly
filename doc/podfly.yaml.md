@@ -446,10 +446,11 @@ See [supabase.md](supabase.md).
 ## `mobile`
 
 Store / binary CI for Flutter **iOS/Android** (not Flutter web). Orthogonal to `host:`.
+Pick **one** provider — both generate pipeline files only (no remote “start build” CLI).
 
 ```yaml
 mobile:
-  provider: codemagic   # none | codemagic
+  provider: codemagic   # none | codemagic | github_actions (gha)
   codemagic:
     path: codemagic.yaml
     write_yaml: true    # write if missing; never overwrite
@@ -461,13 +462,22 @@ mobile:
     # publish_testflight: false
     # publish_play: false
     # app_id: <codemagic-app-uuid>
+  # OR:
+  # github_actions:
+  #   workflows_dir: .github/workflows
+  #   write_yaml: true
+  #   ios: true
+  #   android: true
+  #   android_workflow: mobile-android.yml
+  #   ios_workflow: mobile-ios.yml
+  #   flutter_channel: stable
 ```
 
 On API-only init (`web.enabled: false`), podfly defaults `provider: codemagic`.
-`podfly deploy` writes `codemagic.yaml` with workflows that bake `web.api_url` into
+`podfly deploy` writes the chosen pipeline(s) with `web.api_url` baked into
 `--dart-define` (`web.server_url_define`, default `SERVER_URL`).
 
-See [codemagic.md](codemagic.md).
+See [codemagic.md](codemagic.md) and [github_actions_mobile.md](github_actions_mobile.md).
 
 ## `web`
 

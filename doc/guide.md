@@ -136,17 +136,19 @@ web:
   enabled: false   # mobile clients hit the API; no Pages / no flutter build web
 
 mobile:
-  provider: codemagic   # write codemagic.yaml for iOS/Android store CI
+  provider: codemagic        # or github_actions — pipeline files for iOS/Android
 ```
 
 ```bash
-podfly deploy --api          # force API only (+ codemagic.yaml if mobile.provider set)
+podfly deploy --api          # force API only (+ mobile CI files if configured)
 podfly deploy --web          # force web half (even if enabled: false)
 ```
 
 API-only init defaults `mobile.provider: codemagic` and writes `codemagic.yaml` when
-missing (never overwrites). Store signing stays in the Codemagic dashboard — see
-[codemagic.md](codemagic.md).
+missing (never overwrites). Use `provider: github_actions` for
+`.github/workflows/mobile-*.yml` instead. Signing stays in Codemagic / GitHub
+secrets — see [codemagic.md](codemagic.md) and
+[github_actions_mobile.md](github_actions_mobile.md).
 
 Sample: [`example/mobile_api_only`](../example/mobile_api_only).
 

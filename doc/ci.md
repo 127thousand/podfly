@@ -114,6 +114,11 @@ CI runners need Docker (remote build/push to DOCR). Prefer pinning `linux/amd64`
 | [`.github/workflows/plan.yml`](../example/mobile_api_only/.github/workflows/plan.yml) | PR dry-run |
 | [`podfly.yaml`](../example/mobile_api_only/podfly.yaml) | `host: fly`, `web.enabled: false`, smoke |
 
+**Mobile client builds** (separate from API deploy): set
+`mobile.provider: github_actions` to generate `mobile-android.yml` /
+`mobile-ios.yml` — see [github_actions_mobile.md](github_actions_mobile.md).
+Or `mobile.provider: codemagic` for `codemagic.yaml`.
+
 ### Minimal workflow (copy into monorepo root)
 
 ```yaml

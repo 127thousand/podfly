@@ -109,5 +109,6 @@ API deploy + Codemagic scaffolding for the Flutter client.
 ## Related
 
 - [CI & GitHub Actions](ci.md) (API deploy in GHA)
+- [GitHub Actions mobile](github_actions_mobile.md) (same role, GHA workflows instead)
 - [guide.md — mobile / API only](guide.md)
 - [Codemagic Flutter docs](https://docs.codemagic.io/flutter-configuration/flutter-projects/)

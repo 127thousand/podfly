@@ -60,10 +60,20 @@ example/mobile_api_only/          ← monorepo root for this example
 
 | Layer | Who ships it |
 |-------|----------------|
-| Serverpod API | **podfly** + Fly (this example’s GHA) |
-| Flutter iOS/Android | **Codemagic** (`codemagic.yaml`) — signing/store keys in dashboard |
+| Serverpod API | **podfly** + Fly (this example’s GHA `deploy.yml`) |
+| Flutter iOS/Android | **Codemagic** *or* **GitHub Actions** — pick one `mobile.provider` |
 
-See [doc/codemagic.md](../../doc/codemagic.md).
+This example defaults to **Codemagic** (`codemagic.yaml`). For GHA mobile builds
+instead:
+
+```yaml
+mobile:
+  provider: github_actions
+```
+
+Then `podfly deploy --api` writes `.github/workflows/mobile-android.yml` and
+`mobile-ios.yml` if missing. See [doc/codemagic.md](../../doc/codemagic.md) and
+[doc/github_actions_mobile.md](../../doc/github_actions_mobile.md).
 
 ---
 

@@ -659,5 +659,29 @@ class Doctor {
         );
       }
     }
+    if (config.mobile.provider == MobileProvider.githubActions) {
+      final g = config.mobile.githubActionsOrDefault;
+      final dir = p.join(config.root, g.workflowsDir);
+      final android = p.join(dir, g.androidWorkflow);
+      final ios = p.join(dir, g.iosWorkflow);
+      final haveA = !g.android || File(android).existsSync();
+      final haveI = !g.ios || File(ios).existsSync();
+      if (haveA && haveI) {
+        log.detail(
+          'mobile: github_actions — workflows present under ${g.workflowsDir} '
+          '(see doc/github_actions_mobile.md)',
+        );
+      } else if (g.writeYaml) {
+        log.detail(
+          'mobile: github_actions — missing workflow(s) will be written on '
+          'next podfly deploy',
+        );
+      } else {
+        log.warn(
+          'mobile.provider: github_actions but workflow files missing and '
+          'write_yaml: false',
+        );
+      }
+    }
   }
 }
