@@ -225,13 +225,28 @@ class Destroyer {
   }
 
   List<_DestroyItem> _planWeb() {
-    if (!config.usesStaticWebHost &&
-        config.mode == DeployMode.split &&
-        config.web.enabled) {
-      // Native web hosts tear down with API project often.
+    // Only destroy a *separate* static CDN project when we actually deployed one.
+    // - monolith: UI is inside the API container (Cloud Run nginx, Fly, …)
+    // - native web hosts (Railway/DO/Render): UI is a host service, not Pages
+    // - web disabled: nothing
+    if (!config.web.enabled) {
+      log.detail('web.enabled: false — no separate UI resource to destroy');
       return [];
     }
-    if (!config.web.enabled) return [];
+    if (config.mode == DeployMode.monolith) {
+      log.detail(
+        'mode: monolith — UI ships with the API service '
+        '(no Cloudflare/Vercel/Netlify project to delete)',
+      );
+      return [];
+    }
+    if (!config.usesStaticWebHost) {
+      log.detail(
+        'web is on the API host (native web), not a third-party CDN — '
+        'no separate Pages/Vercel/Netlify delete',
+      );
+      return [];
+    }
 
     switch (config.webHost) {
       case StaticWebHost.cloudflare:

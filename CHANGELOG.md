@@ -15,6 +15,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.9] — 2026-07-24
+
+### Fixed
+
+- **`podfly destroy`:** do not delete Cloudflare/Vercel/Netlify for **monolith**
+  (UI is inside the API service) or native-web hosts — only when
+  `usesStaticWebHost` (real CDN split deploy).
+
+---
+
 ## [0.10.8] — 2026-07-24
 
 ### Fixed
