@@ -15,6 +15,19 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.8] — 2026-07-24
+
+### Fixed
+
+- **Cloud Run monolith:** real one-URL UI — multi-stage **nginx + Serverpod** image
+  (Flutter static on public port, API/WS on :8081). Copying into `web/app` alone left
+  the API answering `/` because Cloud Run only exposes one port.
+  - Writes root `Dockerfile` + `deploy/nginx.cloud_run_monolith.conf` + start script
+  - Patches `production.yaml` `apiServer.port: 8081`
+  - Uses pre-built `build/web` from podfly’s Flutter web step
+
+---
+
 ## [0.10.7] — 2026-07-24
 
 ### Fixed

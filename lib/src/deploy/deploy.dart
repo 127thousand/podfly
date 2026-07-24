@@ -177,7 +177,21 @@ class Deployer {
           } catch (_) {/* keep */}
         }
       } else if (adapter.supportsAllInOneWeb) {
-        await _copyWebIntoServer();
+        if (cfg.host == AppHost.cloudRun &&
+            cfg.mode == DeployMode.monolith) {
+          // Cloud Run one public port: nginx image bakes build/web (see CloudRunHost).
+          log.detail(
+            'Cloud Run monolith: Flutter web → image /app/public via Dockerfile '
+            '(not Serverpod web/ alone)',
+          );
+          if (!await File(p.join(cfg.webOutPath, 'index.html')).exists()) {
+            throw StateError(
+              'missing ${cfg.webOutPath}/index.html after flutter build web',
+            );
+          }
+        } else {
+          await _copyWebIntoServer();
+        }
       } else {
         log.warn('no web deploy path for ${adapter.label}');
       }

@@ -6,13 +6,15 @@ import '../config.dart';
 import '../fly_name.dart';
 import '../log.dart';
 import '../process_runner.dart';
+import '../templates.dart';
 import 'adapter.dart';
 import 'auth_helpers.dart';
 
-/// Google Cloud Run — inexpensive serverless Serverpod API (stateless).
+/// Google Cloud Run — inexpensive serverless Serverpod.
 ///
-/// Aligns with Serverpod's GCR guide: Docker image, scale-to-zero, optional
-/// Cloud SQL later. Not full GCE/Terraform. UI/web is out of scope for v1.
+/// **API-only:** standard Serverpod Dockerfile via `gcloud run deploy --source`.
+/// **Monolith** (`mode: monolith` + `web.enabled`): nginx serves Flutter web and
+/// proxies API/WebSockets to Serverpod on :8081 (one public Cloud Run port).
 class CloudRunHost extends HostAdapter {
   @override
   String get id => 'cloud_run';
@@ -132,10 +134,17 @@ class CloudRunHost extends HostAdapter {
         '(gcloud config get-value project)',
       );
     }
-    log.detail(
-      'Cloud Run is for stateless Serverpod (API). Future calls / in-memory '
-      'global state need GCE Terraform or Serverpod Cloud — not this path.',
-    );
+    if (config.mode == DeployMode.monolith && config.web.enabled) {
+      log.detail(
+        'Cloud Run monolith: nginx serves Flutter web + proxies API/WS '
+        '(one service / one URL).',
+      );
+    } else {
+      log.detail(
+        'Cloud Run API-only: stateless Serverpod. For Flutter web on the same '
+        'URL, use mode: monolith + web.enabled: true.',
+      );
+    }
   }
 
   @override
@@ -242,32 +251,133 @@ class CloudRunHost extends HostAdapter {
     return HostDeployResult(publicHost: host, displayUrl: url);
   }
 
-  /// Serverpod Dockerfiles expect monorepo root context; Cloud Run `--source`
-  /// looks for a Dockerfile in that directory.
+  static const _monolithDockerMarker = '# podfly:cloud_run_monolith';
+
+  /// Root Dockerfile for Cloud Run `--source` build.
+  ///
+  /// Monolith + web → nginx multi-stage image. API-only → server Dockerfile.
   Future<void> _ensureRootDockerfile(DeployContext ctx) async {
-    final rootDocker = File(p.join(ctx.config.root, 'Dockerfile'));
-    final serverDocker =
-        File(p.join(ctx.config.root, ctx.config.server, 'Dockerfile'));
-    if (await rootDocker.exists()) {
-      ctx.log.detail('using monorepo root Dockerfile');
+    final cfg = ctx.config;
+    final monolithWeb =
+        cfg.mode == DeployMode.monolith && cfg.web.enabled;
+
+    if (monolithWeb) {
+      await _ensureMonolithImage(ctx);
       return;
     }
+
+    final rootDocker = File(p.join(cfg.root, 'Dockerfile'));
+    // Don't leave a monolith Dockerfile when switching to API-only.
+    if (await rootDocker.exists()) {
+      final existing = await rootDocker.readAsString();
+      if (existing.contains(_monolithDockerMarker)) {
+        ctx.log.detail(
+          'root Dockerfile is monolith — replacing with API-only for this deploy',
+        );
+      } else {
+        ctx.log.detail('using monorepo root Dockerfile');
+        return;
+      }
+    }
+    final serverDocker = File(p.join(cfg.root, cfg.server, 'Dockerfile'));
     if (!await serverDocker.exists()) {
       ctx.log.warn(
-        'No Dockerfile at root or ${ctx.config.server}/ — '
+        'No Dockerfile at root or ${cfg.server}/ — '
         'gcloud may fail; run serverpod create or add a Dockerfile',
       );
       return;
     }
     if (ctx.runner.dryRun) {
-      ctx.log.dry('copy ${ctx.config.server}/Dockerfile → ./Dockerfile');
+      ctx.log.dry('copy ${cfg.server}/Dockerfile → ./Dockerfile');
       return;
     }
     await rootDocker.writeAsString(await serverDocker.readAsString());
     ctx.log.ok(
-      'copied ${ctx.config.server}/Dockerfile → ./Dockerfile '
+      'copied ${cfg.server}/Dockerfile → ./Dockerfile '
       '(Cloud Run --source requires root Dockerfile)',
     );
+  }
+
+  /// nginx + Serverpod image: static Flutter at /app/public, API on :8081.
+  Future<void> _ensureMonolithImage(DeployContext ctx) async {
+    final cfg = ctx.config;
+    final log = ctx.log;
+    final root = cfg.root;
+
+    final webIndex = File(p.join(root, 'build', 'web', 'index.html'));
+    if (!ctx.runner.dryRun && !await webIndex.exists()) {
+      throw StateError(
+        'Cloud Run monolith needs build/web (flutter build web). '
+        'podfly should build web before deploy — check web.enabled: true',
+      );
+    }
+
+    final deployDir = Directory(p.join(root, 'deploy'));
+    final nginxPath =
+        p.join(deployDir.path, 'nginx.cloud_run_monolith.conf');
+    final startPath =
+        p.join(deployDir.path, 'start.cloud_run_monolith.sh');
+    final dockerPath = p.join(root, 'Dockerfile');
+
+    if (ctx.runner.dryRun) {
+      log.dry('write Dockerfile (cloud_run monolith) + deploy/nginx + start.sh');
+      log.dry('patch ${cfg.server}/config/production.yaml apiServer.port → 8081');
+      return;
+    }
+
+    await deployDir.create(recursive: true);
+    await File(nginxPath).writeAsString(
+      readTemplate('nginx.cloud_run_monolith.conf'),
+    );
+    await File(startPath).writeAsString(
+      readTemplate('start.cloud_run_monolith.sh'),
+    );
+    await Process.run('chmod', ['+x', startPath]);
+
+    var docker = readTemplate('Dockerfile.cloud_run_monolith');
+    docker = '$_monolithDockerMarker\n$docker';
+    docker = docker.replaceAll('{{SERVER_DIR}}', cfg.server);
+    await File(dockerPath).writeAsString(docker);
+    log.ok('wrote Cloud Run monolith Dockerfile (nginx + Serverpod)');
+
+    await _patchApiServerPort(cfg, port: 8081, log: log);
+  }
+
+  /// Serverpod must listen on 8081; nginx owns the Cloud Run public port.
+  Future<void> _patchApiServerPort(
+    PodflyConfig config, {
+    required int port,
+    required Log log,
+  }) async {
+    final f = File(p.join(config.serverPath, 'config', 'production.yaml'));
+    if (!await f.exists()) {
+      log.warn('no production.yaml — ensure apiServer.port: $port for monolith');
+      return;
+    }
+    var text = await f.readAsString();
+    final original = text;
+    // Replace first apiServer port: N under apiServer block.
+    text = text.replaceFirstMapped(
+      RegExp(
+        r'(apiServer:\s*\n(?:[ \t]+.+\n)*?[ \t]+port:\s*)(\d+)',
+      ),
+      (m) => '${m.group(1)}$port',
+    );
+    if (text == original) {
+      // Insert port if missing after apiServer:
+      if (text.contains('apiServer:')) {
+        text = text.replaceFirst(
+          'apiServer:',
+          'apiServer:\n  port: $port',
+        );
+      }
+    }
+    if (text != original) {
+      await f.writeAsString(text);
+      log.ok('production.yaml apiServer.port → $port (nginx proxies public PORT)');
+    } else {
+      log.detail('production.yaml apiServer.port already $port (or unparsed)');
+    }
   }
 
   Future<String> _resolveProject(
