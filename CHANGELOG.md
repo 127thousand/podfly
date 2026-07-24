@@ -15,6 +15,17 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.10.12] — 2026-07-24
+
+### Fixed
+
+- **Fly.io monolith:** use the same **nginx + Serverpod** image as Cloud Run
+  (`internal_port` 8080 → static Flutter + API/WS on :8081). Copying Flutter into
+  `web/app` alone left the proxy hitting the wrong port after Cloud Run had
+  moved `apiServer` to 8081 (request timeouts on `*.fly.dev`).
+
+---
+
 ## [0.10.11] — 2026-07-24
 
 ### Fixed

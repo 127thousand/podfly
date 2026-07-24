@@ -177,12 +177,16 @@ class Deployer {
           } catch (_) {/* keep */}
         }
       } else if (adapter.supportsAllInOneWeb) {
-        if (cfg.host == AppHost.cloudRun &&
-            cfg.mode == DeployMode.monolith) {
-          // Cloud Run one public port: nginx image bakes build/web (see CloudRunHost).
+        final nginxMonolith = cfg.mode == DeployMode.monolith &&
+            cfg.web.enabled &&
+            (cfg.host == AppHost.cloudRun || cfg.host == AppHost.fly);
+        if (nginxMonolith) {
+          // One public port: nginx image bakes build/web (see NginxMonolithImage).
+          // Copying only into server web/app leaves UI on webServer:8082 while
+          // fly/Cloud Run proxy a single port — or api on 8081 with nothing on 8080.
           log.detail(
-            'Cloud Run monolith: Flutter web → image /app/public via Dockerfile '
-            '(not Serverpod web/ alone)',
+            '${adapter.label} monolith: Flutter web → image /app/public via '
+            'nginx Dockerfile (not Serverpod web/ alone)',
           );
           if (!await File(p.join(cfg.webOutPath, 'index.html')).exists()) {
             throw StateError(

@@ -6,9 +6,13 @@ import '../config.dart';
 import '../fly_name.dart';
 import '../log.dart';
 import '../process_runner.dart';
-import '../templates.dart';
 import 'adapter.dart';
 import 'auth_helpers.dart';
+import 'nginx_monolith_image.dart';
+
+// Re-export for tests that import cloud_run_host.dart
+export 'nginx_monolith_image.dart'
+    show patchCloudRunMonolithProductionYaml, patchNginxMonolithProductionYaml;
 
 /// Google Cloud Run — inexpensive serverless Serverpod.
 ///
@@ -254,8 +258,6 @@ class CloudRunHost extends HostAdapter {
     return HostDeployResult(publicHost: host, displayUrl: url);
   }
 
-  static const _monolithDockerMarker = '# podfly:cloud_run_monolith';
-
   /// Root Dockerfile for Cloud Run `--source` build.
   ///
   /// Monolith + web → nginx multi-stage image. API-only → server Dockerfile.
@@ -265,7 +267,7 @@ class CloudRunHost extends HostAdapter {
         cfg.mode == DeployMode.monolith && cfg.web.enabled;
 
     if (monolithWeb) {
-      await _ensureMonolithImage(ctx);
+      await NginxMonolithImage.ensure(ctx);
       return;
     }
 
@@ -273,7 +275,7 @@ class CloudRunHost extends HostAdapter {
     // Don't leave a monolith Dockerfile when switching to API-only.
     if (await rootDocker.exists()) {
       final existing = await rootDocker.readAsString();
-      if (existing.contains(_monolithDockerMarker)) {
+      if (NginxMonolithImage.isMonolithDockerfile(existing)) {
         ctx.log.detail(
           'root Dockerfile is monolith — replacing with API-only for this deploy',
         );
@@ -299,77 +301,6 @@ class CloudRunHost extends HostAdapter {
       'copied ${cfg.server}/Dockerfile → ./Dockerfile '
       '(Cloud Run --source requires root Dockerfile)',
     );
-  }
-
-  /// nginx + Serverpod image: static Flutter at /app/public, API on :8081.
-  Future<void> _ensureMonolithImage(DeployContext ctx) async {
-    final cfg = ctx.config;
-    final log = ctx.log;
-    final root = cfg.root;
-
-    final webIndex = File(p.join(root, 'build', 'web', 'index.html'));
-    if (!ctx.runner.dryRun && !await webIndex.exists()) {
-      throw StateError(
-        'Cloud Run monolith needs build/web (flutter build web). '
-        'podfly should build web before deploy — check web.enabled: true',
-      );
-    }
-
-    final deployDir = Directory(p.join(root, 'deploy'));
-    final nginxPath =
-        p.join(deployDir.path, 'nginx.cloud_run_monolith.conf');
-    final startPath =
-        p.join(deployDir.path, 'start.cloud_run_monolith.sh');
-    final dockerPath = p.join(root, 'Dockerfile');
-
-    if (ctx.runner.dryRun) {
-      log.dry('write Dockerfile (cloud_run monolith) + deploy/nginx + start.sh');
-      log.dry('patch ${cfg.server}/config/production.yaml apiServer.port → 8081');
-      return;
-    }
-
-    await deployDir.create(recursive: true);
-    await File(nginxPath).writeAsString(
-      readTemplate('nginx.cloud_run_monolith.conf'),
-    );
-    await File(startPath).writeAsString(
-      readTemplate('start.cloud_run_monolith.sh'),
-    );
-    await Process.run('chmod', ['+x', startPath]);
-
-    var docker = readTemplate('Dockerfile.cloud_run_monolith');
-    docker = '$_monolithDockerMarker\n$docker';
-    docker = docker.replaceAll('{{SERVER_DIR}}', cfg.server);
-    await File(dockerPath).writeAsString(docker);
-    log.ok('wrote Cloud Run monolith Dockerfile (nginx + Serverpod)');
-
-    await _patchApiServerPort(cfg, port: 8081, log: log);
-  }
-
-  /// Serverpod must listen on 8081; nginx owns the Cloud Run public port.
-  Future<void> _patchApiServerPort(
-    PodflyConfig config, {
-    required int port,
-    required Log log,
-  }) async {
-    final f = File(p.join(config.serverPath, 'config', 'production.yaml'));
-    if (!await f.exists()) {
-      log.warn('no production.yaml — ensure apiServer.port: $port for monolith');
-      return;
-    }
-    final original = await f.readAsString();
-    final text = patchCloudRunMonolithProductionYaml(original, port: port);
-    if (text != original) {
-      await f.writeAsString(text);
-      if (text.contains(RegExp(r'insightsServer:[\s\S]*?port:\s*8083'))) {
-        log.ok(
-          'production.yaml insightsServer.port → 8083 (avoid dual-bind with API)',
-        );
-      }
-      log.ok('production.yaml apiServer.port → $port (nginx proxies public PORT)');
-    } else {
-      log.detail('production.yaml apiServer.port already $port (or unparsed)');
-    }
   }
 
   Future<String> _resolveProject(
@@ -477,53 +408,4 @@ class CloudRunHost extends HostAdapter {
     await updated.save();
     ctx.log.detail('saved cloud_run.public_host → $publicHost');
   }
-}
-
-/// Rewrite Serverpod production.yaml for Cloud Run monolith (nginx → :8081 API).
-///
-/// Mini `serverpod create` templates put insightsServer on 8081 and api on 8080.
-/// Only rewriting api→8081 dual-binds both and Serverpod dies on start.
-/// Also enable console session logs so Cloud Run shows crash output.
-String patchCloudRunMonolithProductionYaml(String text, {int port = 8081}) {
-  final apiPortRe = RegExp(
-    r'(apiServer:\s*\n(?:[ \t]+.+\n)*?[ \t]+port:\s*)(\d+)',
-  );
-  if (apiPortRe.hasMatch(text)) {
-    text = text.replaceFirstMapped(
-      apiPortRe,
-      (m) => '${m.group(1)}$port',
-    );
-  } else if (text.contains('apiServer:')) {
-    text = text.replaceFirst(
-      'apiServer:',
-      'apiServer:\n  port: $port',
-    );
-  }
-
-  final insightsConflict = RegExp(
-    r'(insightsServer:\s*\n(?:[ \t]+.+\n)*?[ \t]+port:\s*)(\d+)',
-  );
-  final insightsMatch = insightsConflict.firstMatch(text);
-  if (insightsMatch != null && insightsMatch.group(2) == '$port') {
-    // 8083 is free (api 8081, web typically 8082).
-    text = text.replaceFirstMapped(
-      insightsConflict,
-      (m) => '${m.group(1)}8083',
-    );
-  }
-
-  if (RegExp(r'consoleEnabled:\s*false').hasMatch(text)) {
-    text = text.replaceFirst(
-      RegExp(r'consoleEnabled:\s*false'),
-      'consoleEnabled: true',
-    );
-  } else if (text.contains('sessionLogs:') &&
-      !RegExp(r'consoleEnabled:\s*true').hasMatch(text)) {
-    text = text.replaceFirst(
-      'sessionLogs:',
-      'sessionLogs:\n  consoleEnabled: true',
-    );
-  }
-
-  return text;
 }

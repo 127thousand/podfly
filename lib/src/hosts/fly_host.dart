@@ -10,6 +10,7 @@ import '../process_runner.dart';
 import '../templates.dart';
 import 'adapter.dart';
 import 'auth_helpers.dart';
+import 'nginx_monolith_image.dart';
 
 class FlyHost extends HostAdapter {
   @override
@@ -128,7 +129,17 @@ class FlyHost extends HostAdapter {
     if (fly == null) throw StateError('fly not found');
 
     final app = await _ensureFlyApp(ctx, fly, preferred);
-    await _ensureFlyToml(ctx, app);
+
+    final monolithWeb =
+        config.mode == DeployMode.monolith && config.web.enabled;
+    if (monolithWeb) {
+      // One public port: nginx :8080 → static Flutter + proxy Serverpod :8081.
+      // Plain server Dockerfile + web/app alone leaves API on a different port
+      // than fly.toml internal_port (or UI on webServer 8082 — unreachable).
+      await NginxMonolithImage.ensure(ctx);
+    }
+
+    await _ensureFlyToml(ctx, app, monolithWeb: monolithWeb);
     await ctx.patchPublicHosts('$app.fly.dev');
 
     final args = <String>[
@@ -148,22 +159,51 @@ class FlyHost extends HostAdapter {
     return HostDeployResult(publicHost: '$app.fly.dev', displayUrl: url);
   }
 
-  Future<void> _ensureFlyToml(DeployContext ctx, String app) async {
+  Future<void> _ensureFlyToml(
+    DeployContext ctx,
+    String app, {
+    required bool monolithWeb,
+  }) async {
     final config = ctx.config;
     final runner = ctx.runner;
     final log = ctx.log;
     final f = File(config.flyTomlPath);
-    final dockerfile = p.join(config.server, 'Dockerfile');
+    // Monolith: root nginx Dockerfile. API-only: Serverpod package Dockerfile.
+    final dockerfile =
+        monolithWeb ? 'Dockerfile' : p.join(config.server, 'Dockerfile');
 
     if (await f.exists()) {
       var text = await f.readAsString();
-      final updated = text.replaceFirst(
+      final original = text;
+      text = text.replaceFirst(
         RegExp(r'^app\s*=\s*"[^"]*"', multiLine: true),
         'app = "$app"',
       );
-      if (updated != text && !runner.dryRun) {
-        await f.writeAsString(updated);
-        log.detail('updated fly.toml app = $app');
+      // Keep dockerfile path in sync when switching monolith ↔ API-only.
+      if (RegExp(r'dockerfile\s*=').hasMatch(text)) {
+        text = text.replaceFirst(
+          RegExp(r'dockerfile\s*=\s*"[^"]*"'),
+          'dockerfile = "$dockerfile"',
+        );
+      } else if (text.contains('[build]')) {
+        text = text.replaceFirst(
+          '[build]',
+          '[build]\n  dockerfile = "$dockerfile"',
+        );
+      }
+      // Monolith nginx listens on 8080 (or \$PORT).
+      if (monolithWeb && RegExp(r'internal_port\s*=').hasMatch(text)) {
+        text = text.replaceFirst(
+          RegExp(r'internal_port\s*=\s*\d+'),
+          'internal_port = 8080',
+        );
+      }
+      if (text != original && !runner.dryRun) {
+        await f.writeAsString(text);
+        log.detail(
+          'updated fly.toml app=$app dockerfile=$dockerfile'
+          '${monolithWeb ? " (nginx monolith)" : ""}',
+        );
       }
       return;
     }
