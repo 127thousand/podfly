@@ -63,16 +63,19 @@ example/mobile_api_only/          ← monorepo root for this example
 | Serverpod API | **podfly** + Fly (this example’s GHA `deploy.yml`) |
 | Flutter iOS/Android | **Codemagic** *or* **GitHub Actions** — pick one `mobile.provider` |
 
-This example defaults to **Codemagic** (`codemagic.yaml`). For GHA mobile builds
+This example defaults to **Codemagic** (`codemagic.yaml`). For **GHA + Fastlane**
 instead:
 
 ```yaml
 mobile:
   provider: github_actions
+  github_actions:
+    fastlane: true   # default — Fastfile + workflows call fastlane
 ```
 
-Then `podfly deploy --api` writes `.github/workflows/mobile-android.yml` and
-`mobile-ios.yml` if missing. See [doc/codemagic.md](../../doc/codemagic.md) and
+Then `podfly deploy --api` writes `mobile-*.yml` plus
+`mobile_api_only_flutter/fastlane/` + `Gemfile` if missing. Set `fastlane: false`
+for compile-only. See [doc/codemagic.md](../../doc/codemagic.md) and
 [doc/github_actions_mobile.md](../../doc/github_actions_mobile.md).
 
 ---

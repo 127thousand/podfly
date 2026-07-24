@@ -1409,9 +1409,10 @@ class CodemagicConfig {
 
 /// Flutter iOS/Android CI via GitHub Actions (`mobile.provider: github_actions`).
 ///
-/// Writes workflow files under [.github/workflows] that build with
-/// `--dart-define` from [WebConfig.apiUrl]. Same role as [CodemagicConfig]:
-/// generate pipeline config only — signing secrets stay in GitHub.
+/// Writes workflow files under [.github/workflows]. When [fastlane] is true
+/// (default), also scaffolds `fastlane/` + `Gemfile` under the Flutter package
+/// and workflows call `bundle exec fastlane` (release path). When false,
+/// workflows only run `flutter build` (compile gate).
 class GithubActionsMobileConfig {
   GithubActionsMobileConfig({
     this.workflowsDir = '.github/workflows',
@@ -1421,12 +1422,15 @@ class GithubActionsMobileConfig {
     this.androidWorkflow = 'mobile-android.yml',
     this.iosWorkflow = 'mobile-ios.yml',
     this.flutterChannel = 'stable',
+    this.fastlane = true,
+    this.bundleId,
+    this.androidPackageName,
   });
 
   /// Relative to monorepo root.
   final String workflowsDir;
 
-  /// Write workflow files when missing (never overwrite).
+  /// Write workflow / Fastlane files when missing (never overwrite).
   final bool writeYaml;
 
   final bool ios;
@@ -1438,6 +1442,16 @@ class GithubActionsMobileConfig {
   /// `subosito/flutter-action` channel.
   final String flutterChannel;
 
+  /// Scaffold Fastlane + wire GHA to `fastlane ios beta` / `android internal`.
+  /// Set false for compile-only workflows (`flutter build`, no Fastfile).
+  final bool fastlane;
+
+  /// iOS bundle id for Fastlane Appfile (optional stub).
+  final String? bundleId;
+
+  /// Android applicationId for Play lane (optional stub).
+  final String? androidPackageName;
+
   Map<String, Object?> toMap() => {
         'workflows_dir': workflowsDir,
         'write_yaml': writeYaml,
@@ -1446,6 +1460,10 @@ class GithubActionsMobileConfig {
         'android_workflow': androidWorkflow,
         'ios_workflow': iosWorkflow,
         'flutter_channel': flutterChannel,
+        'fastlane': fastlane,
+        if (bundleId != null) 'bundle_id': bundleId,
+        if (androidPackageName != null)
+          'android_package_name': androidPackageName,
       };
 }
 
@@ -2014,6 +2032,11 @@ class PodflyConfig {
         buf.writeln('    android_workflow: ${g.androidWorkflow}');
         buf.writeln('    ios_workflow: ${g.iosWorkflow}');
         buf.writeln('    flutter_channel: ${g.flutterChannel}');
+        buf.writeln('    fastlane: ${g.fastlane}');
+        if (g.bundleId != null) buf.writeln('    bundle_id: ${g.bundleId}');
+        if (g.androidPackageName != null) {
+          buf.writeln('    android_package_name: ${g.androidPackageName}');
+        }
       }
     }
     buf.writeln();
@@ -2635,6 +2658,11 @@ class PodflyConfig {
               g['android_workflow']?.toString() ?? 'mobile-android.yml',
           iosWorkflow: g['ios_workflow']?.toString() ?? 'mobile-ios.yml',
           flutterChannel: g['flutter_channel']?.toString() ?? 'stable',
+          // Default true: GHA + Fastlane release path. Explicit false = compile-only.
+          fastlane: g['fastlane'] != false,
+          bundleId: g['bundle_id']?.toString(),
+          androidPackageName: g['android_package_name']?.toString() ??
+              g['package_name']?.toString(),
         );
       }
       mobile = MobileConfig(

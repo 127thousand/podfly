@@ -1,11 +1,10 @@
-# GitHub Actions — mobile iOS/Android CI
+# GitHub Actions + Fastlane — mobile iOS/Android
 
-Same role as [Codemagic](codemagic.md): **generate pipeline files** for Flutter
-store clients in a Serverpod monorepo. podfly still deploys the **API**
-(`podfly deploy --api`); GHA builds AAB / iOS on GitHub-hosted runners.
+**GHA** = when/where the job runs. **Fastlane** = how you build and (optionally)
+ship to TestFlight / Play. podfly generates both; it does not hold signing keys
+or trigger builds.
 
-This is **not** the API deploy workflow (`deploy.yml` + `FLY_API_TOKEN`). That
-stays separate — see [ci.md](ci.md).
+API still: `podfly deploy --api`. This is **not** `deploy.yml` — see [ci.md](ci.md).
 
 ## Config
 
@@ -14,11 +13,13 @@ mobile:
   provider: github_actions   # alias: gha
   github_actions:
     workflows_dir: .github/workflows
-    write_yaml: true         # write if missing; never overwrite
+    write_yaml: true
     ios: true
     android: true
-    android_workflow: mobile-android.yml
-    ios_workflow: mobile-ios.yml
+    fastlane: true           # default — Fastfile + Gemfile + fastlane lanes
+    # fastlane: false        # compile-only (plain flutter build, no Fastlane)
+    # bundle_id: com.example.app
+    # android_package_name: com.example.app
     flutter_channel: stable
 
 web:
@@ -27,60 +28,85 @@ web:
   server_url_define: SERVER_URL
 ```
 
-On `podfly deploy`, missing workflow files are created. Existing files are left
-alone (hand-tuned signing must not be clobbered).
+## What gets generated (`fastlane: true`)
 
-## What gets generated
+| Path | Role |
+|------|------|
+| `.github/workflows/mobile-android.yml` | ubuntu → Ruby + Flutter → `fastlane android …` |
+| `.github/workflows/mobile-ios.yml` | macos → Ruby + Flutter → `fastlane ios …` |
+| `*_flutter/Gemfile` | `gem "fastlane"` |
+| `*_flutter/fastlane/Fastfile` | lanes: `ios build` / `ios beta`, `android build` / `android internal` |
+| `*_flutter/fastlane/Appfile` | bundle id / package stubs |
+| `*_flutter/fastlane/Matchfile` | match stub (optional signing repo) |
 
-| File | Runner | Default build |
-|------|--------|----------------|
-| `mobile-android.yml` | `ubuntu-latest` | `flutter build appbundle` + artifact |
-| `mobile-ios.yml` | `macos-latest` | `flutter build ios --no-codesign` + optional artifact |
+All writes are **if missing only** (never overwrite hand-tuned files).
 
-Both bake `--dart-define=SERVER_URL=<web.api_url>` (or `web.server_url_define`).
+`SERVER_URL` (or `web.server_url_define`) is set in the workflow env from
+`web.api_url` and passed into Flutter via `--dart-define`.
 
-Triggers: `workflow_dispatch` and `push` to `main` filtered to the Flutter
-package path (so API-only commits do not burn macOS minutes).
+### Lanes
 
-## Secrets / signing
+| Lane | Platform | Behavior |
+|------|----------|----------|
+| `ios build` | iOS | `flutter build ios --no-codesign` |
+| `ios beta` | iOS | `flutter build ipa`; `upload_to_testflight` **commented** until secrets |
+| `android build` | Android | `flutter build appbundle` |
+| `android internal` | Android | appbundle; `upload_to_play_store` **commented** until Play JSON |
 
-| Platform | Default | Store release |
-|----------|---------|----------------|
-| Android | Unsigned/release keystore as Flutter default | Keystore + Play secrets; extend workflow |
-| iOS | `--no-codesign` (compile check) | Certs/profiles + `flutter build ipa`; extend workflow |
+**Push to main** runs `build` (compile-friendly).  
+**workflow_dispatch** lets you pick `beta` / `internal` for release attempts.
 
-podfly does not manage keystores or App Store Connect keys.
+## Secrets (release)
+
+Add under GitHub → Settings → Secrets and variables → Actions:
+
+| Secret | Used for |
+|--------|----------|
+| `MATCH_PASSWORD` / `MATCH_GIT_URL` / `MATCH_GIT_BASIC_AUTHORIZATION` | fastlane match |
+| `APP_IDENTIFIER` / `APPLE_ID` / `TEAM_ID` / `ITC_TEAM_ID` | Appfile / match |
+| `APP_STORE_CONNECT_API_KEY_*` | ASC API (preferred over password) |
+| `PLAY_JSON_KEY` | Play service account JSON body (written to a temp file in CI) |
+| `PACKAGE_NAME` | Android package |
+
+Then uncomment `match`, `upload_to_testflight`, and `upload_to_play_store` in
+the Fastfile (podfly will not re-touch it once created).
+
+## Compile-only mode
+
+```yaml
+mobile:
+  provider: github_actions
+  github_actions:
+    fastlane: false
+```
+
+Workflows call `flutter build` only — no Gemfile/Fastlane. Useful as a cheap PR
+gate; not a store path.
 
 ## vs Codemagic
 
-| | GitHub Actions | Codemagic |
+| | GHA + Fastlane | Codemagic |
 |--|----------------|-----------|
-| Config file | `.github/workflows/mobile-*.yml` | `codemagic.yaml` |
-| Mac builders | GitHub `macos-*` (minutes) | Codemagic mac instances |
-| Store publish UX | DIY / third-party actions | Built-in integrations |
-| API deploy in same org | Natural (`deploy.yml` already) | Separate product |
+| Config | workflows + `fastlane/` | `codemagic.yaml` |
+| Signing | match + GitHub secrets | Codemagic integrations |
+| Same repo as API deploy | Yes | Separate product |
 
-Pick **one** `mobile.provider`. API deploy can still use GHA either way.
+Pick one `mobile.provider`.
 
-## Workflow with API
+## Flow
 
 ```bash
-podfly deploy --api --yes --smoke   # API + write mobile-*.yml if missing
-git add .github/workflows/mobile-*.yml podfly.yaml
-git commit -m "ci: mobile GHA"
+# podfly.yaml: mobile.provider: github_actions  (fastlane defaults true)
+podfly deploy --api --yes --smoke
+git add .github/workflows/mobile-*.yml \
+  your_flutter/Gemfile your_flutter/fastlane/
+git commit -m "ci: mobile GHA + Fastlane"
 git push
-# Actions → Mobile Android / Mobile iOS → Run workflow
+# Actions → Mobile iOS → Run workflow → lane "build" or "beta"
 ```
-
-## Example
-
-[`example/mobile_api_only`](../example/mobile_api_only) documents both providers.
-API deploy workflows live there already; switch `mobile.provider` to
-`github_actions` and re-deploy (or delete workflows and regenerate) for mobile
-build YAML.
 
 ## Related
 
-- [ci.md](ci.md) — API deploy tokens and `podfly deploy` in GHA  
-- [codemagic.md](codemagic.md) — Codemagic alternative  
-- [guide.md — mobile](guide.md)  
+- [ci.md](ci.md) — API deploy  
+- [codemagic.md](codemagic.md)  
+- [Fastlane docs](https://docs.fastlane.tools/)  

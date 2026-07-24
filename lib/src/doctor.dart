@@ -666,15 +666,18 @@ class Doctor {
       final ios = p.join(dir, g.iosWorkflow);
       final haveA = !g.android || File(android).existsSync();
       final haveI = !g.ios || File(ios).existsSync();
+      final fl = g.fastlane
+          ? 'fastlane: true (Fastfile under ${config.flutter}/fastlane)'
+          : 'fastlane: false (compile-only)';
       if (haveA && haveI) {
         log.detail(
-          'mobile: github_actions — workflows present under ${g.workflowsDir} '
+          'mobile: github_actions — workflows under ${g.workflowsDir}; $fl '
           '(see doc/github_actions_mobile.md)',
         );
       } else if (g.writeYaml) {
         log.detail(
-          'mobile: github_actions — missing workflow(s) will be written on '
-          'next podfly deploy',
+          'mobile: github_actions — missing workflow(s)/Fastlane will be '
+          'written on next podfly deploy ($fl)',
         );
       } else {
         log.warn(

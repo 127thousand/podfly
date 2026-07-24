@@ -468,6 +468,9 @@ mobile:
   #   write_yaml: true
   #   ios: true
   #   android: true
+  #   fastlane: true          # default — Fastfile + GHA call fastlane
+  #   # fastlane: false      # compile-only flutter build
+  #   # bundle_id: com.example.app
   #   android_workflow: mobile-android.yml
   #   ios_workflow: mobile-ios.yml
   #   flutter_channel: stable
@@ -476,6 +479,8 @@ mobile:
 On API-only init (`web.enabled: false`), podfly defaults `provider: codemagic`.
 `podfly deploy` writes the chosen pipeline(s) with `web.api_url` baked into
 `--dart-define` (`web.server_url_define`, default `SERVER_URL`).
+
+For GHA, `fastlane: true` (default) also scaffolds `*_flutter/fastlane/` + `Gemfile`.
 
 See [codemagic.md](codemagic.md) and [github_actions_mobile.md](github_actions_mobile.md).
 

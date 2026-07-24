@@ -18,8 +18,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
   - Does **not** trigger builds or manage store secrets (dashboard / REST API)
   - **[doc/codemagic.md](doc/codemagic.md)** · example `example/mobile_api_only`
 - **`mobile.provider: github_actions`** — generate **`.github/workflows/mobile-*.yml`**
-  - Android (ubuntu) appbundle + iOS (macos) `--no-codesign` by default
-  - Same `SERVER_URL` dart-define; never overwrites existing workflows
+  - **`fastlane: true` (default)** — also scaffolds `Gemfile` + `fastlane/Fastfile|Appfile|Matchfile`
+    under the Flutter package; workflows run `bundle exec fastlane` (lanes: `build` /
+    `ios beta` / `android internal`). Store upload steps commented until secrets are set.
+  - **`fastlane: false`** — compile-only plain `flutter build` workflows
+  - Same `SERVER_URL` dart-define; never overwrites existing files
   - **[doc/github_actions_mobile.md](doc/github_actions_mobile.md)**
 - **`redis.provider: upstash`** — optional Serverpod Redis (cache/PubSub)
   - `upstash redis create/list/get` when `provision: true`
