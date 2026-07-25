@@ -12,6 +12,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 ### Planned (parked)
 
 - **AWS RDS / Cloud SQL / Azure Database for PostgreSQL** — enterprise Postgres providers
+- **`podfly create`** — multi-surface / multi-backend monorepo scaffolder
+  (see [doc/specs/2026-07-25-podfly-create-roadmap.md](doc/specs/2026-07-25-podfly-create-roadmap.md))
 
 ---
 

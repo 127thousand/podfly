@@ -18,6 +18,7 @@
 | [Codemagic](codemagic.md) | `mobile.provider: codemagic` — iOS/Android CI (`codemagic.yaml`) |
 | [GitHub Actions mobile](github_actions_mobile.md) | `mobile.provider: github_actions` — `mobile-android.yml` / `mobile-ios.yml` |
 | [Design specs](specs/) | Architecture decisions (incl. [ECS+ALB realtime sketch](specs/2026-07-21-aws-ecs-realtime-sketch.md)) |
+| [**podfly create roadmap**](specs/2026-07-25-podfly-create-roadmap.md) | Living plan: multi-surface / multi-backend scaffolder + app kit |
 
 Start at the [root README](../README.md) for install and quick start.
 
