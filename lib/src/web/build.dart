@@ -23,7 +23,6 @@ class WebBuilder {
     final dest =
         File(p.join(config.flutterPath, 'web', 'flutter_bootstrap.js'));
     final sameOrigin = config.web.build.useSameOriginCanvasKit;
-    final marker = sameOrigin ? 'canvasKitBaseUrl' : 'serviceWorker';
     if (await dest.exists()) {
       final existing = await dest.readAsString();
       // Refresh bootstrap when build mode and file disagree on CanvasKit origin.
