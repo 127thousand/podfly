@@ -116,10 +116,11 @@ my_app/
 
 **Exit criteria:**
 
-- [ ] `podfly create` produces a workspace monorepo.
-- [ ] Serverpod path deploys with current Fly/Cloud Run monolith/split paths.
-- [ ] App-only + backend-only trees make sense and doctor doesn’t crash.
-- [ ] README in scaffold: local run + deploy one-liners.
+- [x] `podfly create` produces a workspace monorepo.
+- [x] Serverpod path deploys with current Fly/Cloud Run monolith/split paths.
+- [x] App-only + backend-only trees make sense and doctor doesn’t crash.
+- [x] README in scaffold: local run + deploy one-liners (`PODFLY.md`).
+- [x] Hardening: `--database` ↔ template, mobile-only CI/API tips, post-create host CLI hints, app-only experimental.
 
 **Suggested implementation notes:**
 

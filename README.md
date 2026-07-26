@@ -9,7 +9,7 @@
 podfly is a thin orchestrator: it shells out to **existing tools** (`fly`, `railway`, `wrangler`, `vercel`, `netlify`, `gh`, `neonctl`, …), generates the right config, and encodes battle-tested defaults (Flutter web packaging, scale-to-zero, DB wiring). It is **not** a new host — it makes the hosts you already use boring to ship to.
 
 ```text
-serverpod create …     →  Dockerfile + monorepo (Serverpod)
+podfly create …        →  serverpod create + podfly.yaml (one shot)
 podfly deploy          →  provider CLIs + configs + quirks (podfly)
 ```
 
@@ -34,7 +34,16 @@ The Serverpod project’s managed offering is **[Serverpod Cloud](https://server
 dart pub global activate podfly
 ```
 
-Ensure `~/.pub-cache/bin` (or your platform’s pub cache bin) is on `PATH`. Upgrade with the same command.
+Ensure `~/.pub-cache/bin` (or your platform’s pub cache bin) is on `PATH`.
+
+```bash
+podfly upgrade              # reinstall latest from pub.dev
+podfly upgrade --git        # track GitHub main
+podfly version              # this binary
+podfly help                 # overview
+podfly help create          # detailed topic
+podfly deploy --help        # same as help deploy
+```
 
 **Contributors / unreleased:**
 
@@ -63,16 +72,23 @@ dart pub global activate --source git https://github.com/127thousand/podfly.git
 
 ## Quick start
 
-**Value prop:** create a Serverpod project, then one command ships it. You do **not** hand-write `fly.toml` / `railway.toml` / app specs first — podfly generates them when missing.
+**Value prop:** one command scaffolds Serverpod + `podfly.yaml`, then one command ships. You do **not** hand-write `fly.toml` / `railway.toml` / app specs first — podfly generates them when missing.
 
 ```bash
-serverpod create my_app --mini -f   # Serverpod: monorepo + Dockerfile
+podfly create my_app --yes          # serverpod create + podfly.yaml + PODFLY.md
 cd my_app
 fly auth login                      # once per machine (or set FLY_API_TOKEN in CI)
-podfly deploy --yes --smoke         # creates podfly.yaml + fly.toml if needed, deploys, smokes
+podfly deploy --yes --smoke         # fly.toml if needed, deploys, smokes
 ```
 
-That’s the happy path. No prior `podfly.yaml`, no prior host config — only a normal Serverpod tree and a logged-in host CLI (or CI token).
+Interactive create (TTY): kind, surfaces, **database** (mini vs Postgres), host, web topology.
+
+```bash
+podfly create shop --database neon --yes          # fullstack + Neon in podfly.yaml
+podfly create mobile_app --surfaces mobile --yes  # API-only + Codemagic on deploy
+```
+
+That’s the happy path. Already have a Serverpod tree? `cd` into it and run `podfly deploy` (init writes `podfly.yaml` if missing).
 
 ### Do I need `fly.toml`?
 

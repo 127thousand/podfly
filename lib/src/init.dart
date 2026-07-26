@@ -11,6 +11,29 @@ import 'hosts/hosts.dart';
 import 'log.dart';
 import 'tty.dart';
 
+/// Overrides when [Initer] is driven by `podfly create` (skip re-prompts).
+class InitOverrides {
+  InitOverrides({
+    this.host,
+    this.mode,
+    this.webEnabled,
+    this.database,
+    this.webBuild,
+    this.server,
+    this.flutter,
+  });
+
+  final AppHost? host;
+  final DeployMode? mode;
+  final bool? webEnabled;
+  final DatabaseProvider? database;
+  final FlutterWebBuild? webBuild;
+
+  /// Relative package paths when discovery is incomplete (e.g. app-only `.`).
+  final String? server;
+  final String? flutter;
+}
+
 /// Interactive (or --yes defaults) project init → [PodflyConfig].
 class Initer {
   Initer({
@@ -21,6 +44,8 @@ class Initer {
     this.configPath,
     /// Preferred API host (e.g. from `podfly deploy --host railway`).
     this.preferredHost,
+    /// When set (e.g. by `podfly create`), forces host/mode/web without menus.
+    this.overrides,
   });
 
   final String root;
@@ -28,6 +53,7 @@ class Initer {
   final bool yes;
   final String? configPath;
   final AppHost? preferredHost;
+  final InitOverrides? overrides;
 
   Future<PodflyConfig> run() async {
     ensureHostsRegistered();
@@ -60,11 +86,16 @@ class Initer {
       return '$status ${a.label}  ·  ${a.capabilitySummary}$planned';
     }
 
-    if (yes || !isTty) {
+    final useDefaults = yes || !isTty || overrides != null;
+    if (useDefaults) {
       name = nameDefault;
-      server = discovered.server ?? '${nameDefault}_server';
-      flutter = discovered.flutter ?? '${nameDefault}_flutter';
-      host = preferredHost ?? AppHost.fly;
+      server = overrides?.server ??
+          discovered.server ??
+          '${nameDefault}_server';
+      flutter = overrides?.flutter ??
+          discovered.flutter ??
+          '${nameDefault}_flutter';
+      host = overrides?.host ?? preferredHost ?? AppHost.fly;
       region = 'iad';
 
       final surface = await detectClientSurface(
@@ -78,10 +109,11 @@ class Initer {
       for (final w in surface.warnings.take(3)) {
         log.warn(w);
       }
-      webEnabled = surface.deployWeb;
+      webEnabled = overrides?.webEnabled ?? surface.deployWeb;
       // API-only apps don't need Cloudflare Pages.
-      mode = webEnabled ? DeployMode.split : DeployMode.monolith;
-      flutterWebBuild = FlutterWebBuild.canvaskit;
+      mode = overrides?.mode ??
+          (webEnabled ? DeployMode.split : DeployMode.monolith);
+      flutterWebBuild = overrides?.webBuild ?? FlutterWebBuild.canvaskit;
 
       final detection = await detectDatabaseNeed(
         p.join(root, server),
@@ -94,13 +126,16 @@ class Initer {
       for (final w in detection.warnings.take(4)) {
         log.warn(w);
       }
-      dbProvider = detection.need == DatabaseNeed.required
-          ? DatabaseProvider.neon
-          : DatabaseProvider.none;
+      dbProvider = overrides?.database ??
+          (detection.need == DatabaseNeed.required
+              ? DatabaseProvider.neon
+              : DatabaseProvider.none);
       // Serverpod mini default greeting endpoint (used by --smoke).
       smokePath = '/greeting/hello';
       smokeMethod = 'POST';
-      log.detail('using defaults (--yes / non-TTY); host: ${host.yamlName}');
+      log.detail(
+        'using defaults (--yes / non-TTY / create); host: ${host.yamlName}',
+      );
     } else {
       name = await prompt('App name', defaultValue: nameDefault);
       server = await prompt(

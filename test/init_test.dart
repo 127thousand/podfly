@@ -50,6 +50,38 @@ dependencies:
     await dir.delete(recursive: true);
   });
 
+  test('Initer respects InitOverrides from create', () async {
+    final dir = await Directory.systemTemp.createTemp('podfly_init_ov_');
+    Directory(p.join(dir.path, 'demo_server', 'config')).createSync(recursive: true);
+    File(p.join(dir.path, 'demo_server', 'config', 'production.yaml'))
+        .writeAsStringSync('apiServer:\n  port: 8080\n');
+    File(p.join(dir.path, 'demo_server', 'pubspec.yaml')).writeAsStringSync(
+        'name: demo_server\ndependencies:\n  serverpod: 1.0.0\n');
+    Directory(p.join(dir.path, 'demo_flutter', 'web')).createSync(recursive: true);
+    File(p.join(dir.path, 'demo_flutter', 'pubspec.yaml')).writeAsStringSync(
+        'name: demo_flutter\ndependencies:\n  flutter:\n    sdk: flutter\n');
+
+    final cfg = await Initer(
+      root: dir.path,
+      log: Log(quiet: true),
+      yes: true,
+      overrides: InitOverrides(
+        host: AppHost.railway,
+        mode: DeployMode.monolith,
+        webEnabled: true,
+        database: DatabaseProvider.none,
+        webBuild: FlutterWebBuild.canvaskit,
+      ),
+    ).run();
+
+    expect(cfg.host, AppHost.railway);
+    expect(cfg.mode, DeployMode.monolith);
+    expect(cfg.web.enabled, isTrue);
+    expect(cfg.database.provider, DatabaseProvider.none);
+
+    await dir.delete(recursive: true);
+  });
+
   test('Initer respects custom configPath', () async {
     final dir = await Directory.systemTemp.createTemp('podfly_init_cfg_');
     Directory(p.join(dir.path, 'x_server', 'config')).createSync(recursive: true);

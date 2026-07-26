@@ -12,8 +12,32 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 ### Planned (parked)
 
 - **AWS RDS / Cloud SQL / Azure Database for PostgreSQL** — enterprise Postgres providers
-- **`podfly create`** — multi-surface / multi-backend monorepo scaffolder
+- **`podfly create`** recipes beyond Serverpod (dart_frog, relic, grpc) and app kit
   (see [doc/specs/2026-07-25-podfly-create-roadmap.md](doc/specs/2026-07-25-podfly-create-roadmap.md))
+
+---
+
+## [0.11.0] — 2026-07-26
+
+### Added
+
+- **`podfly create`** — one-shot Serverpod scaffold + `podfly.yaml`:
+  wraps `serverpod create` (or `flutter create` for app-only), then init with
+  host/mode/web overrides (no second wizard).
+- **Create hardening:** `--database` drives template (`mini` / `fullstack`);
+  mobile-only → API + Codemagic; post-create host CLI/login tips; app-only
+  experimental; richer `PODFLY.md`.
+- **`InitOverrides`** on `Initer` for non-interactive create/deploy glue.
+- **`podfly upgrade`** — `dart pub global activate` (pub.dev, `--git`, `--path`).
+- **`podfly version` / `--version`** — embedded package version.
+- **Detailed help** — `podfly help [topic]` and `podfly <cmd> --help`
+  (create, deploy, destroy, doctor, init, smoke, upgrade, hosts, config, workflow).
+
+### Changed
+
+- Help text leads with `podfly create` as the first-time path.
+- **CLI UI** — OpenCode/clack-style half-block PODFLy banner and tree steps
+  (`┌` `│` `●` `◇` `└`).
 
 ---
 

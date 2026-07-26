@@ -4,16 +4,20 @@ import 'package:args/args.dart';
 import 'package:path/path.dart' as p;
 
 import 'config.dart';
+import 'create.dart';
 import 'deploy/deploy.dart';
 import 'destroy/destroy.dart';
 import 'doctor.dart';
 import 'fly_name.dart';
+import 'help.dart';
 import 'hosts/hosts.dart';
 import 'init.dart';
 import 'log.dart';
 import 'process_runner.dart';
 import 'smoke.dart';
 import 'tty.dart';
+import 'upgrade.dart';
+import 'version.dart';
 
 Future<int> runPodfly(List<String> args) async {
   ensureHostsRegistered();
@@ -23,19 +27,28 @@ Future<int> runPodfly(List<String> args) async {
   final knownCommands = {
     'doctor',
     'init',
+    'create',
     'deploy',
     'destroy',
     'nuke',
     'smoke',
+    'upgrade',
+    'version',
     'help',
   };
   var effectiveArgs = List<String>.from(args);
+
   if (args.isEmpty) {
     effectiveArgs = ['deploy'];
-  } else if (args.first == 'help' ||
-      args.first == '--help' ||
-      args.first == '-h') {
-    _usage(parser);
+  } else if (args.first == '--version' || args.first == '-v') {
+    stdout.writeln(podflyVersionLine());
+    return 0;
+  } else if (args.first == 'help') {
+    // podfly help [topic]
+    printHelp(args.length > 1 ? args[1] : null);
+    return 0;
+  } else if (args.first == '--help' || args.first == '-h') {
+    printHelp();
     return 0;
   } else if (!knownCommands.contains(args.first) &&
       args.first.startsWith('-')) {
@@ -47,20 +60,28 @@ Future<int> runPodfly(List<String> args) async {
     global = parser.parse(effectiveArgs);
   } on FormatException catch (e) {
     stderr.writeln(e.message);
-    _usage(parser);
+    printHelp();
     return 64;
   }
 
+  // Command-specific --help / -h
+  final cmdName = global.command?.name;
   if (global['help'] == true || global.command?['help'] == true) {
-    _usage(parser);
+    printHelp(cmdName == 'nuke' ? 'destroy' : cmdName);
+    return 0;
+  }
+  if (global['version'] == true) {
+    stdout.writeln(podflyVersionLine());
     return 0;
   }
 
-  switch (global.command?.name) {
+  switch (cmdName) {
     case 'doctor':
       return _doctor(global);
     case 'init':
       return _init(global);
+    case 'create':
+      return _create(global);
     case 'deploy':
       return _deploy(global);
     case 'destroy':
@@ -68,12 +89,21 @@ Future<int> runPodfly(List<String> args) async {
       return _destroy(global);
     case 'smoke':
       return _smokeOnly(global);
+    case 'upgrade':
+      return _upgrade(global);
+    case 'version':
+      stdout.writeln(podflyVersionLine());
+      return 0;
+    case 'help':
+      printHelp(global.command?.rest.isNotEmpty == true
+          ? global.command!.rest.first
+          : null);
+      return 0;
     default:
-      // `podfly deploy` parsed as command; bare might fall through
       if (global.command == null) {
         return _deploy(global);
       }
-      _usage(parser);
+      printHelp();
       return 64;
   }
 }
@@ -103,54 +133,64 @@ ArgParser _buildParser() {
     ..addOption('config', help: 'Path to podfly.yaml')
     ..addOption('root', help: 'Project root');
 
+  ArgParser createFlags() => ArgParser()
+    ..addFlag('help', abbr: 'h', negatable: false)
+    ..addFlag('dry-run', negatable: false, help: 'Plan only (no files)')
+    ..addFlag('yes', abbr: 'y', negatable: false,
+        help: 'Non-interactive defaults (app+backend, mobile+web, Fly, no DB)')
+    ..addOption('directory',
+        abbr: 'd',
+        help: 'Parent directory for the new project (default: cwd)')
+    ..addOption('kind',
+        help: 'app-backend | app-only | backend-only',
+        valueHelp: 'kind')
+    ..addOption('surfaces',
+        help: 'Comma list: mobile, web (ignored for backend-only)',
+        valueHelp: 'mobile,web')
+    ..addOption('host',
+        allowed: HostRegistry.cliAllowedIds,
+        help: 'API cloud host (default: fly)')
+    ..addOption('mode',
+        allowed: ['split', 'monolith', 'fly'],
+        help: 'Web topology when web surface is on (default: split)')
+    ..addOption('template',
+        allowed: ['mini', 'fullstack', 'server', 'module'],
+        help:
+            'serverpod create template (default: mini if no DB, fullstack if DB)')
+    ..addOption('database',
+        help:
+            'none | neon | fly_postgres | sqlite | … (default: none with --yes)',
+        valueHelp: 'provider');
+
+  ArgParser upgradeFlags() => ArgParser()
+    ..addFlag('help', abbr: 'h', negatable: false)
+    ..addFlag('dry-run', negatable: false, help: 'Print activate command only')
+    ..addFlag('yes', abbr: 'y', negatable: false, help: 'Non-interactive')
+    ..addFlag('git',
+        negatable: false, help: 'Activate from GitHub instead of pub.dev')
+    ..addOption('git-url',
+        help: 'Git URL for --git (default: 127thousand/podfly)')
+    ..addOption('path', help: 'Activate from local path (contributors)');
+
+  ArgParser versionFlags() => ArgParser()
+    ..addFlag('help', abbr: 'h', negatable: false);
+
+  ArgParser helpFlags() => ArgParser()
+    ..addFlag('help', abbr: 'h', negatable: false);
+
   return ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false)
+    ..addFlag('version', abbr: 'v', negatable: false, help: 'Print version')
     ..addCommand('doctor', deployFlags())
     ..addCommand('init', deployFlags())
+    ..addCommand('create', createFlags())
     ..addCommand('deploy', deployFlags())
     ..addCommand('destroy', deployFlags())
     ..addCommand('nuke', deployFlags()) // alias
-    ..addCommand('smoke', deployFlags());
-}
-
-void _usage(ArgParser parser) {
-  stdout.writeln('''
-podfly — deploy Serverpod via existing cloud CLIs (not a host)
-
-  serverpod create …  →  monorepo + Dockerfile (Serverpod)
-  podfly deploy       →  fly/railway/wrangler/… + config quirks
-  podfly destroy      →  tear down API + static web (opt-in DB)
-
-Usage:
-  podfly deploy [options]   Doctor → init if needed → deploy
-  podfly destroy [options]  Tear down cloud resources from podfly.yaml
-  podfly doctor             Check tools + auth
-  podfly init               Write podfly.yaml only (interactive host picker)
-  podfly smoke              HTTP checks only
-
-Deploy options:
-  --dry-run     Plan only (no create/deploy/network side effects)
-  --smoke       After deploy, hit smoke: endpoints in podfly.yaml
-  --api         API only (skip Flutter web / Pages) — use for mobile
-  --web         Web only (or force web even if web.enabled: false)
-  --yes / -y    Non-interactive init defaults (skips host/CDN questions!)
-  --no-login    Do not open browser logins (CI: use tokens)
-  --init        Force wizard; confirms before overwriting podfly.yaml
-  --host        API cloud: fly | railway | digitalocean | render | …
-  --mode        split | monolith
-  --root / --config
-
-Destroy options:
-  --yes         Required non-interactively; confirm destruction
-  --api / --web Limit what is destroyed (default: both)
-  --database    Also delete managed Postgres (Supabase / Fly PG / …)
-  --dry-run     Print plan only
-
-Tip: first-time interactive demo — omit --yes so you are asked for cloud + CDN:
-  serverpod create my_app --mini -f && cd my_app && podfly deploy --smoke
-
-Docs: https://pub.dev/packages/podfly · https://github.com/127thousand/podfly
-''');
+    ..addCommand('smoke', deployFlags())
+    ..addCommand('upgrade', upgradeFlags())
+    ..addCommand('version', versionFlags())
+    ..addCommand('help', helpFlags());
 }
 
 String _root(ArgResults g) {
@@ -231,6 +271,63 @@ Future<int> _init(ArgResults g) async {
   }
   log.detail('Next: podfly deploy --smoke');
   return 0;
+}
+
+Future<int> _create(ArgResults g) async {
+  final log = Log();
+  final dry = _flag(g, 'dry-run');
+  log.banner(subtitle: dry ? 'create (dry-run)' : 'create');
+  final runner = ProcessRunner(log: log, dryRun: dry);
+
+  final cmd = g.command;
+  final rest = cmd?.rest ?? const <String>[];
+  final nameArg = rest.isNotEmpty ? rest.first : null;
+  if (rest.length > 1) {
+    log.err('Too many arguments — usage: podfly create [name] [options]');
+    return 64;
+  }
+
+  CreateKind? kind;
+  CreateSurfaces? surfaces;
+  DeployMode? mode;
+  AppHost? host;
+  DatabaseProvider? database;
+  try {
+    kind = parseCreateKind(_opt(g, 'kind'));
+    surfaces = parseCreateSurfaces(_opt(g, 'surfaces'));
+    database = parseCreateDatabase(_opt(g, 'database'));
+    final modeOpt = _opt(g, 'mode');
+    if (modeOpt != null) mode = parseDeployMode(modeOpt);
+    final hostOpt = _opt(g, 'host');
+    if (hostOpt != null) host = AppHostX.parse(hostOpt);
+  } on FormatException catch (e) {
+    log.err(e.message);
+    return 64;
+  }
+
+  try {
+    await Creator(
+      log: log,
+      runner: runner,
+      yes: _flag(g, 'yes'),
+    ).run(
+      nameArg: nameArg,
+      directoryArg: _opt(g, 'directory'),
+      kindFlag: kind,
+      surfacesFlag: surfaces,
+      hostFlag: host,
+      modeFlag: mode,
+      templateFlag: _opt(g, 'template'),
+      databaseFlag: database,
+    );
+    return 0;
+  } catch (e, st) {
+    log.err('$e');
+    if (Platform.environment['PODFLY_DEBUG'] == '1') {
+      log.detail('$st');
+    }
+    return 1;
+  }
 }
 
 Future<int> _deploy(ArgResults g) async {
@@ -519,7 +616,7 @@ Future<int> _deploy(ArgResults g) async {
   } finally {
     // Wall clock including doctor/init — always printed.
     wall.stop();
-    log.elapsed(wall.elapsed, label: 'podfly deploy wall clock');
+    log.elapsed(wall.elapsed, label: 'Deploy finished');
   }
 }
 
@@ -577,4 +674,39 @@ Future<int> _smokeOnly(ArgResults g) async {
   final config = await PodflyConfig.load(cfgPath);
   final ok = await SmokeRunner(config: config, log: log).run();
   return ok ? 0 : 1;
+}
+
+Future<int> _upgrade(ArgResults g) async {
+  final log = Log();
+  final dry = _flag(g, 'dry-run');
+  log.banner(subtitle: dry ? 'upgrade (dry-run)' : 'upgrade');
+  final runner = ProcessRunner(log: log, dryRun: dry);
+
+  UpgradeSource source = UpgradeSource.pub;
+  String? pathDir = _opt(g, 'path');
+  var gitUrl = _opt(g, 'git-url');
+  if (pathDir != null && pathDir.isNotEmpty) {
+    source = UpgradeSource.path;
+  } else if (_flag(g, 'git') || (gitUrl != null && gitUrl.isNotEmpty)) {
+    source = UpgradeSource.git;
+    gitUrl ??= 'https://github.com/127thousand/podfly.git';
+  }
+
+  try {
+    return await Upgrader(log: log, runner: runner).run(
+      UpgradeOptions(
+        source: source,
+        gitUrl: gitUrl ?? 'https://github.com/127thousand/podfly.git',
+        pathDir: pathDir,
+        dryRun: dry,
+        yes: _flag(g, 'yes'),
+      ),
+    );
+  } catch (e, st) {
+    log.err('$e');
+    if (Platform.environment['PODFLY_DEBUG'] == '1') {
+      log.detail('$st');
+    }
+    return 1;
+  }
 }

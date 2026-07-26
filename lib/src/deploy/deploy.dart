@@ -259,7 +259,9 @@ class Deployer {
     if (doApi) {
       log.ok('API: $apiUrl');
     }
-    log.tip('Tear down later: podfly destroy   (add --database to drop managed PG)');
+    log.tip(
+      'Tear down later: podfly destroy   (add --database to drop managed PG)',
+    );
   }
 
   PodflyConfig _withApiUrl(PodflyConfig c, String apiUrl) {
