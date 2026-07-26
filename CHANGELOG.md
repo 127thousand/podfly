@@ -17,6 +17,17 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.11.1] — 2026-07-26
+
+### Fixed
+
+- **Fly app create** — detect `Name has already been taken` from captured
+  CLI output (inheritStdio left stderr empty, so retries never ran). On
+  global collision, try `preferred-xxxx` and persist the new name to
+  `podfly.yaml`.
+
+---
+
 ## [0.11.0] — 2026-07-26
 
 ### Added

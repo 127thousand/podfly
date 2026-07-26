@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 
 import '../config.dart';
 import '../fly_name.dart';
@@ -231,15 +230,26 @@ class FlyHost extends HostAdapter {
       return preferred;
     }
 
+    // Capture stdout/stderr so we can detect "Name has already been taken".
+    // inheritStdio would leave those empty and skip the retry path.
     var app = preferred;
-    for (var attempt = 0; attempt < 5; attempt++) {
+    for (var attempt = 0; attempt < 8; attempt++) {
+      if (attempt > 0) {
+        app = nextFlyAppNameCandidate(preferred, attempt);
+      }
+
       if (await _flyAppExists(runner, flyBin, app)) {
-        log.detail('Fly app $app already exists');
+        if (app == preferred) {
+          log.detail('Fly app $app already exists (yours) — reusing');
+        } else {
+          log.ok('reusing existing Fly app $app');
+          await _persistFlyAppName(ctx, app);
+        }
         return app;
       }
 
       log.detail('creating Fly app $app');
-      final create = await runner.run(
+      final create = await runner.runCapture(
         flyBin,
         ['apps', 'create', app],
         allowDryRun: false,
@@ -247,29 +257,47 @@ class FlyHost extends HostAdapter {
       if (create.ok) {
         log.ok('created Fly app $app');
         if (app != preferred) {
+          log.tip(
+            'Preferred name "$preferred" was unavailable; using $app. '
+            'Saved to podfly.yaml.',
+          );
           await _persistFlyAppName(ctx, app);
         }
         return app;
       }
 
-      final err = (create.stderr + create.stdout).toLowerCase();
-      if (err.contains('already') || err.contains('taken')) {
+      final combined = '${create.stderr}\n${create.stdout}';
+      final conflict = isFlyAppNameConflict(combined);
+
+      // Name taken by this account but status was flaky — recheck once.
+      if (conflict || create.exitCode != 0) {
         if (await _flyAppExists(runner, flyBin, app)) {
           log.detail('Fly app $app exists — continuing');
+          if (app != preferred) await _persistFlyAppName(ctx, app);
           return app;
         }
-        final suffix =
-            Random().nextInt(0xFFFF).toRadixString(16).padLeft(4, '0');
-        app = '$preferred-$suffix';
-        log.warn('name taken — trying $app');
+      }
+
+      if (conflict) {
+        final next = nextFlyAppNameCandidate(preferred, attempt + 1);
+        log.warn(
+          'Fly app name "$app" is taken (not in this account). '
+          'Trying $next …',
+        );
         continue;
       }
 
+      final detail = combined.trim();
       throw StateError(
-        'fly apps create $app failed (exit ${create.exitCode})',
+        'fly apps create $app failed (exit ${create.exitCode})'
+        '${detail.isEmpty ? '' : ':\n$detail'}',
       );
     }
-    throw StateError('could not create a unique Fly app name from $preferred');
+    throw StateError(
+      'Could not allocate a free Fly app name from "$preferred" '
+      'after several tries. Set fly.app: in podfly.yaml to an available name '
+      'or delete/rename the conflicting app.',
+    );
   }
 
   Future<bool> _flyAppExists(
