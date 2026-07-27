@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 /// CLI logging in the OpenCode / clack style: clean half-block wordmark and a
 /// vertical tree of steps (`┌` `│` `●` `◇` `└`).
@@ -46,18 +47,99 @@ class Log {
   }
 
   /// Half-block PODFLy mark + optional dim subtitle (command name).
+  ///
+  /// On a color TTY, a short purple→white shimmer runs once (~0.5s).
+  /// Disabled for quiet, `NO_COLOR`, dumb TERM, pipes, `CI=true`, or
+  /// `PODFLY_NO_SHIMMER=1`.
   void banner({String? subtitle}) {
     if (quiet) return;
     _open = false;
     stdout.writeln('');
-    for (final line in _bannerArt) {
-      stdout.writeln(_c(_purpleBold, line));
+    if (_shouldShimmer) {
+      _shimmerBanner(_bannerArt);
+    } else {
+      for (final line in _bannerArt) {
+        stdout.writeln(_c(_purpleBold, line));
+      }
     }
     if (subtitle != null && subtitle.isNotEmpty) {
       stdout.writeln('');
       stdout.writeln(_c(_dim, '  $subtitle'));
     }
     stdout.writeln('');
+  }
+
+  bool get _shouldShimmer {
+    if (!color || !stdout.hasTerminal) return false;
+    if (Platform.environment['PODFLY_NO_SHIMMER'] == '1') return false;
+    if (Platform.environment['CI'] == 'true') return false;
+    return true;
+  }
+
+  /// Sweep a bright band across the wordmark, then settle on solid purple.
+  void _shimmerBanner(List<String> lines) {
+    final width = lines.fold<int>(0, (w, l) => math.max(w, l.length));
+    const band = 8;
+    const frameMs = 28;
+    final frames = ((width + band * 2) / 2.5).ceil().clamp(10, 20);
+
+    stdout.write('\x1B[?25l'); // hide cursor
+    try {
+      for (final line in lines) {
+        stdout.writeln(_shimmerLine(line, peak: -band, band: band));
+      }
+
+      for (var f = 0; f < frames; f++) {
+        final peak = -band + (f * (width + band * 2) / frames).round();
+        stdout.write('\x1B[${lines.length}A');
+        for (final line in lines) {
+          stdout.write('\x1B[2K');
+          stdout.writeln(_shimmerLine(line, peak: peak, band: band));
+        }
+        sleep(const Duration(milliseconds: frameMs));
+      }
+
+      // Final solid brand purple.
+      stdout.write('\x1B[${lines.length}A');
+      for (final line in lines) {
+        stdout.write('\x1B[2K');
+        stdout.writeln(_c(_purpleBold, line));
+      }
+    } finally {
+      stdout.write('\x1B[?25h');
+    }
+  }
+
+  /// Color one art line with a highlight centered at [peak] column.
+  String _shimmerLine(String line, {required int peak, required int band}) {
+    if (!color) return line;
+    final buf = StringBuffer();
+    for (var i = 0; i < line.length; i++) {
+      final ch = line[i];
+      // Keep pure spaces unstyled so background stays clean.
+      if (ch == ' ') {
+        buf.write(ch);
+        continue;
+      }
+      final d = (i - peak).abs();
+      if (d <= 1) {
+        // Hot core — near white
+        buf.write('\x1B[1;38;2;255;255;255m$ch$_reset');
+      } else if (d <= band ~/ 3) {
+        // Bright lavender
+        buf.write('\x1B[1;38;2;233;213;255m$ch$_reset'); // #e9d5ff
+      } else if (d <= (band * 2) ~/ 3) {
+        // Brand purple
+        buf.write('\x1B[1;38;2;192;132;252m$ch$_reset'); // #c084fc
+      } else if (d <= band) {
+        // Soft edge
+        buf.write('\x1B[38;2;167;139;250m$ch$_reset'); // #a78bfa
+      } else {
+        // Base glyph (deeper purple)
+        buf.write('\x1B[1;38;2;126;34;206m$ch$_reset'); // #7e22ce
+      }
+    }
+    return buf.toString();
   }
 
   void info(String msg) {

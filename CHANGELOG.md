@@ -17,6 +17,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.11.2] — 2026-07-26
+
+### Added
+
+- **Banner shimmer** restored on color TTYs (~0.5s purple→white sweep over
+  PODFLy). Skipped for quiet, `NO_COLOR`, pipes, `CI=true`, or
+  `PODFLY_NO_SHIMMER=1`.
+
+---
+
 ## [0.11.1] — 2026-07-26
 
 ### Fixed
